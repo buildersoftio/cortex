@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.34607.79
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Core", "src\Cortex.Core\Cortex.Core.csproj", "{EA929CD0-0408-4F39-B18F-C08F01471EC4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EA929CD0-0408-4F39-B18F-C08F01471EC4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA929CD0-0408-4F39-B18F-C08F01471EC4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA929CD0-0408-4F39-B18F-C08F01471EC4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA929CD0-0408-4F39-B18F-C08F01471EC4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E20303B6-8AC9-4FFF-B645-4608309ADA94}
+	EndGlobalSection
+EndGlobal
