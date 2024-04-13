@@ -5,7 +5,7 @@ namespace Cortex.Core.Abstractions.Pipelines
 {
     public interface IPipelineStreamBuilder
     {
-        IPipelineStreamBuilder AddStream(string name, IStreamBuilder streamBuilder);
+        IPipelineStreamBuilder AddStream(string name, Action<StreamBase> streamDesigner);
         IPipeline Build();
     }
 }

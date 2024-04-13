@@ -16,8 +16,10 @@ namespace Cortex.Core.Pipelines
             return new PipelineBuilder(name);
         }
 
-
-
+        public IPipelineStreamBuilder AddStream(string name, Action<StreamBase> streamDesigner)
+        {
+            throw new NotImplementedException();
+        }
 
         public IPipelineStreamBuilder AddStream(string name, IStreamBuilder streamBuilder)
         {
