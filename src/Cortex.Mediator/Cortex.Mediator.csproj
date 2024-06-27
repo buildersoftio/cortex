@@ -23,7 +23,7 @@
 		<Version>1.0.0</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>andyX.png</PackageIcon>
-		<PackageId>Buildersoft.Cortex.Mediator</PackageId>
+		<PackageId>Cortex.Mediator</PackageId>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
