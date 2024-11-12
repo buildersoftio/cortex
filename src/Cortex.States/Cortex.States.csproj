@@ -5,13 +5,13 @@
 
 		<AssemblyVersion>1.0.0</AssemblyVersion>
 		<FileVersion>1.0.0</FileVersion>
-		<Product>Buildersoft Cortex Toolkit</Product>
+		<Product>Buildersoft Cortex Framework</Product>
 		<Company>Buildersoft</Company>
 		<Authors>Buildersoft</Authors>
 		<Copyright>Copyright © Buildersoft 2024</Copyright>
 
 		<Description>
-			Buildersoft Cortex Mediator is a library for .NET applications that implements the mediator pattern. It helps to reduce dependencies between objects by allowing in-process messaging without direct communication. Instead, objects communicate through Cortex Mediator, making them less coupled and more maintainable..
+			Buildersoft Cortex Framework is a library for .NET applications that implements the mediator pattern. It helps to reduce dependencies between objects by allowing in-process messaging without direct communication. Instead, objects communicate through Cortex Mediator, making them less coupled and more maintainable..
 		</Description>
 
 
@@ -21,7 +21,7 @@
 		<Version>1.0.0</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>cortex.png</PackageIcon>
-		<PackageId>Cortex.Streams</PackageId>
+		<PackageId>Cortex.States</PackageId>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
@@ -30,6 +30,8 @@
 		<PackageProjectUrl>https://buildersoft.io/</PackageProjectUrl>
 
 	</PropertyGroup>
+
+
 	<ItemGroup>
 		<None Include="Assets\cortex.png">
 			<Pack>True</Pack>
@@ -39,16 +41,6 @@
 			<Pack>True</Pack>
 			<PackagePath></PackagePath>
 		</None>
-	</ItemGroup>
-
-	<ItemGroup>
-		<Folder Include="Assets\" />
-		<Folder Include="Builders\" />
-		<Folder Include="Metrics\" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\Cortex.States\Cortex.States.csproj" />
 	</ItemGroup>
 
 </Project>

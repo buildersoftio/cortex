@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>net9;net8;net7;net6</TargetFrameworks>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 
 		<AssemblyVersion>1.0.0</AssemblyVersion>
 		<FileVersion>1.0.0</FileVersion>
