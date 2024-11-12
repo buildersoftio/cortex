@@ -1,6 +1,9 @@
-﻿using Cortex.Streams.Operators;
+﻿using Cortex.States;
+using Cortex.States.Operators;
+using Cortex.Streams.Operators;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Cortex.Streams
 {
@@ -9,7 +12,7 @@ namespace Cortex.Streams
     /// </summary>
     /// <typeparam name="TIn">The type of the initial input to the stream.</typeparam>
     /// <typeparam name="TCurrent">The current type of data in the stream.</typeparam>
-    public class Stream<TIn, TCurrent> : IStream<TIn, TCurrent>
+    public class Stream<TIn, TCurrent> : IStream<TIn, TCurrent>, IStatefulOperator
     {
         private readonly string _name;
         private readonly IOperator _operatorChain;
@@ -82,6 +85,57 @@ namespace Cortex.Streams
                 branchDict[branchOperator.BranchName] = branchOperator;
             }
             return branchDict;
+        }
+
+        public IEnumerable<IStateStore> GetStateStores()
+        {
+            var visitedOperators = new HashSet<IOperator>();
+            var stateStores = new List<IStateStore>();
+            CollectStateStores(_operatorChain, stateStores, visitedOperators);
+            return stateStores;
+        }
+
+        private void CollectStateStores(IOperator op, List<IStateStore> stateStores, HashSet<IOperator> visitedOperators)
+        {
+            if (op == null || visitedOperators.Contains(op))
+                return;
+
+            visitedOperators.Add(op);
+
+            if (op is IStatefulOperator statefulOperator)
+            {
+                stateStores.AddRange(statefulOperator.GetStateStores());
+            }
+
+            if (op is IHasNextOperators hasNextOperators)
+            {
+                foreach (var nextOp in hasNextOperators.GetNextOperators())
+                {
+                    CollectStateStores(nextOp, stateStores, visitedOperators);
+                }
+            }
+            else if (op is IOperator nextOperator)
+            {
+                var field = op.GetType().GetField("_nextOperator", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (field != null)
+                {
+                    var nextOp = field.GetValue(op) as IOperator;
+                    CollectStateStores(nextOp, stateStores, visitedOperators);
+                }
+            }
+        }
+
+        public TStateStore GetStateStoreByName<TStateStore>(string name) where TStateStore : IStateStore
+        {
+            return GetStateStores()
+                .OfType<TStateStore>()
+                .FirstOrDefault(store => store.Name == name);
+        }
+
+        public IEnumerable<TStateStore> GetStateStoresByType<TStateStore>() where TStateStore : IStateStore
+        {
+            return GetStateStores()
+                .OfType<TStateStore>();
         }
     }
 }

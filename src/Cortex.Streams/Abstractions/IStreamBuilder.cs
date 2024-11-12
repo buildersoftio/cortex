@@ -1,5 +1,7 @@
-﻿using Cortex.Streams.Operators;
+﻿using Cortex.States;
+using Cortex.Streams.Operators;
 using System;
+using System.Collections.Generic;
 
 namespace Cortex.Streams.Abstractions
 {
@@ -64,6 +66,25 @@ namespace Cortex.Streams.Abstractions
         /// </summary>
         /// <returns></returns>
         IStream<TIn, TCurrent> Build();
+
+
+        /// <summary>
+        /// Groups the stream data by a specified key selector.
+        /// </summary>
+        /// <typeparam name="TKey">The type of the key to group by.</typeparam>
+        /// <param name="keySelector">A function to extract the key from data.</param>
+        /// <param name="stateStore">An optional state store to use for storing group state.</param>
+        /// <returns>A stream builder with grouped data.</returns>
+        IStreamBuilder<TIn, KeyValuePair<TKey, TCurrent>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, IStateStore<TKey,List<TCurrent>> stateStore = null);
+
+        /// <summary>
+        /// Aggregates the stream data using a specified aggregation function.
+        /// </summary>
+        /// <typeparam name="TAggregate">The type of the aggregate value.</typeparam>
+        /// <param name="aggregateFunction">A function to aggregate data.</param>
+        /// <param name="stateStore">An optional state store to use for storing aggregate state.</param>
+        /// <returns>A stream builder with aggregated data.</returns>
+        IStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, IStateStore<TKey, TAggregate> stateStore = null);
 
     }
 }

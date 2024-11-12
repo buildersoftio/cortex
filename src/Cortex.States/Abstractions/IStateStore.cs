@@ -2,7 +2,13 @@
 
 namespace Cortex.States
 {
-    public interface IStateStore<TKey, TValue>
+    public interface IStateStore
+    {
+        string Name { get; }
+    }
+
+
+    public interface IStateStore<TKey, TValue> : IStateStore
     {
         TValue Get(TKey key);
         void Put(TKey key, TValue value);

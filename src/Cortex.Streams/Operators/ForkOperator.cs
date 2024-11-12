@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Cortex.Streams.Operators
 {
-    internal class ForkOperator<T> : IOperator
+    internal class ForkOperator<T> : IOperator, IHasNextOperators
     {
         private readonly Dictionary<string, BranchOperator<T>> _branches = new Dictionary<string, BranchOperator<T>>();
 
@@ -28,6 +28,11 @@ namespace Cortex.Streams.Operators
         public void SetNext(IOperator nextOperator)
         {
             throw new InvalidOperationException("Cannot set next operator on a ForkOperator.");
+        }
+
+        public IEnumerable<IOperator> GetNextOperators()
+        {
+            return _branches.Values;
         }
 
         public IReadOnlyDictionary<string, BranchOperator<T>> Branches => _branches;

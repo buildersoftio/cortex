@@ -7,6 +7,13 @@ namespace Cortex.States
     {
         private readonly ConcurrentDictionary<TKey, TValue> _store = new ConcurrentDictionary<TKey, TValue>();
 
+        public string Name { get; }
+
+        public InMemoryStateStore(string name)
+        {
+            Name = name;
+        }
+
         public TValue Get(TKey key)
         {
             _store.TryGetValue(key, out var value);
