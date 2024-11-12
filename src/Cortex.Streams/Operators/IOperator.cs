@@ -3,7 +3,7 @@
     /// <summary>
     /// Represents a generic operator in the stream processing pipeline.
     /// </summary>
-    internal interface IOperator
+    public interface IOperator
     {
         /// <summary>
         /// Processes the input object and passes it to the next operator in the pipeline.
