@@ -1,6 +1,8 @@
-﻿namespace Cortex.Streams.Operators
+﻿using System.Collections.Generic;
+
+namespace Cortex.Streams.Operators
 {
-    public class SourceOperatorAdapter<TOutput> : IOperator
+    public class SourceOperatorAdapter<TOutput> : IOperator, IHasNextOperators
     {
         private readonly ISourceOperator<TOutput> _sourceOperator;
         private IOperator _nextOperator;
@@ -27,6 +29,12 @@
         public void Stop()
         {
             _sourceOperator.Stop();
+        }
+
+        public IEnumerable<IOperator> GetNextOperators()
+        {
+            if (_nextOperator != null)
+                yield return _nextOperator;
         }
     }
 }

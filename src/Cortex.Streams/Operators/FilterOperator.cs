@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Cortex.Streams.Operators
 {
@@ -6,7 +7,7 @@ namespace Cortex.Streams.Operators
     /// An operator that filters data based on a predicate.
     /// </summary>
     /// <typeparam name="T">The type of data being filtered.</typeparam>
-    public class FilterOperator<T> : IOperator
+    public class FilterOperator<T> : IOperator, IHasNextOperators
     {
         private readonly Func<T, bool> _predicate;
         private IOperator _nextOperator;
@@ -28,6 +29,12 @@ namespace Cortex.Streams.Operators
         public void SetNext(IOperator nextOperator)
         {
             _nextOperator = nextOperator;
+        }
+
+        public IEnumerable<IOperator> GetNextOperators()
+        {
+            if (_nextOperator != null)
+                yield return _nextOperator;
         }
     }
 }

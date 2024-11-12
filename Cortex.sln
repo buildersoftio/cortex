@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Pulsar", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States", "src\Cortex.States\Cortex.States.csproj", "{34CA231A-1E3A-4CA4-820C-946DC8E2737F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.RocksDb", "src\Cortex.States.RocksDb\Cortex.States.RocksDb.csproj", "{16FA00B1-973B-443C-BF84-9B76DCAF341B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{34CA231A-1E3A-4CA4-820C-946DC8E2737F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{34CA231A-1E3A-4CA4-820C-946DC8E2737F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{34CA231A-1E3A-4CA4-820C-946DC8E2737F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{16FA00B1-973B-443C-BF84-9B76DCAF341B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{16FA00B1-973B-443C-BF84-9B76DCAF341B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{16FA00B1-973B-443C-BF84-9B76DCAF341B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{16FA00B1-973B-443C-BF84-9B76DCAF341B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

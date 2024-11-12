@@ -1,4 +1,5 @@
-﻿using Cortex.Streams.Operators;
+﻿using Cortex.States;
+using Cortex.Streams.Operators;
 using System.Collections.Generic;
 
 namespace Cortex.Streams
@@ -10,5 +11,8 @@ namespace Cortex.Streams
         void Emit(TIn value);
         string GetStatus();
         IReadOnlyDictionary<string, BranchOperator<TCurrent>> GetBranches();
+
+        TStateStore GetStateStoreByName<TStateStore>(string name) where TStateStore : IStateStore;
+        IEnumerable<TStateStore> GetStateStoresByType<TStateStore>() where TStateStore : IStateStore;
     }
 }

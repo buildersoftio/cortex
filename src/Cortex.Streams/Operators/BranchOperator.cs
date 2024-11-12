@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Cortex.Streams.Operators
 {
-    public class BranchOperator<T> : IOperator
+    public class BranchOperator<T> : IOperator, IHasNextOperators
     {
         private readonly string _branchName;
         private readonly IOperator _branchOperator;
@@ -23,6 +24,12 @@ namespace Cortex.Streams.Operators
         public void SetNext(IOperator nextOperator)
         {
             throw new InvalidOperationException("Cannot set next operator on a BranchOperator.");
+        }
+
+        public IEnumerable<IOperator> GetNextOperators()
+        {
+            if (_branchOperator != null)
+                yield return _branchOperator;
         }
     }
 }
