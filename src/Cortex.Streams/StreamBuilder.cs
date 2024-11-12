@@ -52,6 +52,24 @@ namespace Cortex.Streams
             return new StreamBuilder<TIn, TNext>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
 
+        public IStreamBuilder<TIn, TCurrent> Filter(Func<TCurrent, bool> predicate)
+        {
+            var filterOperator = new FilterOperator<TCurrent>(predicate);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = filterOperator;
+                _lastOperator = filterOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(filterOperator);
+                _lastOperator = filterOperator;
+            }
+
+            return this; // Returns the current builder for method chaining
+        }
+
         public ISinkBuilder<TIn> Sink(Action<TCurrent> sinkFunction)
         {
             var sinkOperator = new SinkOperator<TCurrent>(sinkFunction);

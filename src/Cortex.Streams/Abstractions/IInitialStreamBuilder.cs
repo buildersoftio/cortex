@@ -7,5 +7,6 @@ namespace Cortex.Streams.Abstractions
         IStreamBuilder<TIn, TCurrent> Stream();
         IStreamBuilder<TIn, TCurrent> Stream(ISourceOperator<TCurrent> sourceOperator);
         IStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
+        IStreamBuilder<TIn, TCurrent> Filter(Func<TCurrent, bool> predicate);
     }
 }
