@@ -4,6 +4,11 @@ using System.Collections.Generic;
 
 namespace Cortex.Streams
 {
+    /// <summary>
+    /// Represents a built stream that can be started and stopped.
+    /// </summary>
+    /// <typeparam name="TIn">The type of the initial input to the stream.</typeparam>
+    /// <typeparam name="TCurrent">The current type of data in the stream.</typeparam>
     public class Stream<TIn, TCurrent> : IStream<TIn, TCurrent>
     {
         private readonly string _name;
@@ -18,11 +23,17 @@ namespace Cortex.Streams
             _branchOperators = branchOperators;
         }
 
+        /// <summary>
+        /// Starts the stream processing.
+        /// </summary>
         public void Start()
         {
             _isStarted = true;
         }
 
+        /// <summary>
+        /// Stops the stream processing.
+        /// </summary>
         public void Stop()
         {
             _isStarted = false;
@@ -33,11 +44,19 @@ namespace Cortex.Streams
             }
         }
 
+        /// <summary>
+        /// Gets the current status of the stream.
+        /// </summary>
+        /// <returns>A string indicating whether the stream is running or stopped.</returns>
         public string GetStatus()
         {
             return _isStarted ? "Running" : "Stopped";
         }
 
+        /// <summary>
+        /// Emits data into the stream when no source operator is used.
+        /// </summary>
+        /// <param name="value">The data to emit.</param>
         public void Emit(TIn value)
         {
             if (_isStarted)

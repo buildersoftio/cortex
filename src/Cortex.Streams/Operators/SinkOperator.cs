@@ -2,6 +2,10 @@
 
 namespace Cortex.Streams.Operators
 {
+    /// <summary>
+    /// An operator that consumes data at the end of the stream.
+    /// </summary>
+    /// <typeparam name="TInput">The type of data consumed by the sink.</typeparam>
     public class SinkOperator<TInput> : IOperator
     {
         private readonly Action<TInput> _sinkFunction;

@@ -2,6 +2,10 @@
 
 namespace Cortex.Streams.Operators
 {
+    /// <summary>
+    /// An operator that filters data based on a predicate.
+    /// </summary>
+    /// <typeparam name="T">The type of data being filtered.</typeparam>
     public class FilterOperator<T> : IOperator
     {
         private readonly Func<T, bool> _predicate;

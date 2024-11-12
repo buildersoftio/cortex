@@ -5,6 +5,11 @@ using System.Collections.Generic;
 
 namespace Cortex.Streams
 {
+    /// <summary>
+    /// Builds a stream processing pipeline with optional branches.
+    /// </summary>
+    /// <typeparam name="TIn">The type of the initial input to the stream.</typeparam>
+    /// <typeparam name="TCurrent">The current type of data in the stream.</typeparam>
     public class StreamBuilder<TIn, TCurrent> : IInitialStreamBuilder<TIn, TCurrent>, IStreamBuilder<TIn, TCurrent>
     {
         private readonly string _name;
@@ -29,16 +34,34 @@ namespace Cortex.Streams
             _sourceAdded = sourceAdded;
         }
 
+        /// <summary>
+        /// Creates a new stream with the specified name.
+        /// </summary>
+        /// <param name="name">The name of the stream.</param>
+        /// <returns>An initial stream builder.</returns>
         public static IInitialStreamBuilder<TIn, TIn> CreateNewStream(string name)
         {
             return new StreamBuilder<TIn, TIn>(name);
         }
 
+        /// <summary>
+        /// Creates a new stream with the specified name.
+        /// </summary>
+        /// <param name="name">The name of the stream.</param>
+        /// <param name="firstOperator">The first operator in the pipeline</param>
+        /// <param name="lastOperator">The last operator in the pipeline</param>
+        /// <returns>An initial stream builder.</returns>
         public static IStreamBuilder<TIn, TCurrent> CreateNewStream(string name, IOperator firstOperator, IOperator lastOperator)
         {
             return new StreamBuilder<TIn, TCurrent>(name, firstOperator, lastOperator, false);
         }
 
+        /// <summary>
+        /// Adds a map operator to the branch to transform data.
+        /// </summary>
+        /// <typeparam name="TNext">The type of data after the transformation.</typeparam>
+        /// <param name="mapFunction">A function to transform data.</param>
+        /// <returns>The branch stream builder with the new data type.</returns>
         public IStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction)
         {
             var mapOperator = new MapOperator<TCurrent, TNext>(mapFunction);
@@ -57,6 +80,11 @@ namespace Cortex.Streams
             return new StreamBuilder<TIn, TNext>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
 
+        /// <summary>
+        /// Adds a filter operator to the branch.
+        /// </summary>
+        /// <param name="predicate">A function to filter data.</param>
+        /// <returns>The branch stream builder for method chaining.</returns>
         public IStreamBuilder<TIn, TCurrent> Filter(Func<TCurrent, bool> predicate)
         {
             var filterOperator = new FilterOperator<TCurrent>(predicate);
@@ -75,6 +103,10 @@ namespace Cortex.Streams
             return this; // Returns the current builder for method chaining
         }
 
+        /// <summary>
+        /// Adds a sink function to the branch to consume data.
+        /// </summary>
+        /// <param name="sinkFunction">An action to consume data.</param>
         public ISinkBuilder<TIn, TCurrent> Sink(Action<TCurrent> sinkFunction)
         {
             var sinkOperator = new SinkOperator<TCurrent>(sinkFunction);
@@ -93,6 +125,10 @@ namespace Cortex.Streams
             return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
         }
 
+        /// <summary>
+        /// Adds a sink operator to the branch to consume data.
+        /// </summary>
+        /// <param name="sinkOperator">A sink operator to consume data.</param>
         public ISinkBuilder<TIn, TCurrent> Sink(ISinkOperator<TCurrent> sinkOperator)
         {
             var sinkAdapter = new SinkOperatorAdapter<TCurrent>(sinkOperator);
@@ -111,6 +147,12 @@ namespace Cortex.Streams
             return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
         }
 
+        /// <summary>
+        /// Start configuring the Stream
+        /// </summary>
+        /// <param name="sourceOperator">Type of the Source Operator</param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
         public IStreamBuilder<TIn, TCurrent> Stream(ISourceOperator<TCurrent> sourceOperator)
         {
             if (_sourceAdded)
@@ -134,6 +176,11 @@ namespace Cortex.Streams
             return this; // Returns IStreamBuilder<TIn, TCurrent>
         }
 
+        /// <summary>
+        /// Start the stream inside the application, in-app streaming
+        /// </summary>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
         public IStreamBuilder<TIn, TCurrent> Stream()
         {
             // In memory source added.
@@ -146,56 +193,21 @@ namespace Cortex.Streams
             return this; // Returns IStreamBuilder<TIn, TCurrent>
         }
 
-        public IStreamBuilder<TIn, TCurrent> Branch(params (string name, Action<IStreamBuilder<TIn, TCurrent>>)[] branches)
-        {
-            // Old implementation; please remove it
-
-            if (branches == null || branches.Length == 0)
-            {
-                throw new ArgumentException("At least one branch must be provided.");
-            }
-
-            var forkOperator = new ForkOperator<TCurrent>();
-
-            if (_firstOperator == null)
-            {
-                _firstOperator = forkOperator;
-                _lastOperator = forkOperator;
-            }
-            else
-            {
-                _lastOperator.SetNext(forkOperator);
-                _lastOperator = forkOperator;
-            }
-
-            foreach (var (name, branchAction) in branches)
-            {
-                if (string.IsNullOrEmpty(name))
-                {
-                    throw new ArgumentException("Branch name cannot be null or empty.");
-                }
-
-                var branchBuilder = new StreamBuilder<TIn, TCurrent>(_name);
-                branchAction(branchBuilder);
-
-                if (branchBuilder._firstOperator == null)
-                {
-                    throw new InvalidOperationException($"Branch '{name}' must have at least one operator.");
-                }
-
-                var branchOperator = new BranchOperator<TCurrent>(name, branchBuilder._firstOperator);
-                forkOperator.AddBranch(name, branchOperator);
-                _branchOperators.Add(branchOperator);
-            }
-
-            return this;
-        }
 
         public IStream<TIn, TCurrent> Build()
         {
             return new Stream<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
         }
 
+        /// <summary>
+        /// Start creating branches, each branch can contain filtering, mapping and sink of the data
+        /// </summary>
+        /// <param name="name">Name of the branch</param>
+        /// <param name="config">Action of configuring the branch</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="InvalidOperationException"></exception>
         public IStreamBuilder<TIn, TCurrent> AddBranch(string name, Action<IBranchStreamBuilder<TIn, TCurrent>> config)
         {
             if (string.IsNullOrEmpty(name))

@@ -4,7 +4,11 @@ using System.Collections.Generic;
 
 namespace Cortex.Streams
 {
-    // Sink builder that only allows Build
+    /// <summary>
+    /// Builds the final stream after adding a sink.
+    /// </summary>
+    /// <typeparam name="TIn">The type of the initial input to the stream.</typeparam>
+    /// <typeparam name="TCurrent">The current type of data in the stream.</typeparam>
     public class SinkBuilder<TIn, TCurrent> : ISinkBuilder<TIn, TCurrent>
     {
         private readonly string _name;
@@ -18,6 +22,10 @@ namespace Cortex.Streams
             _branchOperators = branchOperators;
         }
 
+        /// <summary>
+        /// Builds the stream and returns a stream instance.
+        /// </summary>
+        /// <returns>A stream instance.</returns>
         public IStream<TIn, TCurrent> Build()
         {
             return new Stream<TIn, TCurrent>(_name, _firstOperator, _branchOperators);

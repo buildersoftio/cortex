@@ -2,6 +2,11 @@
 
 namespace Cortex.Streams.Operators
 {
+    /// <summary>
+    /// An operator that transforms data from one type to another.
+    /// </summary>
+    /// <typeparam name="TInput">The input data type.</typeparam>
+    /// <typeparam name="TOutput">The output data type after transformation.</typeparam>
     public class MapOperator<TInput, TOutput> : IOperator
     {
         private readonly Func<TInput, TOutput> _mapFunction;
