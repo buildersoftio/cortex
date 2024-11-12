@@ -1,5 +1,5 @@
 ﻿using System;
-namespace Cortex.Streams.Abstractions
+namespace Cortex.Streams.Operators
 {
     public interface ISourceOperator<TOutput>
     {

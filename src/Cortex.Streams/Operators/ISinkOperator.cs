@@ -2,8 +2,8 @@
 {
     public interface ISinkOperator<TInput>
     {
-        void Process(TInput input);
         void Start();
+        void Process(TInput input);
         void Stop();
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Cortex.Streams.Abstractions;
 using Cortex.Streams.Operators;
 using System;
+using System.Collections.Generic;
 
 namespace Cortex.Streams
 {
@@ -10,6 +11,10 @@ namespace Cortex.Streams
         private IOperator _firstOperator;
         private IOperator _lastOperator;
         private bool _sourceAdded = false;
+        private readonly List<BranchOperator<TCurrent>> _branchOperators = new List<BranchOperator<TCurrent>>();
+        private ForkOperator<TCurrent> _forkOperator;
+
+
 
         private StreamBuilder(string name)
         {
@@ -70,7 +75,7 @@ namespace Cortex.Streams
             return this; // Returns the current builder for method chaining
         }
 
-        public ISinkBuilder<TIn> Sink(Action<TCurrent> sinkFunction)
+        public ISinkBuilder<TIn, TCurrent> Sink(Action<TCurrent> sinkFunction)
         {
             var sinkOperator = new SinkOperator<TCurrent>(sinkFunction);
 
@@ -85,10 +90,10 @@ namespace Cortex.Streams
                 _lastOperator = sinkOperator;
             }
 
-            return new SinkBuilder<TIn>(_name, _firstOperator);
+            return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
         }
 
-        public ISinkBuilder<TIn> Sink(ISinkOperator<TCurrent> sinkOperator)
+        public ISinkBuilder<TIn, TCurrent> Sink(ISinkOperator<TCurrent> sinkOperator)
         {
             var sinkAdapter = new SinkOperatorAdapter<TCurrent>(sinkOperator);
 
@@ -103,7 +108,7 @@ namespace Cortex.Streams
                 _lastOperator = sinkAdapter;
             }
 
-            return new SinkBuilder<TIn>(_name, _firstOperator);
+            return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
         }
 
         public IStreamBuilder<TIn, TCurrent> Stream(ISourceOperator<TCurrent> sourceOperator)
@@ -139,6 +144,100 @@ namespace Cortex.Streams
 
             _sourceAdded = true;
             return this; // Returns IStreamBuilder<TIn, TCurrent>
+        }
+
+        public IStreamBuilder<TIn, TCurrent> Branch(params (string name, Action<IStreamBuilder<TIn, TCurrent>>)[] branches)
+        {
+            // Old implementation; please remove it
+
+            if (branches == null || branches.Length == 0)
+            {
+                throw new ArgumentException("At least one branch must be provided.");
+            }
+
+            var forkOperator = new ForkOperator<TCurrent>();
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = forkOperator;
+                _lastOperator = forkOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(forkOperator);
+                _lastOperator = forkOperator;
+            }
+
+            foreach (var (name, branchAction) in branches)
+            {
+                if (string.IsNullOrEmpty(name))
+                {
+                    throw new ArgumentException("Branch name cannot be null or empty.");
+                }
+
+                var branchBuilder = new StreamBuilder<TIn, TCurrent>(_name);
+                branchAction(branchBuilder);
+
+                if (branchBuilder._firstOperator == null)
+                {
+                    throw new InvalidOperationException($"Branch '{name}' must have at least one operator.");
+                }
+
+                var branchOperator = new BranchOperator<TCurrent>(name, branchBuilder._firstOperator);
+                forkOperator.AddBranch(name, branchOperator);
+                _branchOperators.Add(branchOperator);
+            }
+
+            return this;
+        }
+
+        public IStream<TIn, TCurrent> Build()
+        {
+            return new Stream<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
+        }
+
+        public IStreamBuilder<TIn, TCurrent> AddBranch(string name, Action<IBranchStreamBuilder<TIn, TCurrent>> config)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                throw new ArgumentException("Branch name cannot be null or empty.", nameof(name));
+            }
+            if (config == null)
+            {
+                throw new ArgumentNullException(nameof(config));
+            }
+
+            // Initialize the fork operator if it's not already
+            if (_forkOperator == null)
+            {
+                _forkOperator = new ForkOperator<TCurrent>();
+
+                if (_firstOperator == null)
+                {
+                    _firstOperator = _forkOperator;
+                    _lastOperator = _forkOperator;
+                }
+                else
+                {
+                    _lastOperator.SetNext(_forkOperator);
+                    _lastOperator = _forkOperator;
+                }
+            }
+
+            // Create a new branch builder
+            var branchBuilder = new BranchStreamBuilder<TIn, TCurrent>(_name);
+            config(branchBuilder);
+
+            if (branchBuilder._firstOperator == null)
+            {
+                throw new InvalidOperationException($"Branch '{name}' must have at least one operator.");
+            }
+
+            var branchOperator = new BranchOperator<TCurrent>(name, branchBuilder._firstOperator);
+            _forkOperator.AddBranch(name, branchOperator);
+            _branchOperators.Add(branchOperator);
+
+            return this;
         }
     }
 }

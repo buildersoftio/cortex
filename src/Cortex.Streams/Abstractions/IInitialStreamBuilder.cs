@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Cortex.Streams.Operators;
+using System;
 
 namespace Cortex.Streams.Abstractions
 {

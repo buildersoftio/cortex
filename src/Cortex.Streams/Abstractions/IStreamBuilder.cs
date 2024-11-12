@@ -5,9 +5,12 @@ namespace Cortex.Streams.Abstractions
 {
     public interface IStreamBuilder<TIn, TCurrent>
     {
-        IStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
         IStreamBuilder<TIn, TCurrent> Filter(Func<TCurrent, bool> predicate);
-        ISinkBuilder<TIn> Sink(Action<TCurrent> sinkFunction);
-        ISinkBuilder<TIn> Sink(ISinkOperator<TCurrent> sinkOperator);
+        IStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
+        ISinkBuilder<TIn, TCurrent> Sink(Action<TCurrent> sinkFunction);
+        ISinkBuilder<TIn, TCurrent> Sink(ISinkOperator<TCurrent> sinkOperator);
+        IStreamBuilder<TIn, TCurrent> AddBranch(string name, Action<IBranchStreamBuilder<TIn, TCurrent>> config);
+        IStream<TIn, TCurrent> Build();
+
     }
 }

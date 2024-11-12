@@ -1,7 +1,7 @@
 ﻿namespace Cortex.Streams.Abstractions
 {
-    public interface ISinkBuilder<TIn>
+    public interface ISinkBuilder<TIn, TCurrent>
     {
-        Stream<TIn> Build();
+        IStream<TIn, TCurrent> Build();
     }
 }

@@ -1,6 +1,4 @@
-﻿using Cortex.Streams.Abstractions;
-
-namespace Cortex.Streams.Operators
+﻿namespace Cortex.Streams.Operators
 {
     public class SourceOperatorAdapter<TOutput> : IOperator
     {

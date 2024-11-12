@@ -1,5 +1,4 @@
-﻿using Cortex.Streams.Abstractions;
-using DotPulsar.Abstractions;
+﻿using DotPulsar.Abstractions;
 using DotPulsar;
 using DotPulsar.Extensions;
 using Cortex.Streams.Pulsar.Deserializers;
@@ -7,6 +6,7 @@ using System.Buffers;
 using System.Threading;
 using System.Threading.Tasks;
 using System;
+using Cortex.Streams.Operators;
 
 namespace Cortex.Streams.Pulsar
 {

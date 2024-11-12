@@ -1,6 +1,6 @@
 ﻿using Confluent.Kafka;
-using Cortex.Streams.Abstractions;
 using Cortex.Streams.Kafka.Deserializers;
+using Cortex.Streams.Operators;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
