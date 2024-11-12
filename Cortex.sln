@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Kafka", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Pulsar", "src\Cortex.Streams.Pulsar\Cortex.Streams.Pulsar.csproj", "{EE799E10-7469-428E-AF8C-F2807F6CE7E5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States", "src\Cortex.States\Cortex.States.csproj", "{34CA231A-1E3A-4CA4-820C-946DC8E2737F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{EE799E10-7469-428E-AF8C-F2807F6CE7E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EE799E10-7469-428E-AF8C-F2807F6CE7E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EE799E10-7469-428E-AF8C-F2807F6CE7E5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34CA231A-1E3A-4CA4-820C-946DC8E2737F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34CA231A-1E3A-4CA4-820C-946DC8E2737F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34CA231A-1E3A-4CA4-820C-946DC8E2737F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34CA231A-1E3A-4CA4-820C-946DC8E2737F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
