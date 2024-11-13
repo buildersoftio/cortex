@@ -181,8 +181,12 @@ while (true)
 Retrieve and display the click counts from the state store
 
 ```csharp
-// Access the state store data
+// Access the aggregate state store data
 var aggregateStore = stream.GetStateStoreByName<InMemoryStateStore<string, int>>("ClickAggregateStore");
+
+// Access the groupby state store data
+var groupByStore = stream.GetStateStoreByName<InMemoryStateStore<string, List<ClickEvent>>>("ClickGroupStore")
+
 
 if (aggregateStore != null)
 {
@@ -227,7 +231,7 @@ This project is licensed under the MIT License.
 Cortex is an open-source project maintained by BuilderSoft. Your support helps us continue developing and improving Vortex. Consider sponsoring us to contribute to the future of resilient streaming platforms.
 
 ### How to Sponsor
-* **Financial Contributions**: Support us through [GitHub Sponsors]() or other preferred platforms.
+* **Financial Contributions**: Support us through [GitHub Sponsors](https://github.com/sponsors/buildersoftio) or other preferred platforms.
 * **Corporate Sponsorship**: If your organization is interested in sponsoring Vortex, please contact us directly.
 
 Contact Us: cortex@buildersoft.io
