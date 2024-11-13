@@ -75,7 +75,8 @@ namespace Cortex.Streams.Abstractions
         /// <param name="keySelector">A function to extract the key from data.</param>
         /// <param name="stateStore">An optional state store to use for storing group state.</param>
         /// <returns>A stream builder with grouped data.</returns>
-        IStreamBuilder<TIn, KeyValuePair<TKey, TCurrent>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, IStateStore<TKey,List<TCurrent>> stateStore = null);
+        //IStreamBuilder<TIn, KeyValuePair<TKey, TCurrent>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, IStateStore<TKey,List<TCurrent>> stateStore = null);
+        IStreamBuilder<TIn, TCurrent> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, IStateStore<TKey,List<TCurrent>> stateStore = null);
 
         /// <summary>
         /// Aggregates the stream data using a specified aggregation function.
@@ -84,7 +85,8 @@ namespace Cortex.Streams.Abstractions
         /// <param name="aggregateFunction">A function to aggregate data.</param>
         /// <param name="stateStore">An optional state store to use for storing aggregate state.</param>
         /// <returns>A stream builder with aggregated data.</returns>
-        IStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, IStateStore<TKey, TAggregate> stateStore = null);
+        IStreamBuilder<TIn, TCurrent> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, IStateStore<TKey, TAggregate> stateStore = null);
+        //IStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, IStateStore<TKey, TAggregate> stateStore = null);
 
     }
 }

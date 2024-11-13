@@ -252,7 +252,7 @@ namespace Cortex.Streams
             return this;
         }
 
-        public IStreamBuilder<TIn, KeyValuePair<TKey, TCurrent>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
+        public IStreamBuilder<TIn, TCurrent> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
         {
             if (stateStore == null)
             {
@@ -276,10 +276,11 @@ namespace Cortex.Streams
                 _lastOperator = groupByOperator;
             }
 
-            return new StreamBuilder<TIn, KeyValuePair<TKey, TCurrent>>(_name, _firstOperator, _lastOperator, _sourceAdded);
+            //return new StreamBuilder<TIn, KeyValuePair<TKey, TCurrent>>(_name, _firstOperator, _lastOperator, _sourceAdded);
+            return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
 
-        public IStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IStateStore<TKey, TAggregate> stateStore = null)
+        public IStreamBuilder<TIn, TCurrent> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IStateStore<TKey, TAggregate> stateStore = null)
         {
             //private readonly Func<TInput, TKey> _keySelector
             if (stateStore == null)
@@ -304,7 +305,8 @@ namespace Cortex.Streams
                 _lastOperator = aggregateOperator;
             }
 
-            return new StreamBuilder<TIn, KeyValuePair<TKey, TAggregate>>(_name, _firstOperator, _lastOperator, _sourceAdded);
+            //return new StreamBuilder<TIn, KeyValuePair<TKey, TAggregate>>(_name, _firstOperator, _lastOperator, _sourceAdded);
+            return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
     }
 }
