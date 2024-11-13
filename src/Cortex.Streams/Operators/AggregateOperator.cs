@@ -34,7 +34,11 @@ namespace Cortex.Streams.Operators
                 _stateStore.Put(key, aggregate);
             }
 
-            _nextOperator?.Process(new KeyValuePair<TKey, TAggregate>(key, aggregate));
+            // we should not return the value from the state, continue the process further, state is just used to mutate
+            // for now we are commenting the next Operator.
+            //_nextOperator?.Process(new KeyValuePair<TKey, TAggregate>(key, aggregate));
+            _nextOperator?.Process(typedInput);
+
         }
 
         public void SetNext(IOperator nextOperator)

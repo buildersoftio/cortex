@@ -36,7 +36,12 @@ namespace Cortex.Streams.Operators
                 _stateStore.Put(key, group);
             }
 
-            _nextOperator?.Process(new KeyValuePair<TKey, List<TInput>>(key, group));
+            // we should not return the value from the state, continue the process further, state is just used to mutate
+            // for now we are commenting the next Operator.
+            // _nextOperator?.Process(new KeyValuePair<TKey, List<TInput>>(key, group));
+
+            _nextOperator?.Process(typedInput);
+
         }
 
         public void SetNext(IOperator nextOperator)
