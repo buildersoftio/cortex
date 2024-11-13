@@ -181,8 +181,12 @@ while (true)
 Retrieve and display the click counts from the state store
 
 ```csharp
-// Access the state store data
+// Access the aggregate state store data
 var aggregateStore = stream.GetStateStoreByName<InMemoryStateStore<string, int>>("ClickAggregateStore");
+
+// Access the groupby state store data
+var groupByStore = stream.GetStateStoreByName<InMemoryStateStore<string, List<ClickEvent>>>("ClickGroupStore")
+
 
 if (aggregateStore != null)
 {
