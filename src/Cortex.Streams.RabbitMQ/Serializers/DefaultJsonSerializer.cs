@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace Cortex.Streams.RabbitMq.Serializers
+namespace Cortex.Streams.RabbitMQ.Serializers
 {
     /// <summary>
     /// JSON implementation of ISerializer.

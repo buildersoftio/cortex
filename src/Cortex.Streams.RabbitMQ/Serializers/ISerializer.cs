@@ -1,4 +1,4 @@
-﻿namespace Cortex.Streams.RabbitMq.Serializers
+﻿namespace Cortex.Streams.RabbitMQ.Serializers
 {
     /// <summary>
     /// Interface for serializing objects of type T to strings.

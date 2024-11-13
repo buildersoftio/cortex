@@ -1,4 +1,4 @@
-﻿namespace Cortex.Streams.RabbitMq.Deserializers
+﻿namespace Cortex.Streams.RabbitMQ.Deserializers
 {
     /// <summary>
     /// Interface for deserializing strings to objects of type T.
