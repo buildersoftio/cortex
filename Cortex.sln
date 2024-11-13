@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States", "src\Cortex
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.RocksDb", "src\Cortex.States.RocksDb\Cortex.States.RocksDb.csproj", "{16FA00B1-973B-443C-BF84-9B76DCAF341B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.AWSSQS", "src\Cortex.Streams.AWSSQS\Cortex.Streams.AWSSQS.csproj", "{1F60F66A-5DC0-4C1D-A7B7-66F568A26911}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.RabbitMQ", "src\Cortex.Streams.RabbitMQ\Cortex.Streams.RabbitMQ.csproj", "{2B949637-FC31-4F51-A391-19F76B57CC28}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,6 +49,14 @@ Global
 		{16FA00B1-973B-443C-BF84-9B76DCAF341B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{16FA00B1-973B-443C-BF84-9B76DCAF341B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{16FA00B1-973B-443C-BF84-9B76DCAF341B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1F60F66A-5DC0-4C1D-A7B7-66F568A26911}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1F60F66A-5DC0-4C1D-A7B7-66F568A26911}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1F60F66A-5DC0-4C1D-A7B7-66F568A26911}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1F60F66A-5DC0-4C1D-A7B7-66F568A26911}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B949637-FC31-4F51-A391-19F76B57CC28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B949637-FC31-4F51-A391-19F76B57CC28}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B949637-FC31-4F51-A391-19F76B57CC28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B949637-FC31-4F51-A391-19F76B57CC28}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
