@@ -38,6 +38,11 @@
 - **Cortex.Streams:** Core streaming capabilities for building data pipelines.
 - **Cortex.Streams.Kafka:** Integration with Apache Kafka for robust data streaming.
 - **Cortex.Streams.Pulsar:** Integration with Apache Pulsar for versatile messaging needs.
+- **Cortex.Streams.RabbitMQ:** Integration with RabbitMQ for versatile messaging needs.
+- **Cortex.Streams.AWSSQS:** Integration with Amazon SQS for messaging needs in the cloud.
+- **Cortex.Streams.AzureServiceBus:** Integration with Azure Messaging Service Bus for messaging needs in the cloud.
+- **Cortex.Streams.AzureBlobStorage:** Integration with Azure Blob Storage for sinking messages.
+- **Cortex.Streams.S3:** Integration with AWS S3 for sinking messages.
 - **Cortex.States:** Core state management functionalities.
 - **Cortex.States.RocksDb:** Persistent state storage using RocksDB.
 

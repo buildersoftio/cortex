@@ -19,7 +19,7 @@
 		<Version>1.0.0</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>cortex.png</PackageIcon>
-		<PackageId>Cortex.Streams.Kafka</PackageId>
+		<PackageId>Cortex.Streams.AWSSQS</PackageId>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
