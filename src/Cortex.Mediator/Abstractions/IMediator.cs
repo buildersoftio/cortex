@@ -1,4 +1,6 @@
-﻿namespace Cortex.Mediator
+﻿using System.Threading.Tasks;
+
+namespace Cortex.Mediator
 {
     public interface IMediator
     {
