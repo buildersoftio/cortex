@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>net8.0;net6.0</TargetFrameworks>
+		<TargetFrameworks>net8.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 
 		<AssemblyVersion>1.0.0</AssemblyVersion>
@@ -14,12 +14,12 @@
 		<Description>Cortex Data Framework is a robust, extensible platform designed to facilitate real-time data streaming, processing, and state management. It provides developers with a comprehensive suite of tools and libraries to build scalable, high-performance data pipelines tailored to diverse use cases. By abstracting underlying streaming technologies and state management solutions, Cortex Data Framework enables seamless integration, simplified development workflows, and enhanced maintainability for complex data-driven applications.</Description>
 
 		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
-		<PackageTags>cortex vortex eda streaming distributed streams states kafka pulsar rocksdb</PackageTags>
+		<PackageTags>cortex vortex mediator eda streaming distributed streams states kafka pulsar rocksdb</PackageTags>
 
 		<Version>1.0.0</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>cortex.png</PackageIcon>
-		<PackageId>Cortex.Streams.Kafka</PackageId>
+		<PackageId>Cortex.Streams.AWSSQS</PackageId>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
@@ -50,15 +50,12 @@
 		<Folder Include="Assets\" />
 	</ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.SQS" Version="3.7.400.49" />
+  </ItemGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Confluent.Kafka" Version="2.6.0" />
-		<PackageReference Include="Google.Protobuf" Version="3.28.3" />
-		<PackageReference Include="protobuf-net" Version="3.2.45" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<ProjectReference Include="..\Cortex.Streams\Cortex.Streams.csproj" />
-	</ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex.Streams\Cortex.Streams.csproj" />
+  </ItemGroup>
 
 </Project>
