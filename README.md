@@ -67,17 +67,8 @@ Open your terminal or command prompt and navigate to your project directory, the
 # Install Cortex.Streams
 dotnet add package Cortex.Streams
 
-# Install Cortex.Streams.Kafka
-dotnet add package Cortex.Streams.Kafka
-
-# Install Cortex.Streams.Pulsar
-dotnet add package Cortex.Streams.Pulsar
-
 # Install Cortex.States
 dotnet add package Cortex.States
-
-# Install Cortex.States.RocksDb
-dotnet add package Cortex.States.RocksDb
 ```
 
 #### Using the Package Manager Console in Visual Studio
@@ -89,18 +80,8 @@ dotnet add package Cortex.States.RocksDb
 # Install Cortex.Streams
 Install-Package Cortex.Streams
 
-# Install Cortex.Streams.Kafka
-Install-Package Cortex.Streams.Kafka
-
-# Install Cortex.Streams.Pulsar
-Install-Package Cortex.Streams.Pulsar
-
 # Install Cortex.States
 Install-Package Cortex.States
-
-# Install Cortex.States.RocksDb
-Install-Package Cortex.States.RocksDb
-
 ```
 
 ## Usage
@@ -252,4 +233,4 @@ We'd love to hear from you! Whether you have questions, feedback, or need suppor
 
 Thank you for using Cortex Data Framework! We hope it empowers you to build scalable and efficient data processing pipelines effortlessly.
 
-Built with ❤️ by the BuilderSoft team.
+Built with ❤️ by the Buildersoft team.
