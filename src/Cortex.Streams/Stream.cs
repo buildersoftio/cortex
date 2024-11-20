@@ -1,6 +1,7 @@
 ﻿using Cortex.States;
 using Cortex.States.Operators;
 using Cortex.Streams.Operators;
+using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,12 +20,47 @@ namespace Cortex.Streams
         private readonly List<BranchOperator<TCurrent>> _branchOperators;
         private bool _isStarted;
 
-        internal Stream(string name, IOperator operatorChain, List<BranchOperator<TCurrent>> branchOperators)
+        private readonly ITelemetryProvider _telemetryProvider;
+
+        internal Stream(string name, IOperator operatorChain, List<BranchOperator<TCurrent>> branchOperators, ITelemetryProvider telemetryProvider)
         {
             _name = name;
             _operatorChain = operatorChain;
             _branchOperators = branchOperators;
+            _telemetryProvider = telemetryProvider;
+
+            // Initialize telemetry in operators
+            InitializeTelemetry(_operatorChain);
         }
+
+        private void InitializeTelemetry(IOperator op)
+        {
+            if (op == null)
+                return;
+
+            if (op is ITelemetryEnabled telemetryEnabled)
+            {
+                telemetryEnabled.SetTelemetryProvider(_telemetryProvider);
+            }
+
+            if (op is IHasNextOperators hasNextOperators)
+            {
+                foreach (var nextOp in hasNextOperators.GetNextOperators())
+                {
+                    InitializeTelemetry(nextOp);
+                }
+            }
+            else
+            {
+                var field = op.GetType().GetField("_nextOperator", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (field != null)
+                {
+                    var nextOp = field.GetValue(op) as IOperator;
+                    InitializeTelemetry(nextOp);
+                }
+            }
+        }
+
 
         /// <summary>
         /// Starts the stream processing.

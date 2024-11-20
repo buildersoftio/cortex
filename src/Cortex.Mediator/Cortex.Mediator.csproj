@@ -5,9 +5,9 @@
 
 		<AssemblyVersion>1.0.0</AssemblyVersion>
 		<FileVersion>1.0.0</FileVersion>
-		<Product>Buildersoft Cortex Toolkit</Product>
+		<Product>Buildersoft Cortex Framework</Product>
 		<Company>Buildersoft</Company>
-		<Authors>Buildersoft</Authors>
+		<Authors>Buildersoft,EnesHoxha</Authors>
 		<Copyright>Copyright © Buildersoft 2024</Copyright>
 
 		<Description>

@@ -25,6 +25,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.S3", "src\Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.AzureBlobStorage", "src\Cortex.Streams.AzureBlobStorage\Cortex.Streams.AzureBlobStorage.csproj", "{20FAE1F1-D677-4E0E-B3A7-E2B1485C874C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Telemetry", "src\Cortex.Telemetry\Cortex.Telemetry.csproj", "{CFEB3F3A-8B3E-4286-8596-EF888552C07F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Telemetry.OpenTelemetry", "src\Cortex.Telemetry.OpenTelemetry\Cortex.Telemetry.OpenTelemetry.csproj", "{D51C6B82-ABD9-4C43-820E-237EDBD706A1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -75,6 +79,14 @@ Global
 		{20FAE1F1-D677-4E0E-B3A7-E2B1485C874C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{20FAE1F1-D677-4E0E-B3A7-E2B1485C874C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{20FAE1F1-D677-4E0E-B3A7-E2B1485C874C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CFEB3F3A-8B3E-4286-8596-EF888552C07F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CFEB3F3A-8B3E-4286-8596-EF888552C07F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CFEB3F3A-8B3E-4286-8596-EF888552C07F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CFEB3F3A-8B3E-4286-8596-EF888552C07F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D51C6B82-ABD9-4C43-820E-237EDBD706A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D51C6B82-ABD9-4C43-820E-237EDBD706A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D51C6B82-ABD9-4C43-820E-237EDBD706A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D51C6B82-ABD9-4C43-820E-237EDBD706A1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

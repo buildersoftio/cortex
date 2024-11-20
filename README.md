@@ -45,6 +45,8 @@
 - **Cortex.Streams.S3:** Integration with AWS S3 for sinking messages.
 - **Cortex.States:** Core state management functionalities.
 - **Cortex.States.RocksDb:** Persistent state storage using RocksDB.
+- **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
+- **Cortex.Telemetry.OpenTelemetry:** Adds support for Open Telemetry.
 
 ## Getting Started
 
@@ -117,8 +119,6 @@ public class ClickEvent
 ```csharp
         static void Main(string[] args)
         {
-            var clickCountStore = new InMemoryStateStore<string, int>("ClickAggregateStore");
-
             // Build the stream
             var stream = StreamBuilder<ClickEvent, ClickEvent>.CreateNewStream("ClickStream")
                 .Stream()
