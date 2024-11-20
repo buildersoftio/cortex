@@ -411,5 +411,45 @@ namespace Cortex.Streams
 
             return new StreamBuilder<TIn, TWindowOutput>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
+
+        public IStreamBuilder<TIn, TWindowOutput> SessionWindow<TKey, TWindowOutput>(
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan inactivityGap,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string sessionStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, SessionWindowState<TCurrent>> sessionStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
+        {
+            if (sessionStateStore == null)
+            {
+                if (string.IsNullOrEmpty(sessionStateStoreName))
+                {
+                    sessionStateStoreName = $"SessionStateStore_{Guid.NewGuid()}";
+                }
+                sessionStateStore = new InMemoryStateStore<TKey, SessionWindowState<TCurrent>>(sessionStateStoreName);
+            }
+
+            if (windowResultsStateStore == null && !string.IsNullOrEmpty(windowResultsStateStoreName))
+            {
+                windowResultsStateStore = new InMemoryStateStore<(TKey, DateTime), TWindowOutput>(windowResultsStateStoreName);
+            }
+
+            var sessionWindowOperator = new SessionWindowOperator<TCurrent, TKey, TWindowOutput>(
+                keySelector, inactivityGap, windowFunction, sessionStateStore, windowResultsStateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = sessionWindowOperator;
+                _lastOperator = sessionWindowOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(sessionWindowOperator);
+                _lastOperator = sessionWindowOperator;
+            }
+
+            return new StreamBuilder<TIn, TWindowOutput>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
     }
 }

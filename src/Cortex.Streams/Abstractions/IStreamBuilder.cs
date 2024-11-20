@@ -134,5 +134,27 @@ namespace Cortex.Streams.Abstractions
             string windowResultsStateStoreName = null,
             IStateStore<TKey, List<(TCurrent, DateTime)>> windowStateStore = null,
             IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
+
+        /// <summary>
+        /// Adds Session window operator to the stream
+        /// </summary>
+        /// <typeparam name="TKey">The type of the key to group by.</typeparam>
+        /// <typeparam name="TWindowOutput">The type of the output after windowing.</typeparam>
+        /// <param name="keySelector">A function to extract the key from data.</param>
+        /// <param name="inactivityGap"></param>
+        /// <param name="windowFunction"></param>
+        /// <param name="sessionStateStoreName"></param>
+        /// <param name="windowResultsStateStoreName"></param>
+        /// <param name="sessionStateStore"></param>
+        /// <param name="windowResultsStateStore"></param>
+        /// <returns></returns>
+        IStreamBuilder<TIn, TWindowOutput> SessionWindow<TKey, TWindowOutput>(
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan inactivityGap,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string sessionStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, SessionWindowState<TCurrent>> sessionStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
     }
 }
