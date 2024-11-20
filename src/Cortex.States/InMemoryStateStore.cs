@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Cortex.States
@@ -16,8 +17,10 @@ namespace Cortex.States
 
         public TValue Get(TKey key)
         {
-            _store.TryGetValue(key, out var value);
-            return value;
+            if (_store.TryGetValue(key, out var value))
+                return value;
+
+            return default;
         }
 
         public void Put(TKey key, TValue value)

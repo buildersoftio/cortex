@@ -60,37 +60,44 @@ namespace Cortex.Streams.Operators
         {
             TOutput output;
 
-            if (_telemetryProvider != null)
+            if (input != null)
             {
-                var stopwatch = Stopwatch.StartNew();
-
-                using (var span = _tracer.StartSpan("MapOperator.Process"))
+                if (_telemetryProvider != null)
                 {
-                    try
+                    var stopwatch = Stopwatch.StartNew();
+
+                    using (var span = _tracer.StartSpan("MapOperator.Process"))
                     {
-                        output = _mapFunction((TInput)input);
-                        span.SetAttribute("status", "success");
-                    }
-                    catch (Exception ex)
-                    {
-                        span.SetAttribute("status", "error");
-                        span.SetAttribute("exception", ex.Message);
-                        throw;
-                    }
-                    finally
-                    {
-                        stopwatch.Stop();
-                        _recordProcessingTime(stopwatch.Elapsed.TotalMilliseconds);
-                        _incrementProcessedCounter();
+                        try
+                        {
+                            output = _mapFunction((TInput)input);
+                            span.SetAttribute("status", "success");
+                        }
+                        catch (Exception ex)
+                        {
+                            span.SetAttribute("status", "error");
+                            span.SetAttribute("exception", ex.Message);
+                            throw;
+                        }
+                        finally
+                        {
+                            stopwatch.Stop();
+                            _recordProcessingTime(stopwatch.Elapsed.TotalMilliseconds);
+                            _incrementProcessedCounter();
+                        }
                     }
                 }
+                else
+                {
+                    output = _mapFunction((TInput)input);
+                }
+
+                _nextOperator?.Process(output);
             }
             else
             {
-                output = _mapFunction((TInput)input);
+                throw new ArgumentNullException("Input cannot be null");
             }
-
-            _nextOperator?.Process(output);
         }
 
         public void SetNext(IOperator nextOperator)
