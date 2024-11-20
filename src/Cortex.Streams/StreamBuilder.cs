@@ -1,6 +1,7 @@
 ﻿using Cortex.States;
 using Cortex.Streams.Abstractions;
 using Cortex.Streams.Operators;
+using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
 
@@ -19,6 +20,8 @@ namespace Cortex.Streams
         private bool _sourceAdded = false;
         private readonly List<BranchOperator<TCurrent>> _branchOperators = new List<BranchOperator<TCurrent>>();
         private ForkOperator<TCurrent> _forkOperator;
+
+        private ITelemetryProvider _telemetryProvider;
 
 
         private StreamBuilder(string name)
@@ -122,7 +125,7 @@ namespace Cortex.Streams
                 _lastOperator = sinkOperator;
             }
 
-            return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
+            return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators, _telemetryProvider);
         }
 
         /// <summary>
@@ -144,7 +147,7 @@ namespace Cortex.Streams
                 _lastOperator = sinkAdapter;
             }
 
-            return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
+            return new SinkBuilder<TIn, TCurrent>(_name, _firstOperator, _branchOperators, _telemetryProvider);
         }
 
         /// <summary>
@@ -196,7 +199,9 @@ namespace Cortex.Streams
 
         public IStream<TIn, TCurrent> Build()
         {
-            return new Stream<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
+            //return new Stream<TIn, TCurrent>(_name, _firstOperator, _branchOperators);
+            return new Stream<TIn, TCurrent>(_name, _firstOperator, _branchOperators, _telemetryProvider);
+
         }
 
         /// <summary>
@@ -307,6 +312,12 @@ namespace Cortex.Streams
 
             //return new StreamBuilder<TIn, KeyValuePair<TKey, TAggregate>>(_name, _firstOperator, _lastOperator, _sourceAdded);
             return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
+
+        public IInitialStreamBuilder<TIn, TCurrent> WithTelemetry(ITelemetryProvider telemetryProvider)
+        {
+            _telemetryProvider = telemetryProvider;
+            return this;
         }
     }
 }
