@@ -90,9 +90,40 @@ Install-Package Cortex.States
 
 Cortex Data Framework makes it easy to set up and run real-time data processing pipelines. Below are some simple examples to get you started.
 
+### 1. Creating a Stream
 
+```csharp
+var stream = StreamBuilder<int, int>.CreateNewStream("ExampleStream")
+    .Map(x => x * 2)
+    .Filter(x => x > 10)
+    .Sink(Console.WriteLine)
+    .Build();
+stream.Start();
 
-### 1. Real-Time Click Tracking
+// emitting data to the stream
+stream.Emit(2);
+```
+### 2. Using State Stores
+
+```csharp
+var stateStore = new RocksDbStateStore<string, int>("ExampleStateStore", "./data");
+stateStore.Put("key1", 42);
+Console.WriteLine(stateStore.Get("key1"));
+```
+
+### 3. Telemetry Integration
+
+```csharp
+var telemetryProvider = new OpenTelemetryProvider();
+var stream = StreamBuilder<int, int>
+    .CreateNewStream("TelemetryStream")
+    .WithTelemetry(telemetryProvider)
+    .Map(x => x * 2)
+    .Sink(Console.WriteLine)
+    .Build();
+```
+
+### 4. Real-Time Click Tracking
 
 **Scenario**: Track the number of clicks on different web pages in real-time and display the aggregated counts.
 
