@@ -1,7 +1,9 @@
 ﻿using Cortex.Streams.Operators;
 using Cortex.Streams.RabbitMQ.Serializers;
 using RabbitMQ.Client;
+using System;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Cortex.Streams.RabbitMQ
 { /// <summary>

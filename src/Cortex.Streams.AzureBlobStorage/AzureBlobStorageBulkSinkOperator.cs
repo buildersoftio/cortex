@@ -3,6 +3,11 @@ using Cortex.Streams.AzureBlobStorage.Serializers;
 using Cortex.Streams.Operators;
 using Polly;
 using Polly.Retry;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Cortex.Streams.AzureBlobStorage
 {

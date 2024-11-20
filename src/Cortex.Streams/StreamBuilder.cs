@@ -319,5 +319,137 @@ namespace Cortex.Streams
             _telemetryProvider = telemetryProvider;
             return this;
         }
+
+        /// <summary>
+        /// Adds a tumbling window operator to the stream.
+        /// </summary>
+        /// <typeparam name="TKey">The type of the key to group by.</typeparam>
+        /// <typeparam name="TWindowOutput">The type of the output after windowing.</typeparam>
+        /// <param name="keySelector">A function to extract the key from data.</param>
+        /// <param name="windowDuration">The duration of the tumbling window.</param>
+        /// <param name="windowFunction">A function to process the data in the window.</param>
+        /// <param name="stateStoreName">Optional name for the state store.</param>
+        /// <param name="stateStore">Optional state store instance.</param>
+        /// <returns>A stream builder with the new data type.</returns>
+        public IStreamBuilder<TIn, TWindowOutput> TumblingWindow<TKey, TWindowOutput>(
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan windowDuration,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string windowStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, List<TCurrent>> windowStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
+        {
+            if (windowStateStore == null)
+            {
+                if (string.IsNullOrEmpty(windowStateStoreName))
+                {
+                    windowStateStoreName = $"TumblingWindowStateStore_{Guid.NewGuid()}";
+                }
+                windowStateStore = new InMemoryStateStore<TKey, List<TCurrent>>(windowStateStoreName);
+            }
+
+            if (windowResultsStateStore == null && !string.IsNullOrEmpty(windowResultsStateStoreName))
+            {
+                windowResultsStateStore = new InMemoryStateStore<(TKey, DateTime), TWindowOutput>(windowResultsStateStoreName);
+            }
+
+            var windowOperator = new TumblingWindowOperator<TCurrent, TKey, TWindowOutput>(
+                keySelector, windowDuration, windowFunction, windowStateStore, windowResultsStateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = windowOperator;
+                _lastOperator = windowOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(windowOperator);
+                _lastOperator = windowOperator;
+            }
+
+            return new StreamBuilder<TIn, TWindowOutput>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
+
+        public IStreamBuilder<TIn, TWindowOutput> SlidingWindow<TKey, TWindowOutput>(
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan windowSize,
+            TimeSpan advanceBy,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string windowStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, List<(TCurrent, DateTime)>> windowStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
+        {
+            if (windowStateStore == null)
+            {
+                if (string.IsNullOrEmpty(windowStateStoreName))
+                {
+                    windowStateStoreName = $"SlidingWindowStateStore_{Guid.NewGuid()}";
+                }
+                windowStateStore = new InMemoryStateStore<TKey, List<(TCurrent, DateTime)>>(windowStateStoreName);
+            }
+
+            if (windowResultsStateStore == null && !string.IsNullOrEmpty(windowResultsStateStoreName))
+            {
+                windowResultsStateStore = new InMemoryStateStore<(TKey, DateTime), TWindowOutput>(windowResultsStateStoreName);
+            }
+
+            var windowOperator = new SlidingWindowOperator<TCurrent, TKey, TWindowOutput>(
+                keySelector, windowSize, advanceBy, windowFunction, windowStateStore, windowResultsStateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = windowOperator;
+                _lastOperator = windowOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(windowOperator);
+                _lastOperator = windowOperator;
+            }
+
+            return new StreamBuilder<TIn, TWindowOutput>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
+
+        public IStreamBuilder<TIn, TWindowOutput> SessionWindow<TKey, TWindowOutput>(
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan inactivityGap,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string sessionStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, SessionWindowState<TCurrent>> sessionStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
+        {
+            if (sessionStateStore == null)
+            {
+                if (string.IsNullOrEmpty(sessionStateStoreName))
+                {
+                    sessionStateStoreName = $"SessionStateStore_{Guid.NewGuid()}";
+                }
+                sessionStateStore = new InMemoryStateStore<TKey, SessionWindowState<TCurrent>>(sessionStateStoreName);
+            }
+
+            if (windowResultsStateStore == null && !string.IsNullOrEmpty(windowResultsStateStoreName))
+            {
+                windowResultsStateStore = new InMemoryStateStore<(TKey, DateTime), TWindowOutput>(windowResultsStateStoreName);
+            }
+
+            var sessionWindowOperator = new SessionWindowOperator<TCurrent, TKey, TWindowOutput>(
+                keySelector, inactivityGap, windowFunction, sessionStateStore, windowResultsStateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = sessionWindowOperator;
+                _lastOperator = sessionWindowOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(sessionWindowOperator);
+                _lastOperator = sessionWindowOperator;
+            }
+
+            return new StreamBuilder<TIn, TWindowOutput>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
     }
 }

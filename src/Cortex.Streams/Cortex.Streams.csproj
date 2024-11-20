@@ -30,6 +30,12 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Metrics\**" />
+	  <EmbeddedResource Remove="Metrics\**" />
+	  <None Remove="Metrics\**" />
+	</ItemGroup>
 	<ItemGroup>
 		<None Include="..\..\README.md">
 		  <Pack>True</Pack>
@@ -48,7 +54,6 @@
 	<ItemGroup>
 		<Folder Include="Assets\" />
 		<Folder Include="Builders\" />
-		<Folder Include="Metrics\" />
 	</ItemGroup>
 
 	<ItemGroup>
