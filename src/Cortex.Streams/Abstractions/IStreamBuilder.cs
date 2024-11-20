@@ -109,5 +109,30 @@ namespace Cortex.Streams.Abstractions
             string windowResultsStateStoreName = null,
             IStateStore<TKey, List<TCurrent>> stateStore = null,
             IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
+
+
+        /// <summary>
+        /// Adds Sliding window operator to the stream
+        /// </summary>
+        /// <typeparam name="TKey">The type of the key to group by.</typeparam>
+        /// <typeparam name="TWindowOutput">The type of the output after windowing.</typeparam>
+        /// <param name="keySelector">A function to extract the key from data.</param>
+        /// <param name="windowSize"></param>
+        /// <param name="advanceBy"></param>
+        /// <param name="windowFunction"></param>
+        /// <param name="windowStateStoreName"></param>
+        /// <param name="windowResultsStateStoreName"></param>
+        /// <param name="windowStateStore"></param>
+        /// <param name="windowResultsStateStore"></param>
+        /// <returns></returns>
+        IStreamBuilder<TIn, TWindowOutput> SlidingWindow<TKey, TWindowOutput>(
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan windowSize,
+            TimeSpan advanceBy,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string windowStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, List<(TCurrent, DateTime)>> windowStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
     }
 }

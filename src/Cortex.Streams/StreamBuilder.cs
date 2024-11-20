@@ -332,13 +332,13 @@ namespace Cortex.Streams
         /// <param name="stateStore">Optional state store instance.</param>
         /// <returns>A stream builder with the new data type.</returns>
         public IStreamBuilder<TIn, TWindowOutput> TumblingWindow<TKey, TWindowOutput>(
-     Func<TCurrent, TKey> keySelector,
-     TimeSpan windowDuration,
-     Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
-     string windowStateStoreName = null,
-     string windowResultsStateStoreName = null,
-     IStateStore<TKey, List<TCurrent>> windowStateStore = null,
-     IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan windowDuration,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string windowStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, List<TCurrent>> windowStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
         {
             if (windowStateStore == null)
             {
@@ -356,6 +356,47 @@ namespace Cortex.Streams
 
             var windowOperator = new TumblingWindowOperator<TCurrent, TKey, TWindowOutput>(
                 keySelector, windowDuration, windowFunction, windowStateStore, windowResultsStateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = windowOperator;
+                _lastOperator = windowOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(windowOperator);
+                _lastOperator = windowOperator;
+            }
+
+            return new StreamBuilder<TIn, TWindowOutput>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
+
+        public IStreamBuilder<TIn, TWindowOutput> SlidingWindow<TKey, TWindowOutput>(
+            Func<TCurrent, TKey> keySelector,
+            TimeSpan windowSize,
+            TimeSpan advanceBy,
+            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            string windowStateStoreName = null,
+            string windowResultsStateStoreName = null,
+            IStateStore<TKey, List<(TCurrent, DateTime)>> windowStateStore = null,
+            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
+        {
+            if (windowStateStore == null)
+            {
+                if (string.IsNullOrEmpty(windowStateStoreName))
+                {
+                    windowStateStoreName = $"SlidingWindowStateStore_{Guid.NewGuid()}";
+                }
+                windowStateStore = new InMemoryStateStore<TKey, List<(TCurrent, DateTime)>>(windowStateStoreName);
+            }
+
+            if (windowResultsStateStore == null && !string.IsNullOrEmpty(windowResultsStateStoreName))
+            {
+                windowResultsStateStore = new InMemoryStateStore<(TKey, DateTime), TWindowOutput>(windowResultsStateStoreName);
+            }
+
+            var windowOperator = new SlidingWindowOperator<TCurrent, TKey, TWindowOutput>(
+                keySelector, windowSize, advanceBy, windowFunction, windowStateStore, windowResultsStateStore);
 
             if (_firstOperator == null)
             {
