@@ -4,6 +4,8 @@ using Polly.Retry;
 using Polly;
 using Cortex.Streams.AzureBlobStorage.Serializers;
 using Cortex.Streams.Operators;
+using System;
+using System.Threading.Tasks;
 
 namespace Cortex.Streams.AzureBlobStorage
 {
