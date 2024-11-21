@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Telemetry.OpenTeleme
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Tests", "src\Cortex.Tests\Cortex.Tests.csproj", "{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Files", "src\Cortex.Streams.Files\Cortex.Streams.Files.csproj", "{D376D6CA-3192-4EDC-B840-31F58B6457DD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -89,10 +91,13 @@ Global
 		{D51C6B82-ABD9-4C43-820E-237EDBD706A1}.Debug|Any CPU.Build.0 = Debug|AnyCPU
 		{D51C6B82-ABD9-4C43-820E-237EDBD706A1}.Release|Any CPU.ActiveCfg = Release|AnyCPU
 		{D51C6B82-ABD9-4C43-820E-237EDBD706A1}.Release|Any CPU.Build.0 = Release|AnyCPU
-		{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}.Debug|Any CPU.ActiveCfg = Debug|AnyCPU
+		{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}.Release|Any CPU.ActiveCfg = Release|AnyCPU
+		{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}.Release|Any CPU.Build.0 = Release|AnyCPU
+		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

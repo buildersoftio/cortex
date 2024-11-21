@@ -43,6 +43,7 @@
 - **Cortex.Streams.AzureServiceBus:** Integration with Azure Messaging Service Bus for messaging needs in the cloud.
 - **Cortex.Streams.AzureBlobStorage:** Integration with Azure Blob Storage for sinking messages.
 - **Cortex.Streams.S3:** Integration with AWS S3 for sinking messages.
+- **Cortex.Streams.Files:** Implementation of File Source and Sink operators.
 - **Cortex.States:** Core state management functionalities.
 - **Cortex.States.RocksDb:** Persistent state storage using RocksDB.
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
@@ -245,11 +246,11 @@ Describe your changes and submit the pull request for review.
 This project is licensed under the MIT License.
 
 ## Sponsorship
-Cortex is an open-source project maintained by BuilderSoft. Your support helps us continue developing and improving Vortex. Consider sponsoring us to contribute to the future of resilient streaming platforms.
+Cortex is an open-source project maintained by BuilderSoft. Your support helps us continue developing and improving Cortex. Consider sponsoring us to contribute to the future of resilient streaming platforms.
 
 ### How to Sponsor
 * **Financial Contributions**: Support us through [GitHub Sponsors](https://github.com/sponsors/buildersoftio) or other preferred platforms.
-* **Corporate Sponsorship**: If your organization is interested in sponsoring Vortex, please contact us directly.
+* **Corporate Sponsorship**: If your organization is interested in sponsoring Cortex, please contact us directly.
 
 Contact Us: cortex@buildersoft.io
 
