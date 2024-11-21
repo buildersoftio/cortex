@@ -43,6 +43,7 @@
 - **Cortex.Streams.AzureServiceBus:** Integration with Azure Messaging Service Bus for messaging needs in the cloud.
 - **Cortex.Streams.AzureBlobStorage:** Integration with Azure Blob Storage for sinking messages.
 - **Cortex.Streams.S3:** Integration with AWS S3 for sinking messages.
+- **Cortex.Streams.Files:** Implementation of File Source and Sink operators.
 - **Cortex.States:** Core state management functionalities.
 - **Cortex.States.RocksDb:** Persistent state storage using RocksDB.
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
