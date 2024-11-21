@@ -245,11 +245,11 @@ Describe your changes and submit the pull request for review.
 This project is licensed under the MIT License.
 
 ## Sponsorship
-Cortex is an open-source project maintained by BuilderSoft. Your support helps us continue developing and improving Vortex. Consider sponsoring us to contribute to the future of resilient streaming platforms.
+Cortex is an open-source project maintained by BuilderSoft. Your support helps us continue developing and improving Cortex. Consider sponsoring us to contribute to the future of resilient streaming platforms.
 
 ### How to Sponsor
 * **Financial Contributions**: Support us through [GitHub Sponsors](https://github.com/sponsors/buildersoftio) or other preferred platforms.
-* **Corporate Sponsorship**: If your organization is interested in sponsoring Vortex, please contact us directly.
+* **Corporate Sponsorship**: If your organization is interested in sponsoring Cortex, please contact us directly.
 
 Contact Us: cortex@buildersoft.io
 
