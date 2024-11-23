@@ -156,5 +156,8 @@ namespace Cortex.Streams.Abstractions
             string windowResultsStateStoreName = null,
             IStateStore<TKey, SessionWindowState<TCurrent>> sessionStateStore = null,
             IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
+
+
+        IStreamBuilder<TIn, TCurrent> SetNext(IOperator customOperator);
     }
 }

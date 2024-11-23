@@ -451,5 +451,21 @@ namespace Cortex.Streams
 
             return new StreamBuilder<TIn, TWindowOutput>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
+
+        public IStreamBuilder<TIn, TCurrent> SetNext(IOperator customOperator)
+        {
+            if (_firstOperator == null)
+            {
+                _firstOperator = customOperator;
+                _lastOperator = customOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(customOperator);
+                _lastOperator = customOperator;
+            }
+
+            return this; // Returns the current builder for method chaining
+        }
     }
 }
