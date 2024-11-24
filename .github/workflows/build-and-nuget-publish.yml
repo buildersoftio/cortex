@@ -1,0 +1,145 @@
+name: Build and Publish to NuGet
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - 'v*/main'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Check if PR was merged
+        id: check_merge
+        run: |
+          if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+            echo "merged=true" >> $GITHUB_OUTPUT
+          else
+            echo "merged=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine version increment
+        id: versioning
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: |
+          labels=$(echo '${{ toJSON(github.event.pull_request.labels) }}' | jq -r '.[].name')
+          echo "PR labels: $labels"
+          increment="patch"
+          if echo "$labels" | grep -q "feature"; then
+            increment="minor"
+          fi
+          echo "increment=$increment" >> $GITHUB_OUTPUT
+
+      - name: Get current version
+        id: get_version
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: |
+          branchName='${{ github.ref_name }}' # e.g., v1/main
+          echo "Branch name: $branchName"
+          if [[ $branchName =~ ^v([0-9]+)/main$ ]]; then
+            majorVersion="${BASH_REMATCH[1]}"
+            echo "Major version: $majorVersion"
+            git fetch --tags
+            latestTag=$(git tag --list "v$majorVersion.*.*" | sort -V | tail -n1)
+            if [ -n "$latestTag" ]; then
+              currentVersion="${latestTag#v}"
+            else
+              currentVersion="$majorVersion.0.0"
+            fi
+          else
+            echo "Branch name does not match expected pattern"
+            exit 1
+          fi
+          echo "Current version: $currentVersion"
+          echo "major=$majorVersion" >> $GITHUB_OUTPUT
+          echo "currentVersion=$currentVersion" >> $GITHUB_OUTPUT
+
+      - name: Bump version
+        id: bump_version
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: |
+          increment='${{ steps.versioning.outputs.increment }}'
+          currentVersion='${{ steps.get_version.outputs.currentVersion }}'
+          IFS='.' read -ra versionParts <<< "$currentVersion"
+          major=${versionParts[0]}
+          minor=${versionParts[1]}
+          patch=${versionParts[2]}
+          if [ "$increment" == 'minor' ]; then
+            minor=$((minor + 1))
+            patch=0
+          elif [ "$increment" == 'patch' ]; then
+            patch=$((patch + 1))
+          else
+            echo "Unknown increment type: $increment"
+            exit 1
+          fi
+          newVersion="$major.$minor.$patch"
+          echo "New version: $newVersion"
+          echo "newVersion=$newVersion" >> $GITHUB_OUTPUT
+
+      - name: Install xmlstarlet
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: sudo apt-get install -y xmlstarlet
+
+      - name: Update project versions
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: |
+          newVersion='${{ steps.bump_version.outputs.newVersion }}'
+          find . -name '*.csproj' -not -path '*/Cortex.Tests/*' | while read csproj; do
+            echo "Updating version in $csproj"
+            xmlstarlet ed -P -L -u "//Project/PropertyGroup/Version" -v "$newVersion" "$csproj" || \
+            xmlstarlet ed -P -L -s "//Project/PropertyGroup" -t elem -n "Version" -v "$newVersion" "$csproj"
+          done
+
+      - name: Build solution
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: dotnet build --configuration Release
+
+      - name: Pack projects
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: |
+          dotnet pack --configuration Release --no-build --output ./artifacts
+
+      - name: Publish to NuGet
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push ./artifacts/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+
+      - name: Configure Git
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Create Git tag
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        run: |
+          newVersion='${{ steps.bump_version.outputs.newVersion }}'
+          git tag -a "v$newVersion" -m "Release v$newVersion"
+          git push origin "v$newVersion"
+
+      - name: Create GitHub Release
+        if: ${{ steps.check_merge.outputs.merged == 'true' }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ steps.bump_version.outputs.newVersion }}"
+          release_name: "v${{ steps.bump_version.outputs.newVersion }}"
+          draft: false
+          prerelease: false
+          body: "Release of version v${{ steps.bump_version.outputs.newVersion }}"
