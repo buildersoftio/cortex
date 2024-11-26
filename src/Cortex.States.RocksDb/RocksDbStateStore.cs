@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
-using System.Xml.Linq;
 
 namespace Cortex.States.RocksDb
 {
@@ -18,10 +17,11 @@ namespace Cortex.States.RocksDb
         private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
         public string Name { get; }
 
-        public RocksDbStateStore(string name, string dbPath)
+        public RocksDbStateStore(string name, string dbPath, DbOptions rocksDbOptions = null)
         {
             Name = name;
-            var options = new DbOptions().SetCreateIfMissing(true);
+            var options = rocksDbOptions ?? new DbOptions().SetCreateIfMissing(true);
+
             _db = RocksDbSharp.RocksDb.Open(options, dbPath);
 
             // Default serializers using JSON
