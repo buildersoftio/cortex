@@ -1,5 +1,6 @@
 ﻿using Cortex.States;
 using Cortex.States.Operators;
+using Cortex.Streams.Windows;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
@@ -8,18 +9,18 @@ using System.Threading;
 namespace Cortex.Streams.Operators
 {
     /// <summary>
-    /// An operator that implements session window functionality.
+    /// An operator that performs session window aggregation.
     /// </summary>
     /// <typeparam name="TInput">The type of input data.</typeparam>
     /// <typeparam name="TKey">The type of the key to group by.</typeparam>
-    /// <typeparam name="TWindowOutput">The type of the output after windowing.</typeparam>
-    public class SessionWindowOperator<TInput, TKey, TWindowOutput> : IOperator, IStatefulOperator, ITelemetryEnabled, IDisposable
+    /// <typeparam name="TSessionOutput">The type of the output after session windowing.</typeparam>
+    public class SessionWindowOperator<TInput, TKey, TSessionOutput> : IOperator, IStatefulOperator, ITelemetryEnabled
     {
         private readonly Func<TInput, TKey> _keySelector;
         private readonly TimeSpan _inactivityGap;
-        private readonly Func<IEnumerable<TInput>, TWindowOutput> _windowFunction;
-        private readonly IStateStore<TKey, SessionWindowState<TInput>> _sessionStateStore;
-        private readonly IStateStore<(TKey, DateTime), TWindowOutput> _windowResultsStateStore;
+        private readonly Func<IEnumerable<TInput>, TSessionOutput> _sessionFunction;
+        private readonly IStateStore<TKey, SessionState<TInput>> _sessionStateStore;
+        private readonly IStateStore<SessionKey<TKey>, TSessionOutput> _sessionResultsStateStore;
         private IOperator _nextOperator;
 
         // Telemetry fields
@@ -30,186 +31,25 @@ namespace Cortex.Streams.Operators
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
 
-        // Timer management
-        private readonly Timer _timer;
-        private readonly object _lock = new object();
+        // Timer for checking inactive sessions
+        private readonly Timer _sessionExpirationTimer;
+        private readonly object _stateLock = new object();
 
         public SessionWindowOperator(
             Func<TInput, TKey> keySelector,
             TimeSpan inactivityGap,
-            Func<IEnumerable<TInput>, TWindowOutput> windowFunction,
-            IStateStore<TKey, SessionWindowState<TInput>> sessionStateStore,
-            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null)
+            Func<IEnumerable<TInput>, TSessionOutput> sessionFunction,
+            IStateStore<TKey, SessionState<TInput>> sessionStateStore,
+            IStateStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null)
         {
-            _keySelector = keySelector;
+            _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
             _inactivityGap = inactivityGap;
-            _windowFunction = windowFunction;
-            _sessionStateStore = sessionStateStore;
-            _windowResultsStateStore = windowResultsStateStore;
+            _sessionFunction = sessionFunction ?? throw new ArgumentNullException(nameof(sessionFunction));
+            _sessionStateStore = sessionStateStore ?? throw new ArgumentNullException(nameof(sessionStateStore));
+            _sessionResultsStateStore = sessionResultsStateStore;
 
-            // Initialize the timer to periodically check for sessions to close
-            _timer = new Timer(_ => CheckForInactiveSessions(), null, _inactivityGap, _inactivityGap);
-        }
-
-        private void CheckForInactiveSessions()
-        {
-            List<(TKey key, SessionWindowState<TInput> session)> sessionsToClose = new List<(TKey, SessionWindowState<TInput>)>();
-            var now = DateTime.UtcNow;
-
-            lock (_lock)
-            {
-                foreach (var item in _sessionStateStore.GetAll())
-                {
-                    var session = _sessionStateStore.Get(item.Key);
-                    if (session == null)
-                        continue;
-
-                    if (now - session.LastEventTime >= _inactivityGap)
-                    {
-                        sessionsToClose.Add((item.Key, session));
-                        _sessionStateStore.Remove(item.Key);
-                    }
-                }
-            }
-
-            // Process closed sessions outside the lock
-            foreach (var (key, session) in sessionsToClose)
-            {
-                TWindowOutput result;
-                if (_telemetryProvider != null)
-                {
-                    var stopwatch = Stopwatch.StartNew();
-                    using (var span = _tracer.StartSpan("SessionWindowOperator.ProcessSession"))
-                    {
-                        try
-                        {
-                            result = _windowFunction(session.Events);
-                            span.SetAttribute("key", key.ToString());
-                            span.SetAttribute("sessionStart", session.StartTime.ToString());
-                            span.SetAttribute("sessionEnd", session.LastEventTime.ToString());
-                            span.SetAttribute("status", "success");
-                        }
-                        catch (Exception ex)
-                        {
-                            span.SetAttribute("status", "error");
-                            span.SetAttribute("exception", ex.ToString());
-                            throw;
-                        }
-                        finally
-                        {
-                            stopwatch.Stop();
-                            _recordProcessingTime(stopwatch.Elapsed.TotalMilliseconds);
-                        }
-                    }
-                }
-                else
-                {
-                    result = _windowFunction(session.Events);
-                }
-
-                // Store the session result in the state store if provided
-                if (_windowResultsStateStore != null)
-                {
-                    _windowResultsStateStore.Put((key, session.StartTime), result);
-                }
-
-                // Continue processing
-                _nextOperator?.Process(result);
-            }
-        }
-
-        public void Process(object input)
-        {
-            var typedInput = (TInput)input;
-            var key = _keySelector(typedInput);
-            var timestamp = DateTime.UtcNow;
-
-            if (_telemetryProvider != null)
-            {
-                var stopwatch = Stopwatch.StartNew();
-                using (var span = _tracer.StartSpan("SessionWindowOperator.Process"))
-                {
-                    try
-                    {
-                        lock (_lock)
-                        {
-                            var session = _sessionStateStore.Get(key);
-                            if (session == null)
-                            {
-                                session = new SessionWindowState<TInput>
-                                {
-                                    StartTime = timestamp,
-                                    LastEventTime = timestamp,
-                                    Events = new List<TInput> { typedInput }
-                                };
-                                _sessionStateStore.Put(key, session);
-                            }
-                            else
-                            {
-                                session.Events.Add(typedInput);
-                                session.LastEventTime = timestamp;
-                            }
-                        }
-                        span.SetAttribute("key", key.ToString());
-                        span.SetAttribute("timestamp", timestamp.ToString());
-                        span.SetAttribute("status", "success");
-                    }
-                    catch (Exception ex)
-                    {
-                        span.SetAttribute("status", "error");
-                        span.SetAttribute("exception", ex.ToString());
-                        throw;
-                    }
-                    finally
-                    {
-                        stopwatch.Stop();
-                        _recordProcessingTime(stopwatch.Elapsed.TotalMilliseconds);
-                        _incrementProcessedCounter();
-                    }
-                }
-            }
-            else
-            {
-                lock (_lock)
-                {
-                    var session = _sessionStateStore.Get(key);
-                    if (session == null)
-                    {
-                        session = new SessionWindowState<TInput>
-                        {
-                            StartTime = timestamp,
-                            LastEventTime = timestamp,
-                            Events = new List<TInput> { typedInput }
-                        };
-                        _sessionStateStore.Put(key, session);
-                    }
-                    else
-                    {
-                        session.Events.Add(typedInput);
-                        session.LastEventTime = timestamp;
-                    }
-                }
-            }
-        }
-
-        public void SetNext(IOperator nextOperator)
-        {
-            _nextOperator = nextOperator;
-
-            // Propagate telemetry
-            if (_nextOperator is ITelemetryEnabled nextTelemetryEnabled && _telemetryProvider != null)
-            {
-                nextTelemetryEnabled.SetTelemetryProvider(_telemetryProvider);
-            }
-        }
-
-        public IEnumerable<IStateStore> GetStateStores()
-        {
-            yield return _sessionStateStore;
-            if (_windowResultsStateStore != null)
-            {
-                yield return _windowResultsStateStore;
-            }
+            // Set up a timer to periodically check for inactive sessions
+            _sessionExpirationTimer = new Timer(SessionExpirationCallback, null, inactivityGap, inactivityGap);
         }
 
         public void SetTelemetryProvider(ITelemetryProvider telemetryProvider)
@@ -240,20 +80,184 @@ namespace Cortex.Streams.Operators
             }
         }
 
-        public void Dispose()
+        public void Process(object input)
         {
-            _timer?.Dispose();
-        }
-    }
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
 
-    /// <summary>
-    /// Represents the state of a session window.
-    /// </summary>
-    /// <typeparam name="TInput">The type of input data.</typeparam>
-    public class SessionWindowState<TInput>
-    {
-        public DateTime StartTime { get; set; }
-        public DateTime LastEventTime { get; set; }
-        public List<TInput> Events { get; set; }
+            if (!(input is TInput typedInput))
+                throw new ArgumentException($"Expected input of type {typeof(TInput).Name}, but received {input.GetType().Name}");
+
+            if (_telemetryProvider != null)
+            {
+                var stopwatch = Stopwatch.StartNew();
+
+                using (var span = _tracer.StartSpan("SessionWindowOperator.Process"))
+                {
+                    try
+                    {
+                        ProcessInput(typedInput);
+                        span.SetAttribute("status", "success");
+                    }
+                    catch (Exception ex)
+                    {
+                        span.SetAttribute("status", "error");
+                        span.SetAttribute("exception", ex.ToString());
+                        throw;
+                    }
+                    finally
+                    {
+                        stopwatch.Stop();
+                        _recordProcessingTime(stopwatch.Elapsed.TotalMilliseconds);
+                        _incrementProcessedCounter();
+                    }
+                }
+            }
+            else
+            {
+                ProcessInput(typedInput);
+            }
+        }
+
+        private void ProcessInput(TInput input)
+        {
+            var key = _keySelector(input);
+            var currentTime = DateTime.UtcNow;
+
+            lock (_stateLock)
+            {
+                SessionState<TInput> sessionState;
+
+                if (!_sessionStateStore.ContainsKey(key))
+                {
+                    // Start a new session
+                    sessionState = new SessionState<TInput>
+                    {
+                        SessionStartTime = currentTime,
+                        LastEventTime = currentTime,
+                        Events = new List<TInput> { input }
+                    };
+                    _sessionStateStore.Put(key, sessionState);
+                }
+                else
+                {
+                    sessionState = _sessionStateStore.Get(key);
+
+                    var timeSinceLastEvent = currentTime - sessionState.LastEventTime;
+
+                    if (timeSinceLastEvent <= _inactivityGap)
+                    {
+                        // Continue the current session
+                        sessionState.Events.Add(input);
+                        sessionState.LastEventTime = currentTime;
+                        _sessionStateStore.Put(key, sessionState);
+                    }
+                    else
+                    {
+                        // Session has expired, process it
+                        ProcessSession(key, sessionState);
+
+                        // Start a new session
+                        sessionState = new SessionState<TInput>
+                        {
+                            SessionStartTime = currentTime,
+                            LastEventTime = currentTime,
+                            Events = new List<TInput> { input }
+                        };
+                        _sessionStateStore.Put(key, sessionState);
+                    }
+                }
+            }
+        }
+
+        private void ProcessSession(TKey key, SessionState<TInput> sessionState)
+        {
+            var sessionOutput = _sessionFunction(sessionState.Events);
+
+            // Optionally store the session result
+            if (_sessionResultsStateStore != null)
+            {
+                var resultKey = new SessionKey<TKey>
+                {
+                    Key = key,
+                    SessionStartTime = sessionState.SessionStartTime,
+                    SessionEndTime = sessionState.LastEventTime
+                };
+                _sessionResultsStateStore.Put(resultKey, sessionOutput);
+            }
+
+            // Emit the session output
+            _nextOperator?.Process(sessionOutput);
+
+            // Remove the session state
+            _sessionStateStore.Remove(key);
+        }
+
+        private void SessionExpirationCallback(object state)
+        {
+            try
+            {
+                var currentTime = DateTime.UtcNow;
+                var keysToProcess = new List<TKey>();
+
+                lock (_stateLock)
+                {
+                    var allKeys = _sessionStateStore.GetKeys();
+
+                    foreach (var key in allKeys)
+                    {
+                        var sessionState = _sessionStateStore.Get(key);
+                        if (sessionState != null)
+                        {
+                            var timeSinceLastEvent = currentTime - sessionState.LastEventTime;
+
+                            if (timeSinceLastEvent > _inactivityGap)
+                            {
+                                // Session has expired
+                                keysToProcess.Add(key);
+                            }
+                        }
+                    }
+                }
+
+                // Process expired sessions outside the lock
+                foreach (var key in keysToProcess)
+                {
+                    SessionState<TInput> sessionState;
+
+                    lock (_stateLock)
+                    {
+                        sessionState = _sessionStateStore.Get(key);
+                        if (sessionState == null)
+                            continue; // Already processed
+                    }
+
+                    ProcessSession(key, sessionState);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log or handle exceptions as necessary
+                Console.WriteLine($"Error in SessionExpirationCallback: {ex.Message}");
+            }
+        }
+
+        public IEnumerable<IStateStore> GetStateStores()
+        {
+            yield return _sessionStateStore;
+            if (_sessionResultsStateStore != null)
+                yield return _sessionResultsStateStore;
+        }
+
+        public void SetNext(IOperator nextOperator)
+        {
+            _nextOperator = nextOperator;
+
+            // Propagate telemetry to the next operator
+            if (_nextOperator is ITelemetryEnabled nextTelemetryEnabled && _telemetryProvider != null)
+            {
+                nextTelemetryEnabled.SetTelemetryProvider(_telemetryProvider);
+            }
+        }
     }
 }

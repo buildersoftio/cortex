@@ -15,5 +15,6 @@ namespace Cortex.States
         bool ContainsKey(TKey key);
         void Remove(TKey key);
         IEnumerable<KeyValuePair<TKey, TValue>> GetAll();
+        IEnumerable<TKey> GetKeys();
     }
 }

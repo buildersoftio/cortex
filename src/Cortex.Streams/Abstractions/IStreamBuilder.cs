@@ -1,5 +1,6 @@
 ﻿using Cortex.States;
 using Cortex.Streams.Operators;
+using Cortex.Streams.Windows;
 using System;
 using System.Collections.Generic;
 
@@ -98,64 +99,66 @@ namespace Cortex.Streams.Abstractions
         /// <param name="keySelector">A function to extract the key from data.</param>
         /// <param name="windowDuration">The duration of the tumbling window.</param>
         /// <param name="windowFunction">A function to process the data in the window.</param>
-        /// <param name="stateStoreName">Optional name for the state store.</param>
-        /// <param name="stateStore">Optional state store instance.</param>
+        /// <param name="windowStateStoreName">Optional name for the state store.</param>
+        /// <param name="windowResultsStateStoreName">Optional name for the results state store.</param>
+        /// <param name="windowStateStore">Optional state store instance for window state.</param>
+        /// <param name="windowResultsStateStore">Optional state store instance for window results.</param>
         /// <returns>A stream builder with the new data type.</returns>
         IStreamBuilder<TIn, TWindowOutput> TumblingWindow<TKey, TWindowOutput>(
             Func<TCurrent, TKey> keySelector,
             TimeSpan windowDuration,
             Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
-            string stateStoreName = null,
+            string windowStateStoreName = null,
             string windowResultsStateStoreName = null,
-            IStateStore<TKey, List<TCurrent>> stateStore = null,
-            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
+            IStateStore<TKey, WindowState<TCurrent>> windowStateStore = null,
+            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null);
 
 
         /// <summary>
-        /// Adds Sliding window operator to the stream
+        /// Adds a sliding window operator to the stream.
         /// </summary>
         /// <typeparam name="TKey">The type of the key to group by.</typeparam>
         /// <typeparam name="TWindowOutput">The type of the output after windowing.</typeparam>
         /// <param name="keySelector">A function to extract the key from data.</param>
-        /// <param name="windowSize"></param>
-        /// <param name="advanceBy"></param>
-        /// <param name="windowFunction"></param>
-        /// <param name="windowStateStoreName"></param>
-        /// <param name="windowResultsStateStoreName"></param>
-        /// <param name="windowStateStore"></param>
-        /// <param name="windowResultsStateStore"></param>
-        /// <returns></returns>
+        /// <param name="windowDuration">The duration of the sliding window.</param>
+        /// <param name="slideInterval">The interval at which the window slides.</param>
+        /// <param name="windowFunction">A function to process the data in the window.</param>
+        /// <param name="windowStateStoreName">Optional name for the state store.</param>
+        /// <param name="windowResultsStateStoreName">Optional name for the results state store.</param>
+        /// <param name="windowStateStore">Optional state store instance for window state.</param>
+        /// <param name="windowResultsStateStore">Optional state store instance for window results.</param>
+        /// <returns>A stream builder with the new data type.</returns>
         IStreamBuilder<TIn, TWindowOutput> SlidingWindow<TKey, TWindowOutput>(
             Func<TCurrent, TKey> keySelector,
-            TimeSpan windowSize,
-            TimeSpan advanceBy,
+            TimeSpan windowDuration,
+            TimeSpan slideInterval,
             Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
             string windowStateStoreName = null,
             string windowResultsStateStoreName = null,
-            IStateStore<TKey, List<(TCurrent, DateTime)>> windowStateStore = null,
-            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
+            IStateStore<WindowKey<TKey>, List<TCurrent>> windowStateStore = null,
+            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null);
 
         /// <summary>
-        /// Adds Session window operator to the stream
+        /// Adds a session window operator to the stream.
         /// </summary>
         /// <typeparam name="TKey">The type of the key to group by.</typeparam>
-        /// <typeparam name="TWindowOutput">The type of the output after windowing.</typeparam>
+        /// <typeparam name="TSessionOutput">The type of the output after session windowing.</typeparam>
         /// <param name="keySelector">A function to extract the key from data.</param>
-        /// <param name="inactivityGap"></param>
-        /// <param name="windowFunction"></param>
-        /// <param name="sessionStateStoreName"></param>
-        /// <param name="windowResultsStateStoreName"></param>
-        /// <param name="sessionStateStore"></param>
-        /// <param name="windowResultsStateStore"></param>
-        /// <returns></returns>
-        IStreamBuilder<TIn, TWindowOutput> SessionWindow<TKey, TWindowOutput>(
+        /// <param name="inactivityGap">The inactivity gap duration to define session boundaries.</param>
+        /// <param name="sessionFunction">A function to process the data in the session.</param>
+        /// <param name="sessionStateStoreName">Optional name for the state store.</param>
+        /// <param name="sessionResultsStateStoreName">Optional name for the results state store.</param>
+        /// <param name="sessionStateStore">Optional state store instance for session state.</param>
+        /// <param name="sessionResultsStateStore">Optional state store instance for session results.</param>
+        /// <returns>A stream builder with the new data type.</returns>
+        IStreamBuilder<TIn, TSessionOutput> SessionWindow<TKey, TSessionOutput>(
             Func<TCurrent, TKey> keySelector,
             TimeSpan inactivityGap,
-            Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
+            Func<IEnumerable<TCurrent>, TSessionOutput> sessionFunction,
             string sessionStateStoreName = null,
-            string windowResultsStateStoreName = null,
-            IStateStore<TKey, SessionWindowState<TCurrent>> sessionStateStore = null,
-            IStateStore<(TKey, DateTime), TWindowOutput> windowResultsStateStore = null);
+            string sessionResultsStateStoreName = null,
+            IStateStore<TKey, SessionState<TCurrent>> sessionStateStore = null,
+            IStateStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null);
 
 
         IStreamBuilder<TIn, TCurrent> SetNext(IOperator customOperator);
