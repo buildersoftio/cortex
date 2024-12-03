@@ -42,5 +42,10 @@ namespace Cortex.States
         {
             return _store;
         }
+
+        public IEnumerable<TKey> GetKeys()
+        {
+            return _store.Keys;
+        }
     }
 }
