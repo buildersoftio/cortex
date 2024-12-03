@@ -3,8 +3,8 @@
 	<PropertyGroup>
 		<TargetFrameworks>net9.0;net8.0;net7.0;netstandard2.1;netstandard2.0</TargetFrameworks>
 
-		<AssemblyVersion>1.0.0</AssemblyVersion>
-		<FileVersion>1.0.0</FileVersion>
+		<AssemblyVersion>1.0.1</AssemblyVersion>
+		<FileVersion>1.0.1</FileVersion>
 		<Product>Buildersoft Cortex Framework</Product>
 		<Company>Buildersoft</Company>
 		<Authors>Buildersoft,EnesHoxha</Authors>
@@ -16,7 +16,7 @@
 		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
 		<PackageTags>cortex vortex mediator eda streaming distributed streams states kafka pulsar rocksdb</PackageTags>
 
-		<Version>1.0.0</Version>
+		<Version>1.0.1</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>cortex.png</PackageIcon>
 		<PackageId>Cortex.Streams</PackageId>

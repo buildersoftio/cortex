@@ -121,5 +121,26 @@ namespace Cortex.States.RocksDb
             _db?.Dispose();
             _lock?.Dispose();
         }
+
+        public IEnumerable<TKey> GetKeys()
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                using (var iterator = _db.NewIterator())
+                {
+                    for (iterator.SeekToFirst(); iterator.Valid(); iterator.Next())
+                    {
+                        var keyBytes = iterator.Key();
+                        var key = _keyDeserializer(keyBytes);
+                        yield return key;
+                    }
+                }
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
     }
 }
