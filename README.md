@@ -2,10 +2,11 @@
 
 **Cortex Data Framework** is a robust, extensible platform designed to facilitate real-time data streaming, processing, and state management. It provides developers with a comprehensive suite of tools and libraries to build scalable, high-performance data pipelines tailored to diverse use cases. By abstracting underlying streaming technologies and state management solutions, Cortex Data Framework enables seamless integration, simplified development workflows, and enhanced maintainability for complex data-driven applications.
 
-![GitHub forks](https://img.shields.io/github/forks/buildersoftio/cortex)
-![GitHub License](https://img.shields.io/github/license/buildersoftio/cortex)
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams?label=Cortex.Streams)
-![GitHub contributors](https://img.shields.io/github/contributors/buildersoftio/cortex) [![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/4Gfe6mhJ)
+[![GitHub forks](https://img.shields.io/github/forks/buildersoftio/cortex)](https://github.com/buildersoftio/cortex/fork)
+[![GitHub License](https://img.shields.io/github/license/buildersoftio/cortex)](https://github.com/buildersoftio/cortex/blob/master/LICENSE)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams?label=Cortex.Streams)](https://www.nuget.org/packages/Cortex.Streams)
+[![GitHub contributors](https://img.shields.io/github/contributors/buildersoftio/cortex)](https://github.com/buildersoftio/cortex)
+[![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/4Gfe6mhJ)
 
 ## Key Features
 - **Modular Architecture**: Comprises distinct, interchangeable modules for streaming, state management, and connectors, allowing developers to choose components that best fit their requirements.
@@ -41,44 +42,44 @@
 ## Project Structure
 
 - **Cortex.Streams:** Core streaming capabilities for building data pipelines.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams?label=Cortex.Streams)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams?label=Cortex.Streams)](https://www.nuget.org/packages/Cortex.Streams)
 
 - **Cortex.Streams.Kafka:** Integration with Apache Kafka for robust data streaming.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Kafka?label=Cortex.Streams.Kafka)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Kafka?label=Cortex.Streams.Kafka)](https://www.nuget.org/packages/Cortex.Streams.Kafka)
 
 - **Cortex.Streams.Pulsar:** Integration with Apache Pulsar for versatile messaging needs.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Pulsar?label=Cortex.Streams.Pulsar)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Pulsar?label=Cortex.Streams.Pulsar)](https://www.nuget.org/packages/Cortex.Streams.Pulsar)
 
 - **Cortex.Streams.RabbitMQ:** Integration with RabbitMQ for versatile messaging needs.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.RabbitMQ?label=Cortex.Streams.RabbitMQ)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.RabbitMQ?label=Cortex.Streams.RabbitMQ)](https://www.nuget.org/packages/Cortex.Streams.RabbitMQ)
 
 - **Cortex.Streams.AWSSQS:** Integration with Amazon SQS for messaging needs in the cloud.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.AWSSQS?label=Cortex.Streams.AWSSQS)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.AWSSQS?label=Cortex.Streams.AWSSQS)](https://www.nuget.org/packages/Cortex.Streams.AWSSQS)
 
 
 - **Cortex.Streams.AzureServiceBus:** Integration with Azure Messaging Service Bus for messaging needs in the cloud.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.AzureServiceBus?label=Cortex.Streams.AzureServiceBus)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.AzureServiceBus?label=Cortex.Streams.AzureServiceBus)](https://www.nuget.org/packages/Cortex.Streams.AzureServiceBus)
 
 - **Cortex.Streams.AzureBlobStorage:** Integration with Azure Blob Storage for sinking messages.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.AzureBlobStorage?label=Cortex.Streams.AzureBlobStorage)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.AzureBlobStorage?label=Cortex.Streams.AzureBlobStorage)](https://www.nuget.org/packages/Cortex.Streams.AzureBlobStorage)
 
 - **Cortex.Streams.S3:** Integration with AWS S3 for sinking messages.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.S3?label=Cortex.Streams.S3)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.S3?label=Cortex.Streams.S3)](https://www.nuget.org/packages/Cortex.Streams.S3)
 
 - **Cortex.Streams.Files:** Implementation of File Source and Sink operators.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Files?label=Cortex.Streams.Files)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Files?label=Cortex.Streams.Files)](https://www.nuget.org/packages/Cortex.Streams.Files)
 
 - **Cortex.States:** Core state management functionalities.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.States?label=Cortex.States)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States?label=Cortex.States)](https://www.nuget.org/packages/Cortex.States)
 
 - **Cortex.States.RocksDb:** Persistent state storage using RocksDB.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.RocksDb?label=Cortex.States.RocksDb)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.RocksDb?label=Cortex.States.RocksDb)](https://www.nuget.org/packages/Cortex.States.RocksDb)
 
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)](https://www.nuget.org/packages/Cortex.Telemetry)
 
 - **Cortex.Telemetry.OpenTelemetry:** Adds support for Open Telemetry.
-![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry.OpenTelemetry?label=Cortex.Telemetry.OpenTelemetry)
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry.OpenTelemetry?label=Cortex.Telemetry.OpenTelemetry)](https://www.nuget.org/packages/Cortex.Telemetry.OpenTelemetry)
 
 
 ## Getting Started
