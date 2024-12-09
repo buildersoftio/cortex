@@ -24,7 +24,7 @@
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 		<RepositoryType>git</RepositoryType>
-		<PackageReleaseNotes>Just as the Cortex in our brains handles complex processing efficiently, Cortex Data Framework brings brainpower to your data management!	</PackageReleaseNotes>
+		<PackageReleaseNotes>Just as the Cortex in our brains handles complex processing efficiently, Cortex Data Framework brings brainpower to your data management!</PackageReleaseNotes>
 		<PackageProjectUrl>https://buildersoft.io/</PackageProjectUrl>
 		<Title>Cortex Data Framework</Title>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
