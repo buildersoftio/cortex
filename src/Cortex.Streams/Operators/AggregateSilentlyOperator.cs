@@ -5,10 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-
 namespace Cortex.Streams.Operators
 {
-    public class AggregateOperator<TKey, TInput, TAggregate> : IOperator, IStatefulOperator, ITelemetryEnabled
+    public class AggregateSilentlyOperator<TKey, TInput, TAggregate> : IOperator, IStatefulOperator, ITelemetryEnabled
     {
         private readonly Func<TInput, TKey> _keySelector;
         private readonly Func<TAggregate, TInput, TAggregate> _aggregateFunction;
@@ -23,7 +22,7 @@ namespace Cortex.Streams.Operators
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
 
-        public AggregateOperator(Func<TInput, TKey> keySelector, Func<TAggregate, TInput, TAggregate> aggregateFunction, IStateStore<TKey, TAggregate> stateStore)
+        public AggregateSilentlyOperator(Func<TInput, TKey> keySelector, Func<TAggregate, TInput, TAggregate> aggregateFunction, IStateStore<TKey, TAggregate> stateStore)
         {
             _keySelector = keySelector;
             _aggregateFunction = aggregateFunction;
@@ -60,18 +59,17 @@ namespace Cortex.Streams.Operators
 
         public void Process(object input)
         {
-            TAggregate aggregate;
-            TKey key;
-
             if (_telemetryProvider != null)
             {
                 var stopwatch = Stopwatch.StartNew();
+
                 using (var span = _tracer.StartSpan("AggregateOperator.Process"))
                 {
                     try
                     {
                         var typedInput = (TInput)input;
-                        key = _keySelector(typedInput);
+                        var key = _keySelector(typedInput);
+                        TAggregate aggregate;
                         lock (_stateStore)
                         {
                             aggregate = _stateStore.Get(key);
@@ -98,17 +96,21 @@ namespace Cortex.Streams.Operators
             else
             {
                 var typedInput = (TInput)input;
-                key = _keySelector(typedInput);
-
+                var key = _keySelector(typedInput);
                 lock (_stateStore)
                 {
-                    aggregate = _stateStore.Get(key);
+                    var aggregate = _stateStore.Get(key);
                     aggregate = _aggregateFunction(aggregate, typedInput);
                     _stateStore.Put(key, aggregate);
                 }
             }
 
-            _nextOperator?.Process(new KeyValuePair<TKey, TAggregate>(key, aggregate));
+            // we should not return the value from the state, continue the process further, state is just used to mutate
+            // for now we are commenting the next Operator.
+            //_nextOperator?.Process(new KeyValuePair<TKey, TAggregate>(key, aggregate));
+
+            // Continue processing
+            _nextOperator?.Process(input);
         }
 
         public void SetNext(IOperator nextOperator)
@@ -127,5 +129,4 @@ namespace Cortex.Streams.Operators
             yield return _stateStore;
         }
     }
-
 }

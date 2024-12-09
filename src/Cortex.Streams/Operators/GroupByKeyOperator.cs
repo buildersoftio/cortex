@@ -57,17 +57,19 @@ namespace Cortex.Streams.Operators
 
         public void Process(object input)
         {
+
+            var typedInput = (TInput)input;
+            var key = _keySelector(typedInput);
+            List<TInput> group;
+
             if (_telemetryProvider != null)
             {
-                var stopwatch = Stopwatch.StartNew();
-
                 using (var span = _tracer.StartSpan("GroupByKeyOperator.Process"))
                 {
+                    var stopwatch = Stopwatch.StartNew();
                     try
                     {
-                        var typedInput = (TInput)input;
-                        var key = _keySelector(typedInput);
-                        List<TInput> group;
+
                         lock (_stateStore)
                         {
                             group = _stateStore.Get(key) ?? new List<TInput>();
@@ -94,18 +96,15 @@ namespace Cortex.Streams.Operators
             }
             else
             {
-                var typedInput = (TInput)input;
-                var key = _keySelector(typedInput);
                 lock (_stateStore)
                 {
-                    var group = _stateStore.Get(key) ?? new List<TInput>();
+                    group = _stateStore.Get(key) ?? new List<TInput>();
                     group.Add(typedInput);
                     _stateStore.Put(key, group);
                 }
             }
 
-            // Continue processing
-            _nextOperator?.Process(input);
+            _nextOperator?.Process(new KeyValuePair<TKey, List<TInput>>(key, group));
         }
 
         public void SetNext(IOperator nextOperator)
