@@ -5,14 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-
 namespace Cortex.Streams.Operators
 {
-    public class AggregateOperator<TKey, TInput, TAggregate> : IOperator, IStatefulOperator, ITelemetryEnabled
+    public class GroupByKeySilentlyOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled
     {
         private readonly Func<TInput, TKey> _keySelector;
-        private readonly Func<TAggregate, TInput, TAggregate> _aggregateFunction;
-        private readonly IStateStore<TKey, TAggregate> _stateStore;
+        private readonly IStateStore<TKey, List<TInput>> _stateStore;
         private IOperator _nextOperator;
 
         // Telemetry fields
@@ -23,10 +21,9 @@ namespace Cortex.Streams.Operators
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
 
-        public AggregateOperator(Func<TInput, TKey> keySelector, Func<TAggregate, TInput, TAggregate> aggregateFunction, IStateStore<TKey, TAggregate> stateStore)
+        public GroupByKeySilentlyOperator(Func<TInput, TKey> keySelector, IStateStore<TKey, List<TInput>> stateStore)
         {
             _keySelector = keySelector;
-            _aggregateFunction = aggregateFunction;
             _stateStore = stateStore;
         }
 
@@ -37,9 +34,9 @@ namespace Cortex.Streams.Operators
             if (_telemetryProvider != null)
             {
                 var metricsProvider = _telemetryProvider.GetMetricsProvider();
-                _processedCounter = metricsProvider.CreateCounter($"aggregate_operator_processed_{typeof(TInput).Name}", "Number of items processed by AggregateOperator");
-                _processingTimeHistogram = metricsProvider.CreateHistogram($"aggregate_operator_processing_time_{typeof(TInput).Name}", "Processing time for AggregateOperator");
-                _tracer = _telemetryProvider.GetTracingProvider().GetTracer($"AggregateOperator_{typeof(TInput).Name}");
+                _processedCounter = metricsProvider.CreateCounter($"groupby_operator_processed_{typeof(TInput).Name}", "Number of items processed by GroupByKeyOperator");
+                _processingTimeHistogram = metricsProvider.CreateHistogram($"groupby_operator_processing_time_{typeof(TInput).Name}", "Processing time for GroupByKeyOperator");
+                _tracer = _telemetryProvider.GetTracingProvider().GetTracer($"GroupByKeyOperator_{typeof(TInput).Name}");
 
                 // Cache delegates
                 _incrementProcessedCounter = () => _processedCounter.Increment();
@@ -51,7 +48,7 @@ namespace Cortex.Streams.Operators
                 _recordProcessingTime = null;
             }
 
-            // Propagate telemetry to the next operator
+            // Propagate telemetry
             if (_nextOperator is ITelemetryEnabled nextTelemetryEnabled)
             {
                 nextTelemetryEnabled.SetTelemetryProvider(_telemetryProvider);
@@ -60,25 +57,27 @@ namespace Cortex.Streams.Operators
 
         public void Process(object input)
         {
-            TAggregate aggregate;
-            TKey key;
+
+            var typedInput = (TInput)input;
+            var key = _keySelector(typedInput);
+            List<TInput> group;
 
             if (_telemetryProvider != null)
             {
-                var stopwatch = Stopwatch.StartNew();
-                using (var span = _tracer.StartSpan("AggregateOperator.Process"))
+                using (var span = _tracer.StartSpan("GroupByKeyOperator.Process"))
                 {
+                    var stopwatch = Stopwatch.StartNew();
                     try
                     {
-                        var typedInput = (TInput)input;
-                        key = _keySelector(typedInput);
+
                         lock (_stateStore)
                         {
-                            aggregate = _stateStore.Get(key);
-                            aggregate = _aggregateFunction(aggregate, typedInput);
-                            _stateStore.Put(key, aggregate);
+                            group = _stateStore.Get(key) ?? new List<TInput>();
+                            group.Add(typedInput);
+                            _stateStore.Put(key, group);
                         }
                         span.SetAttribute("key", key.ToString());
+                        span.SetAttribute("group_size", group.Count.ToString());
                         span.SetAttribute("status", "success");
                     }
                     catch (Exception ex)
@@ -97,18 +96,18 @@ namespace Cortex.Streams.Operators
             }
             else
             {
-                var typedInput = (TInput)input;
-                key = _keySelector(typedInput);
-
                 lock (_stateStore)
                 {
-                    aggregate = _stateStore.Get(key);
-                    aggregate = _aggregateFunction(aggregate, typedInput);
-                    _stateStore.Put(key, aggregate);
+                    group = _stateStore.Get(key) ?? new List<TInput>();
+                    group.Add(typedInput);
+                    _stateStore.Put(key, group);
                 }
             }
 
-            _nextOperator?.Process(new KeyValuePair<TKey, TAggregate>(key, aggregate));
+            //_nextOperator?.Process(new KeyValuePair<TKey, List<TInput>>(key, group));
+
+            // Continue processing
+            _nextOperator?.Process(input);
         }
 
         public void SetNext(IOperator nextOperator)
@@ -127,5 +126,4 @@ namespace Cortex.Streams.Operators
             yield return _stateStore;
         }
     }
-
 }
