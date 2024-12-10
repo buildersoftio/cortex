@@ -34,8 +34,9 @@ jobs:
         id: versioning
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         run: |
-          PR_LABELS="${{ toJSON(github.event.pull_request.labels) }}"
-          labels=$(jq -r '.[].name' <<< "$PR_LABELS")
+          PR_LABELS=${{ toJSON(github.event.pull_request.labels) }}
+          labels=$(echo "${PR_LABELS}" | jq -r '.[].name' 2>/dev/null || true)
+
           echo "PR labels: $labels"
 
           increment="patch"
@@ -44,7 +45,8 @@ jobs:
           elif echo "$labels" | grep -q "bugfix"; then
             increment="patch"
           fi
-          echo "increment=$increment" >> $GITHUB_OUTPUT
+
+          echo "increment=$increment" >> "$GITHUB_OUTPUT"
 
       - name: Get current version
         id: get_version

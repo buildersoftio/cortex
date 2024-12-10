@@ -188,10 +188,10 @@ public class ClickEvent
             var stream = StreamBuilder<ClickEvent, ClickEvent>.CreateNewStream("ClickStream")
                 .Stream()
                 .Filter(e => !string.IsNullOrEmpty(e.PageUrl))
-                .GroupBy(
+                .GroupBySilently(
                     e => e.PageUrl,                   // Key selector: group by PageUrl
                     stateStoreName: "ClickGroupStore")
-                .Aggregate<string, int>(
+                .AggregateSilently<string, int>(
                     e => e.PageUrl,             // Key selector for aggregation
                     (count, e) => count + 1,          // Aggregation function: increment count
                     stateStoreName: "ClickAggregateStore")
