@@ -34,8 +34,11 @@ jobs:
         id: versioning
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         run: |
-          labels=$(echo "${{ toJSON(github.event.pull_request.labels) }}" | jq -r '.[].name')
+          PR_LABELS="${{ toJSON(github.event.pull_request.labels) }}"
+          # Parse PR labels using jq
+          labels=$(jq -r '.[].name' <<< "$PR_LABELS")
           echo "PR labels: $labels"
+
           increment="patch"
           if echo "$labels" | grep -q "feature"; then
             increment="minor"
@@ -76,6 +79,7 @@ jobs:
           major=${versionParts[0]}
           minor=${versionParts[1]}
           patch=${versionParts[2]}
+
           if [ "$increment" == 'minor' ]; then
             minor=$((minor + 1))
             patch=0
@@ -85,6 +89,7 @@ jobs:
             echo "Unknown increment type: $increment"
             exit 1
           fi
+
           newVersion="$major.$minor.$patch"
           echo "New version: $newVersion"
           echo "newVersion=$newVersion" >> $GITHUB_OUTPUT
