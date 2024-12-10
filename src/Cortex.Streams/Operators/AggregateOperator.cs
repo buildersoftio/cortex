@@ -8,10 +8,10 @@ using System.Diagnostics;
 
 namespace Cortex.Streams.Operators
 {
-    public class AggregateOperator<TKey, TInput, TAggregate> : IOperator, IStatefulOperator, ITelemetryEnabled
+    public class AggregateOperator<TKey, TCurrent, TAggregate> : IOperator, IStatefulOperator, ITelemetryEnabled
     {
-        private readonly Func<TInput, TKey> _keySelector;
-        private readonly Func<TAggregate, TInput, TAggregate> _aggregateFunction;
+        private readonly Func<TCurrent, TKey> _keySelector;
+        private readonly Func<TAggregate, TCurrent, TAggregate> _aggregateFunction;
         private readonly IStateStore<TKey, TAggregate> _stateStore;
         private IOperator _nextOperator;
 
@@ -23,7 +23,7 @@ namespace Cortex.Streams.Operators
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
 
-        public AggregateOperator(Func<TInput, TKey> keySelector, Func<TAggregate, TInput, TAggregate> aggregateFunction, IStateStore<TKey, TAggregate> stateStore)
+        public AggregateOperator(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, IStateStore<TKey, TAggregate> stateStore)
         {
             _keySelector = keySelector;
             _aggregateFunction = aggregateFunction;
@@ -37,9 +37,9 @@ namespace Cortex.Streams.Operators
             if (_telemetryProvider != null)
             {
                 var metricsProvider = _telemetryProvider.GetMetricsProvider();
-                _processedCounter = metricsProvider.CreateCounter($"aggregate_operator_processed_{typeof(TInput).Name}", "Number of items processed by AggregateOperator");
-                _processingTimeHistogram = metricsProvider.CreateHistogram($"aggregate_operator_processing_time_{typeof(TInput).Name}", "Processing time for AggregateOperator");
-                _tracer = _telemetryProvider.GetTracingProvider().GetTracer($"AggregateOperator_{typeof(TInput).Name}");
+                _processedCounter = metricsProvider.CreateCounter($"aggregate_operator_processed_{typeof(TCurrent).Name}", "Number of items processed by AggregateOperator");
+                _processingTimeHistogram = metricsProvider.CreateHistogram($"aggregate_operator_processing_time_{typeof(TCurrent).Name}", "Processing time for AggregateOperator");
+                _tracer = _telemetryProvider.GetTracingProvider().GetTracer($"AggregateOperator_{typeof(TCurrent).Name}");
 
                 // Cache delegates
                 _incrementProcessedCounter = () => _processedCounter.Increment();
@@ -70,7 +70,7 @@ namespace Cortex.Streams.Operators
                 {
                     try
                     {
-                        var typedInput = (TInput)input;
+                        var typedInput = (TCurrent)input;
                         key = _keySelector(typedInput);
                         lock (_stateStore)
                         {
@@ -97,7 +97,7 @@ namespace Cortex.Streams.Operators
             }
             else
             {
-                var typedInput = (TInput)input;
+                var typedInput = (TCurrent)input;
                 key = _keySelector(typedInput);
 
                 lock (_stateStore)
