@@ -258,7 +258,64 @@ namespace Cortex.Streams
             return this;
         }
 
-        public IStreamBuilder<TIn, TCurrent> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
+        public IStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
+        {
+            if (stateStore == null)
+            {
+                if (string.IsNullOrEmpty(stateStoreName))
+                {
+                    stateStoreName = $"GroupByStateStore_{Guid.NewGuid()}";
+                }
+                stateStore = new InMemoryStateStore<TKey, List<TCurrent>>(stateStoreName);
+            }
+
+            var groupByOperator = new GroupByKeySilentlyOperator<TCurrent, TKey>(keySelector, stateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = groupByOperator;
+                _lastOperator = groupByOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(groupByOperator);
+                _lastOperator = groupByOperator;
+            }
+
+            return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
+
+        public IStreamBuilder<TIn, TCurrent> AggregateSilently<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IStateStore<TKey, TAggregate> stateStore = null)
+        {
+            //private readonly Func<TInput, TKey> _keySelector
+            if (stateStore == null)
+            {
+                if (string.IsNullOrEmpty(stateStoreName))
+                {
+                    stateStoreName = $"AggregateStateStore_{Guid.NewGuid()}";
+                }
+                stateStore = new InMemoryStateStore<TKey, TAggregate>(stateStoreName);
+            }
+
+            var aggregateOperator = new AggregateSilentlyOperator<TKey, TCurrent, TAggregate>(keySelector, aggregateFunction, stateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = aggregateOperator;
+                _lastOperator = aggregateOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(aggregateOperator);
+                _lastOperator = aggregateOperator;
+            }
+
+            //return new StreamBuilder<TIn, KeyValuePair<TKey, TAggregate>>(_name, _firstOperator, _lastOperator, _sourceAdded);
+            return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
+
+
+        public IStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, IStateStore<TKey, List<TCurrent>> stateStore = null)
         {
             if (stateStore == null)
             {
@@ -282,13 +339,11 @@ namespace Cortex.Streams
                 _lastOperator = groupByOperator;
             }
 
-            //return new StreamBuilder<TIn, KeyValuePair<TKey, TCurrent>>(_name, _firstOperator, _lastOperator, _sourceAdded);
-            return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
+            return new StreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
 
-        public IStreamBuilder<TIn, TCurrent> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IStateStore<TKey, TAggregate> stateStore = null)
+        public IStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, IStateStore<TKey, TAggregate> stateStore = null)
         {
-            //private readonly Func<TInput, TKey> _keySelector
             if (stateStore == null)
             {
                 if (string.IsNullOrEmpty(stateStoreName))
@@ -311,8 +366,7 @@ namespace Cortex.Streams
                 _lastOperator = aggregateOperator;
             }
 
-            //return new StreamBuilder<TIn, KeyValuePair<TKey, TAggregate>>(_name, _firstOperator, _lastOperator, _sourceAdded);
-            return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
+            return new StreamBuilder<TIn, KeyValuePair<TKey, TAggregate>>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
 
         public IInitialStreamBuilder<TIn, TCurrent> WithTelemetry(ITelemetryProvider telemetryProvider)

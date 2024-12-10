@@ -1,6 +1,8 @@
-﻿using Cortex.Streams.Abstractions;
+﻿using Cortex.States;
+using Cortex.Streams.Abstractions;
 using Cortex.Streams.Operators;
 using System;
+using System.Collections.Generic;
 
 namespace Cortex.Streams
 {
@@ -14,6 +16,7 @@ namespace Cortex.Streams
         private readonly string _name;
         internal IOperator _firstOperator;
         internal IOperator _lastOperator;
+        private bool _sourceAdded = false;
 
         public BranchStreamBuilder(string name)
         {
@@ -43,13 +46,14 @@ namespace Cortex.Streams
             return this;
         }
 
+
         /// <summary>
         /// Adds a map operator to the branch to transform data.
         /// </summary>
         /// <typeparam name="TNext">The type of data after the transformation.</typeparam>
         /// <param name="mapFunction">A function to transform data.</param>
         /// <returns>The branch stream builder with the new data type.</returns>
-        public IBranchStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction)
+        public IBranchStreamBuilder<TCurrent, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction)
         {
             var mapOperator = new MapOperator<TCurrent, TNext>(mapFunction);
 
@@ -64,10 +68,10 @@ namespace Cortex.Streams
                 _lastOperator = mapOperator;
             }
 
-            return new BranchStreamBuilder<TIn, TNext>(_name)
+            return new BranchStreamBuilder<TCurrent, TNext>(_name)
             {
-                _firstOperator = this._firstOperator,
-                _lastOperator = this._lastOperator
+                _firstOperator = _firstOperator,
+                _lastOperator = _lastOperator
             };
         }
 
@@ -110,5 +114,137 @@ namespace Cortex.Streams
                 _lastOperator = sinkAdapter;
             }
         }
+
+
+        public IBranchStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
+        {
+            if (stateStore == null)
+            {
+                if (string.IsNullOrEmpty(stateStoreName))
+                {
+                    stateStoreName = $"GroupByStateStore_{Guid.NewGuid()}";
+                }
+                stateStore = new InMemoryStateStore<TKey, List<TCurrent>>(stateStoreName);
+            }
+
+            var groupByOperator = new GroupByKeyOperator<TCurrent, TKey>(keySelector, stateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = groupByOperator;
+                _lastOperator = groupByOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(groupByOperator);
+                _lastOperator = groupByOperator;
+            }
+
+            return new BranchStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>>(_name)
+            {
+                _firstOperator = _firstOperator,
+                _lastOperator = _lastOperator,
+                _sourceAdded = _sourceAdded
+            };
+        }
+
+        public IBranchStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
+        {
+            if (stateStore == null)
+            {
+                if (string.IsNullOrEmpty(stateStoreName))
+                {
+                    stateStoreName = $"GroupByStateStore_{Guid.NewGuid()}";
+                }
+                stateStore = new InMemoryStateStore<TKey, List<TCurrent>>(stateStoreName);
+            }
+
+            var groupByOperator = new GroupByKeySilentlyOperator<TCurrent, TKey>(keySelector, stateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = groupByOperator;
+                _lastOperator = groupByOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(groupByOperator);
+                _lastOperator = groupByOperator;
+            }
+
+            return new BranchStreamBuilder<TIn, TCurrent>(_name)
+            {
+                _firstOperator = _firstOperator,
+                _lastOperator = _lastOperator,
+                _sourceAdded = _sourceAdded
+            };
+        }
+
+        public IBranchStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IStateStore<TKey, TAggregate> stateStore = null)
+        {
+            //private readonly Func<TInput, TKey> _keySelector
+            if (stateStore == null)
+            {
+                if (string.IsNullOrEmpty(stateStoreName))
+                {
+                    stateStoreName = $"AggregateStateStore_{Guid.NewGuid()}";
+                }
+                stateStore = new InMemoryStateStore<TKey, TAggregate>(stateStoreName);
+            }
+
+            var aggregateOperator = new AggregateOperator<TKey, TCurrent, TAggregate>(keySelector, aggregateFunction, stateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = aggregateOperator;
+                _lastOperator = aggregateOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(aggregateOperator);
+                _lastOperator = aggregateOperator;
+            }
+
+            return new BranchStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>>(_name)
+            {
+                _firstOperator = _firstOperator,
+                _lastOperator = _lastOperator,
+                _sourceAdded = _sourceAdded
+            };
+        }
+
+        public IBranchStreamBuilder<TIn, TCurrent> AggregateSilently<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IStateStore<TKey, TAggregate> stateStore = null)
+        {
+            //private readonly Func<TInput, TKey> _keySelector
+            if (stateStore == null)
+            {
+                if (string.IsNullOrEmpty(stateStoreName))
+                {
+                    stateStoreName = $"AggregateStateStore_{Guid.NewGuid()}";
+                }
+                stateStore = new InMemoryStateStore<TKey, TAggregate>(stateStoreName);
+            }
+
+            var aggregateOperator = new AggregateSilentlyOperator<TKey, TCurrent, TAggregate>(keySelector, aggregateFunction, stateStore);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = aggregateOperator;
+                _lastOperator = aggregateOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(aggregateOperator);
+                _lastOperator = aggregateOperator;
+            }
+
+            return new BranchStreamBuilder<TIn, TCurrent>(_name)
+            {
+                _firstOperator = _firstOperator,
+                _lastOperator = _lastOperator,
+                _sourceAdded = _sourceAdded
+            };
+        }
+
     }
 }

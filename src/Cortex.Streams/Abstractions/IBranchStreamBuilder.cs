@@ -1,5 +1,7 @@
-﻿using Cortex.Streams.Operators;
+﻿using Cortex.States;
+using Cortex.Streams.Operators;
 using System;
+using System.Collections.Generic;
 
 namespace Cortex.Streams.Abstractions
 {
@@ -23,7 +25,62 @@ namespace Cortex.Streams.Abstractions
         /// <typeparam name="TNext">The type of data after the transformation.</typeparam>
         /// <param name="mapFunction">A function to transform data.</param>
         /// <returns>The branch stream builder with the new data type.</returns>
-        IBranchStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
+        IBranchStreamBuilder<TCurrent, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
+
+
+
+        /// <summary>
+        /// Groups the stream data by a specified key selector.
+        /// </summary>
+        /// <typeparam name="TKey">The type of the key to group by.</typeparam>
+        /// <param name="keySelector">A function to extract the key from data.</param>
+        /// <param name="stateStore">An optional state store to use for storing group state.</param>
+        /// <returns>A stream builder with grouped data.</returns>
+        IBranchStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(
+            Func<TCurrent, TKey> keySelector,
+            string stateStoreName = null,
+            IStateStore<TKey, List<TCurrent>> stateStore = null);
+
+        /// <summary>
+        /// Groups the stream data by a specified key selector silently.
+        /// </summary>
+        /// <typeparam name="TKey">The type of the key to group by.</typeparam>
+        /// <param name="keySelector">A function to extract the key from data.</param>
+        /// <param name="stateStore">An optional state store to use for storing group state.</param>
+        /// <returns>A stream builder with grouped data.</returns>
+        IBranchStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(
+            Func<TCurrent, TKey> keySelector,
+            string stateStoreName = null,
+            IStateStore<TKey, List<TCurrent>> stateStore = null);
+
+        /// <summary>
+        /// Aggregates the stream data using a specified aggregation function.
+        /// </summary>
+        /// <typeparam name="TAggregate">The type of the aggregate value.</typeparam>
+        /// <param name="aggregateFunction">A function to aggregate data.</param>
+        /// <param name="stateStore">An optional state store to use for storing aggregate state.</param>
+        /// <returns>A stream builder with aggregated data.</returns>
+        IBranchStreamBuilder<TIn, TCurrent> AggregateSilently<TKey, TAggregate>(
+            Func<TCurrent, TKey> keySelector,
+            Func<TAggregate, TCurrent, TAggregate> aggregateFunction,
+            string stateStoreName = null,
+            IStateStore<TKey, TAggregate> stateStore = null);
+
+        /// <summary>
+        /// Aggregates the stream data using a specified aggregation function silently in the background.
+        /// </summary>
+        /// <typeparam name="TAggregate">The type of the aggregate value.</typeparam>
+        /// <param name="aggregateFunction">A function to aggregate data.</param>
+        /// <param name="stateStore">An optional state store to use for storing aggregate state.</param>
+        /// <returns>A stream builder with input data.</returns>
+        IBranchStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(
+            Func<TCurrent, TKey> keySelector,
+            Func<TAggregate, TCurrent, TAggregate> aggregateFunction,
+            string stateStoreName = null,
+            IStateStore<TKey, TAggregate> stateStore = null);
+
+
+
 
         /// <summary>
         /// Adds a sink function to the branch to consume data.
@@ -36,5 +93,9 @@ namespace Cortex.Streams.Abstractions
         /// </summary>
         /// <param name="sinkOperator">A sink operator to consume data.</param>
         void Sink(ISinkOperator<TCurrent> sinkOperator);
+
+
+
+
     }
 }
