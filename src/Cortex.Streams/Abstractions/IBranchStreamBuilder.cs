@@ -48,7 +48,7 @@ namespace Cortex.Streams.Abstractions
         /// <param name="keySelector">A function to extract the key from data.</param>
         /// <param name="stateStore">An optional state store to use for storing group state.</param>
         /// <returns>A stream builder with grouped data.</returns>
-        IBranchStreamBuilder<TIn, KeyValuePair<TKey, TCurrent>> GroupBy<TKey>(
+        IBranchStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(
             Func<TCurrent, TKey> keySelector,
             string stateStoreName = null,
             IStateStore<TKey, List<TCurrent>> stateStore = null);

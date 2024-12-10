@@ -116,9 +116,7 @@ namespace Cortex.Streams
         }
 
 
-
-
-        public IBranchStreamBuilder<TIn, KeyValuePair<TKey, TCurrent>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
+        public IBranchStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
         {
             if (stateStore == null)
             {
@@ -142,7 +140,7 @@ namespace Cortex.Streams
                 _lastOperator = groupByOperator;
             }
 
-            return new BranchStreamBuilder<TIn, KeyValuePair<TKey, TCurrent>>(_name)
+            return new BranchStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>>(_name)
             {
                 _firstOperator = _firstOperator,
                 _lastOperator = _lastOperator,
