@@ -6,7 +6,7 @@
 [![GitHub License](https://img.shields.io/github/license/buildersoftio/cortex)](https://github.com/buildersoftio/cortex/blob/master/LICENSE)
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams?label=Cortex.Streams)](https://www.nuget.org/packages/Cortex.Streams)
 [![GitHub contributors](https://img.shields.io/github/contributors/buildersoftio/cortex)](https://github.com/buildersoftio/cortex)
-[![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/4Gfe6mhJ)
+[![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/GS7nxajG)
 
 ## Key Features
 - **Modular Architecture**: Comprises distinct, interchangeable modules for streaming, state management, and connectors, allowing developers to choose components that best fit their requirements.
@@ -294,7 +294,7 @@ We'd love to hear from you! Whether you have questions, feedback, or need suppor
 - Email: cortex@buildersoft.io
 - Website: https://buildersoft.io
 - GitHub Issues: [Cortex Data Framework Issues](https://github.com/buildersoftio/cortex/issues)
-- Join our Discord Community: [![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/4Gfe6mhJ)
+- Join our Discord Community: [![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/GS7nxajG)
 
 
 Thank you for using Cortex Data Framework! We hope it empowers you to build scalable and efficient data processing pipelines effortlessly.
