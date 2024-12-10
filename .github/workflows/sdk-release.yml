@@ -34,25 +34,19 @@ jobs:
         id: versioning
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         run: |
-          PR_LABELS=${{ toJSON(github.event.pull_request.labels) }}
-          labels=$(echo "${PR_LABELS}" | jq -r '.[].name' 2>/dev/null || true)
-
+          labels=$(echo '${{ toJSON(github.event.pull_request.labels) }}' | jq -r '.[].name')
           echo "PR labels: $labels"
-
           increment="patch"
           if echo "$labels" | grep -q "feature"; then
             increment="minor"
-          elif echo "$labels" | grep -q "bugfix"; then
-            increment="patch"
           fi
-
-          echo "increment=$increment" >> "$GITHUB_OUTPUT"
+          echo "increment=$increment" >> $GITHUB_OUTPUT
 
       - name: Get current version
         id: get_version
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         run: |
-          branchName="${{ github.ref_name }}"
+          branchName='${{ github.ref_name }}' # e.g., v1/main
           echo "Branch name: $branchName"
           if [[ $branchName =~ ^v([0-9]+)/main$ ]]; then
             majorVersion="${BASH_REMATCH[1]}"
@@ -76,13 +70,12 @@ jobs:
         id: bump_version
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         run: |
-          increment="${{ steps.versioning.outputs.increment }}"
-          currentVersion="${{ steps.get_version.outputs.currentVersion }}"
+          increment='${{ steps.versioning.outputs.increment }}'
+          currentVersion='${{ steps.get_version.outputs.currentVersion }}'
           IFS='.' read -ra versionParts <<< "$currentVersion"
           major=${versionParts[0]}
           minor=${versionParts[1]}
           patch=${versionParts[2]}
-
           if [ "$increment" == 'minor' ]; then
             minor=$((minor + 1))
             patch=0
@@ -92,7 +85,6 @@ jobs:
             echo "Unknown increment type: $increment"
             exit 1
           fi
-
           newVersion="$major.$minor.$patch"
           echo "New version: $newVersion"
           echo "newVersion=$newVersion" >> $GITHUB_OUTPUT
@@ -104,8 +96,8 @@ jobs:
       - name: Update project versions
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         run: |
-          newVersion="${{ steps.bump_version.outputs.newVersion }}"
-          find . -name '*.csproj' -not -path '*/Cortex.Tests/*' | while read -r csproj; do
+          newVersion='${{ steps.bump_version.outputs.newVersion }}'
+          find . -name '*.csproj' -not -path '*/Cortex.Tests/*' | while read csproj; do
             echo "Updating version in $csproj"
             xmlstarlet ed -P -L -u "//Project/PropertyGroup/Version" -v "$newVersion" "$csproj" || \
             xmlstarlet ed -P -L -s "//Project/PropertyGroup" -t elem -n "Version" -v "$newVersion" "$csproj"
@@ -117,13 +109,15 @@ jobs:
 
       - name: Pack projects
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
-        run: dotnet pack --configuration Release --no-build --output ./artifacts
+        run: |
+          dotnet pack --configuration Release --no-build --output ./artifacts
 
       - name: Publish to NuGet
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: dotnet nuget push ./artifacts/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+        run: |
+          dotnet nuget push ./artifacts/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
 
       - name: Configure Git
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
@@ -134,7 +128,7 @@ jobs:
       - name: Create Git tag
         if: ${{ steps.check_merge.outputs.merged == 'true' }}
         run: |
-          newVersion="${{ steps.bump_version.outputs.newVersion }}"
+          newVersion='${{ steps.bump_version.outputs.newVersion }}'
           git tag -a "v$newVersion" -m "Release v$newVersion"
           git push origin "v$newVersion"
 
