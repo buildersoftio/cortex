@@ -84,6 +84,9 @@
 - **Cortex.States.MSSqlServer:** Persistent state storage using Microsoft Sql Server.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.MSSqlServer?label=Cortex.States.MSSqlServer)](https://www.nuget.org/packages/Cortex.States.MSSqlServer)
 
+- **Cortex.States.PostgreSQL:** Persistent state storage using PostgreSQL.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.PostgreSQL?label=Cortex.States.PostgreSQL)](https://www.nuget.org/packages/Cortex.States.PostgreSQL)
+
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)](https://www.nuget.org/packages/Cortex.Telemetry)
 

@@ -14,7 +14,7 @@
 
 
 		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
-		<PackageTags>cortex vortex mediator eda streaming distributed streams states kafka pulsar rocksdb</PackageTags>
+		<PackageTags>cortex vortex mediator eda streaming distributed streams states mssql</PackageTags>
 
 		<Version>1.0.1</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
