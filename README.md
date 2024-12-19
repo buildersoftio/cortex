@@ -81,6 +81,9 @@
 - **Cortex.States.MongoDb:** Persistent state storage using MongoDb.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.MongoDb?label=Cortex.States.MongoDb)](https://www.nuget.org/packages/Cortex.States.MongoDb)
 
+- **Cortex.States.MSSqlServer:** Persistent state storage using Microsoft Sql Server.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.MSSqlServer?label=Cortex.States.MSSqlServer)](https://www.nuget.org/packages/Cortex.States.MSSqlServer)
+
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)](https://www.nuget.org/packages/Cortex.Telemetry)
 
