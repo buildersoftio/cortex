@@ -75,6 +75,12 @@
 - **Cortex.States.RocksDb:** Persistent state storage using RocksDB.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.RocksDb?label=Cortex.States.RocksDb)](https://www.nuget.org/packages/Cortex.States.RocksDb)
 
+- **Cortex.States.Cassandra:** Persistent state storage using Cassandra.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.Cassandra?label=Cortex.States.Cassandra)](https://www.nuget.org/packages/Cortex.States.Cassandra)
+
+- **Cortex.States.MongoDb:** Persistent state storage using MongoDb.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.MongoDb?label=Cortex.States.MongoDb)](https://www.nuget.org/packages/Cortex.States.MongoDb)
+
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)](https://www.nuget.org/packages/Cortex.Telemetry)
 
