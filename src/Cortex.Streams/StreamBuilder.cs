@@ -561,5 +561,23 @@ namespace Cortex.Streams
 
             return this; // Returns the current builder for method chaining
         }
+
+        public IStreamBuilder<TIn, TNext> FlatMap<TNext>(Func<TCurrent, IEnumerable<TNext>> flatMapFunction)
+        {
+            var flatMapOperator = new FlatMapOperator<TCurrent, TNext>(flatMapFunction);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = flatMapOperator;
+                _lastOperator = flatMapOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(flatMapOperator);
+                _lastOperator = flatMapOperator;
+            }
+
+            return new StreamBuilder<TIn, TNext>(_name, _firstOperator, _lastOperator, _sourceAdded);
+        }
     }
 }

@@ -53,7 +53,7 @@ namespace Cortex.Streams
         /// <typeparam name="TNext">The type of data after the transformation.</typeparam>
         /// <param name="mapFunction">A function to transform data.</param>
         /// <returns>The branch stream builder with the new data type.</returns>
-        public IBranchStreamBuilder<TCurrent, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction)
+        public IBranchStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction)
         {
             var mapOperator = new MapOperator<TCurrent, TNext>(mapFunction);
 
@@ -68,7 +68,7 @@ namespace Cortex.Streams
                 _lastOperator = mapOperator;
             }
 
-            return new BranchStreamBuilder<TCurrent, TNext>(_name)
+            return new BranchStreamBuilder<TIn, TNext>(_name)
             {
                 _firstOperator = _firstOperator,
                 _lastOperator = _lastOperator
@@ -246,5 +246,27 @@ namespace Cortex.Streams
             };
         }
 
+        public IBranchStreamBuilder<TIn, TNext> FlatMap<TNext>(Func<TCurrent, IEnumerable<TNext>> flatMapFunction)
+        {
+            var flatMapOperator = new FlatMapOperator<TCurrent, TNext>(flatMapFunction);
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = flatMapOperator;
+                _lastOperator = flatMapOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(flatMapOperator);
+                _lastOperator = flatMapOperator;
+            }
+
+            return new BranchStreamBuilder<TIn, TNext>(_name)
+            {
+                _firstOperator = _firstOperator,
+                _lastOperator = _lastOperator,
+                _sourceAdded = _sourceAdded
+            };
+        }
     }
 }
