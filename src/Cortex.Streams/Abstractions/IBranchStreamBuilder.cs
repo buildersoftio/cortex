@@ -25,9 +25,16 @@ namespace Cortex.Streams.Abstractions
         /// <typeparam name="TNext">The type of data after the transformation.</typeparam>
         /// <param name="mapFunction">A function to transform data.</param>
         /// <returns>The branch stream builder with the new data type.</returns>
-        IBranchStreamBuilder<TCurrent, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
+        IBranchStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
 
-
+        /// <summary>
+        /// Adds a FlatMap operator to the stream. For each input element, it produces zero or more output elements.
+        /// </summary>
+        /// <typeparam name="TCurrent">The current type of data in the stream.</typeparam>
+        /// <typeparam name="TNext">The type of data emitted after flat-mapping.</typeparam>
+        /// <param name="flatMapFunction">A function that maps an input element to zero or more output elements.</param>
+        /// <returns>A stream builder emitting elements of type TNext.</returns>
+        IBranchStreamBuilder<TIn, TNext> FlatMap<TNext>(Func<TCurrent, IEnumerable<TNext>> flatMapFunction);
 
         /// <summary>
         /// Groups the stream data by a specified key selector.
