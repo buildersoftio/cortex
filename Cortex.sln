@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.34607.79
@@ -32,6 +32,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Tests", "src\Cortex.Tests\Cortex.Tests.csproj", "{C9A7699A-9BCF-4B51-B29F-ABF78DCEA553}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Files", "src\Cortex.Streams.Files\Cortex.Streams.Files.csproj", "{D376D6CA-3192-4EDC-B840-31F58B6457DD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.MongoDb", "src\Cortex.States.MongoDb\Cortex.States.MongoDb.csproj", "{00358701-D117-4953-A673-D60625D38466}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.Cassandra", "src\Cortex.States.Cassandra\Cortex.States.Cassandra.csproj", "{447970B9-C5AA-41D9-A07F-330A251597D0}"
 EndProject
@@ -100,6 +102,10 @@ Global
 		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{00358701-D117-4953-A673-D60625D38466}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00358701-D117-4953-A673-D60625D38466}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00358701-D117-4953-A673-D60625D38466}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00358701-D117-4953-A673-D60625D38466}.Release|Any CPU.Build.0 = Release|Any CPU
 		{447970B9-C5AA-41D9-A07F-330A251597D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{447970B9-C5AA-41D9-A07F-330A251597D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{447970B9-C5AA-41D9-A07F-330A251597D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
