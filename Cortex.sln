@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Tests", "src\Cortex.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Files", "src\Cortex.Streams.Files\Cortex.Streams.Files.csproj", "{D376D6CA-3192-4EDC-B840-31F58B6457DD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.Cassandra", "src\Cortex.States.Cassandra\Cortex.States.Cassandra.csproj", "{447970B9-C5AA-41D9-A07F-330A251597D0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -98,6 +100,10 @@ Global
 		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D376D6CA-3192-4EDC-B840-31F58B6457DD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{447970B9-C5AA-41D9-A07F-330A251597D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{447970B9-C5AA-41D9-A07F-330A251597D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{447970B9-C5AA-41D9-A07F-330A251597D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{447970B9-C5AA-41D9-A07F-330A251597D0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
