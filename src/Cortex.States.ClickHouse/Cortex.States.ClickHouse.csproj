@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>net8.0</TargetFrameworks>
+		<TargetFrameworks>net9.0;net8.0;net7.0;net6.0</TargetFrameworks>
 
 		<AssemblyVersion>1.0.1</AssemblyVersion>
 		<FileVersion>1.0.1</FileVersion>
@@ -14,12 +14,12 @@
 
 
 		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
-		<PackageTags>cortex vortex mediator eda streaming distributed streams states mongodb</PackageTags>
+		<PackageTags>cortex eda streaming distributed streams states clickhouse</PackageTags>
 
 		<Version>1.0.1</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>cortex.png</PackageIcon>
-		<PackageId>Cortex.States.MongoDb</PackageId>
+		<PackageId>Cortex.States.ClickHouse</PackageId>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
@@ -31,7 +31,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="MongoDB.Driver" Version="3.1.0" />
+		<PackageReference Include="ClickHouse.Client" Version="7.9.1" />
 	</ItemGroup>
 
 	<ItemGroup>
