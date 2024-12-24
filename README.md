@@ -69,6 +69,9 @@
 - **Cortex.Streams.Files:** Implementation of File Source and Sink operators.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Files?label=Cortex.Streams.Files)](https://www.nuget.org/packages/Cortex.Streams.Files)
 
+- **Cortex.Streams.Http:** Implementation of Http Source and Sink operators.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Http?label=Cortex.Streams.Http)](https://www.nuget.org/packages/Cortex.Streams.Http)
+
 - **Cortex.States:** Core state management functionalities.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States?label=Cortex.States)](https://www.nuget.org/packages/Cortex.States)
 
@@ -86,6 +89,9 @@
 
 - **Cortex.States.PostgreSQL:** Persistent state storage using PostgreSQL.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.PostgreSQL?label=Cortex.States.PostgreSQL)](https://www.nuget.org/packages/Cortex.States.PostgreSQL)
+
+- **Cortex.States.ClickHouse:** Persistent state storage using Clickhouse.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.ClickHouse?label=Cortex.States.ClickHouse)](https://www.nuget.org/packages/Cortex.States.ClickHouse)
 
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)](https://www.nuget.org/packages/Cortex.Telemetry)
