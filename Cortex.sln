@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.PostgreSQL", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.ClickHouse", "src\Cortex.States.ClickHouse\Cortex.States.ClickHouse.csproj", "{0F9FCB99-D00F-4396-8E2B-6E627076ADA0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Http", "src\Cortex.Streams.Http\Cortex.Streams.Http.csproj", "{20BD7107-8199-4CA8-815B-4D156B522B82}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -128,6 +130,10 @@ Global
 		{0F9FCB99-D00F-4396-8E2B-6E627076ADA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0F9FCB99-D00F-4396-8E2B-6E627076ADA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0F9FCB99-D00F-4396-8E2B-6E627076ADA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20BD7107-8199-4CA8-815B-4D156B522B82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20BD7107-8199-4CA8-815B-4D156B522B82}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20BD7107-8199-4CA8-815B-4D156B522B82}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20BD7107-8199-4CA8-815B-4D156B522B82}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
