@@ -41,6 +41,15 @@ namespace Cortex.Streams.Abstractions
         IStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
 
         /// <summary>
+        /// Adds a FlatMap operator to the stream. For each input element, it produces zero or more output elements.
+        /// </summary>
+        /// <typeparam name="TCurrent">The current type of data in the stream.</typeparam>
+        /// <typeparam name="TNext">The type of data emitted after flat-mapping.</typeparam>
+        /// <param name="flatMapFunction">A function that maps an input element to zero or more output elements.</param>
+        /// <returns>A stream builder emitting elements of type TNext.</returns>
+        IStreamBuilder<TIn, TNext> FlatMap<TNext>(Func<TCurrent, IEnumerable<TNext>> flatMapFunction);
+
+        /// <summary>
         /// Adds a sink function to the stream.
         /// </summary>
         /// <param name="sinkFunction">An action to consume data.</param>
