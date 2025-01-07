@@ -19,8 +19,8 @@ namespace Cortex.Streams.Operators
         private readonly Func<TInput, TKey> _keySelector;
         private readonly TimeSpan _inactivityGap;
         private readonly Func<IEnumerable<TInput>, TSessionOutput> _sessionFunction;
-        private readonly IStateStore<TKey, SessionState<TInput>> _sessionStateStore;
-        private readonly IStateStore<SessionKey<TKey>, TSessionOutput> _sessionResultsStateStore;
+        private readonly IDataStore<TKey, SessionState<TInput>> _sessionStateStore;
+        private readonly IDataStore<SessionKey<TKey>, TSessionOutput> _sessionResultsStateStore;
         private IOperator _nextOperator;
 
         // Telemetry fields
@@ -39,8 +39,8 @@ namespace Cortex.Streams.Operators
             Func<TInput, TKey> keySelector,
             TimeSpan inactivityGap,
             Func<IEnumerable<TInput>, TSessionOutput> sessionFunction,
-            IStateStore<TKey, SessionState<TInput>> sessionStateStore,
-            IStateStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null)
+            IDataStore<TKey, SessionState<TInput>> sessionStateStore,
+            IDataStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null)
         {
             _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
             _inactivityGap = inactivityGap;
@@ -242,7 +242,7 @@ namespace Cortex.Streams.Operators
             }
         }
 
-        public IEnumerable<IStateStore> GetStateStores()
+        public IEnumerable<IDataStore> GetStateStores()
         {
             yield return _sessionStateStore;
             if (_sessionResultsStateStore != null)

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Cortex.States.MSSqlServer
 {
-    public class SqlServerKeyValueStateStore<TKey, TValue> : IStateStore<TKey, TValue>, IDisposable
+    public class SqlServerKeyValueStateStore<TKey, TValue> : IDataStore<TKey, TValue>, IDisposable
     {
         private readonly string _connectionString;
         private readonly string _schemaName;
