@@ -20,8 +20,8 @@ namespace Cortex.Streams.Operators
         private readonly Func<TInput, TKey> _keySelector;
         private readonly TimeSpan _windowDuration;
         private readonly Func<IEnumerable<TInput>, TWindowOutput> _windowFunction;
-        private readonly IStateStore<TKey, WindowState<TInput>> _windowStateStore;
-        private readonly IStateStore<WindowKey<TKey>, TWindowOutput> _windowResultsStateStore;
+        private readonly IDataStore<TKey, WindowState<TInput>> _windowStateStore;
+        private readonly IDataStore<WindowKey<TKey>, TWindowOutput> _windowResultsStateStore;
         private IOperator _nextOperator;
 
         // Telemetry fields
@@ -40,8 +40,8 @@ namespace Cortex.Streams.Operators
             Func<TInput, TKey> keySelector,
             TimeSpan windowDuration,
             Func<IEnumerable<TInput>, TWindowOutput> windowFunction,
-            IStateStore<TKey, WindowState<TInput>> windowStateStore,
-            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
+            IDataStore<TKey, WindowState<TInput>> windowStateStore,
+            IDataStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
         {
             _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
             _windowDuration = windowDuration;
@@ -253,7 +253,7 @@ namespace Cortex.Streams.Operators
             return new DateTime(windowStartTicks, DateTimeKind.Utc);
         }
 
-        public IEnumerable<IStateStore> GetStateStores()
+        public IEnumerable<IDataStore> GetStateStores()
         {
             yield return _windowStateStore;
             if (_windowResultsStateStore != null)

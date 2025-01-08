@@ -8,7 +8,7 @@ using System.Threading;
 
 namespace Cortex.States.ClickHouse
 {
-    public class ClickHouseStateStore<TKey, TValue> : IStateStore<TKey, TValue>, IDisposable
+    public class ClickHouseStateStore<TKey, TValue> : IDataStore<TKey, TValue>, IDisposable
             where TValue : new()
     {
         private readonly string _connectionString;

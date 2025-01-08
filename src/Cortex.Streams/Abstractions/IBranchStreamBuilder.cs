@@ -46,7 +46,7 @@ namespace Cortex.Streams.Abstractions
         IBranchStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(
             Func<TCurrent, TKey> keySelector,
             string stateStoreName = null,
-            IStateStore<TKey, List<TCurrent>> stateStore = null);
+            IDataStore<TKey, List<TCurrent>> stateStore = null);
 
         /// <summary>
         /// Groups the stream data by a specified key selector silently.
@@ -58,7 +58,7 @@ namespace Cortex.Streams.Abstractions
         IBranchStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(
             Func<TCurrent, TKey> keySelector,
             string stateStoreName = null,
-            IStateStore<TKey, List<TCurrent>> stateStore = null);
+            IDataStore<TKey, List<TCurrent>> stateStore = null);
 
         /// <summary>
         /// Aggregates the stream data using a specified aggregation function.
@@ -71,7 +71,7 @@ namespace Cortex.Streams.Abstractions
             Func<TCurrent, TKey> keySelector,
             Func<TAggregate, TCurrent, TAggregate> aggregateFunction,
             string stateStoreName = null,
-            IStateStore<TKey, TAggregate> stateStore = null);
+            IDataStore<TKey, TAggregate> stateStore = null);
 
         /// <summary>
         /// Aggregates the stream data using a specified aggregation function silently in the background.
@@ -84,7 +84,7 @@ namespace Cortex.Streams.Abstractions
             Func<TCurrent, TKey> keySelector,
             Func<TAggregate, TCurrent, TAggregate> aggregateFunction,
             string stateStoreName = null,
-            IStateStore<TKey, TAggregate> stateStore = null);
+            IDataStore<TKey, TAggregate> stateStore = null);
 
 
 

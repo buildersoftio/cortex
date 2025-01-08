@@ -10,7 +10,7 @@ namespace Cortex.Streams.Operators
     public class GroupByKeySilentlyOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled
     {
         private readonly Func<TInput, TKey> _keySelector;
-        private readonly IStateStore<TKey, List<TInput>> _stateStore;
+        private readonly IDataStore<TKey, List<TInput>> _stateStore;
         private IOperator _nextOperator;
 
         // Telemetry fields
@@ -21,7 +21,7 @@ namespace Cortex.Streams.Operators
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
 
-        public GroupByKeySilentlyOperator(Func<TInput, TKey> keySelector, IStateStore<TKey, List<TInput>> stateStore)
+        public GroupByKeySilentlyOperator(Func<TInput, TKey> keySelector, IDataStore<TKey, List<TInput>> stateStore)
         {
             _keySelector = keySelector;
             _stateStore = stateStore;
@@ -121,7 +121,7 @@ namespace Cortex.Streams.Operators
             }
         }
 
-        public IEnumerable<IStateStore> GetStateStores()
+        public IEnumerable<IDataStore> GetStateStores()
         {
             yield return _stateStore;
         }

@@ -88,7 +88,7 @@ namespace Cortex.Streams.Abstractions
         IStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(
             Func<TCurrent, TKey> keySelector,
             string stateStoreName = null,
-            IStateStore<TKey, List<TCurrent>> stateStore = null);
+            IDataStore<TKey, List<TCurrent>> stateStore = null);
 
         /// <summary>
         /// Groups the stream data by a specified key selector silently.
@@ -100,7 +100,7 @@ namespace Cortex.Streams.Abstractions
         IStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(
             Func<TCurrent, TKey> keySelector,
             string stateStoreName = null,
-            IStateStore<TKey, List<TCurrent>> stateStore = null);
+            IDataStore<TKey, List<TCurrent>> stateStore = null);
 
         /// <summary>
         /// Aggregates the stream data using a specified aggregation function.
@@ -113,7 +113,7 @@ namespace Cortex.Streams.Abstractions
             Func<TCurrent, TKey> keySelector,
             Func<TAggregate, TCurrent, TAggregate> aggregateFunction,
             string stateStoreName = null,
-            IStateStore<TKey, TAggregate> stateStore = null);
+            IDataStore<TKey, TAggregate> stateStore = null);
 
         /// <summary>
         /// Aggregates the stream data using a specified aggregation function silently in the background.
@@ -126,7 +126,7 @@ namespace Cortex.Streams.Abstractions
             Func<TCurrent, TKey> keySelector,
             Func<TAggregate, TCurrent, TAggregate> aggregateFunction,
             string stateStoreName = null,
-            IStateStore<TKey, TAggregate> stateStore = null);
+            IDataStore<TKey, TAggregate> stateStore = null);
 
 
         /// <summary>
@@ -148,8 +148,8 @@ namespace Cortex.Streams.Abstractions
             Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
             string windowStateStoreName = null,
             string windowResultsStateStoreName = null,
-            IStateStore<TKey, WindowState<TCurrent>> windowStateStore = null,
-            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null);
+            IDataStore<TKey, WindowState<TCurrent>> windowStateStore = null,
+            IDataStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null);
 
 
         /// <summary>
@@ -173,8 +173,8 @@ namespace Cortex.Streams.Abstractions
             Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
             string windowStateStoreName = null,
             string windowResultsStateStoreName = null,
-            IStateStore<WindowKey<TKey>, List<TCurrent>> windowStateStore = null,
-            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null);
+            IDataStore<WindowKey<TKey>, List<TCurrent>> windowStateStore = null,
+            IDataStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null);
 
         /// <summary>
         /// Adds a session window operator to the stream.
@@ -195,8 +195,8 @@ namespace Cortex.Streams.Abstractions
             Func<IEnumerable<TCurrent>, TSessionOutput> sessionFunction,
             string sessionStateStoreName = null,
             string sessionResultsStateStoreName = null,
-            IStateStore<TKey, SessionState<TCurrent>> sessionStateStore = null,
-            IStateStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null);
+            IDataStore<TKey, SessionState<TCurrent>> sessionStateStore = null,
+            IDataStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null);
 
 
         IStreamBuilder<TIn, TCurrent> SetNext(IOperator customOperator);

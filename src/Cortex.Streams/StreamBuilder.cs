@@ -258,7 +258,7 @@ namespace Cortex.Streams
             return this;
         }
 
-        public IStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IStateStore<TKey, List<TCurrent>> stateStore = null)
+        public IStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IDataStore<TKey, List<TCurrent>> stateStore = null)
         {
             if (stateStore == null)
             {
@@ -285,7 +285,7 @@ namespace Cortex.Streams
             return new StreamBuilder<TIn, TCurrent>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
 
-        public IStreamBuilder<TIn, TCurrent> AggregateSilently<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IStateStore<TKey, TAggregate> stateStore = null)
+        public IStreamBuilder<TIn, TCurrent> AggregateSilently<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, States.IDataStore<TKey, TAggregate> stateStore = null)
         {
             //private readonly Func<TInput, TKey> _keySelector
             if (stateStore == null)
@@ -315,7 +315,7 @@ namespace Cortex.Streams
         }
 
 
-        public IStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, IStateStore<TKey, List<TCurrent>> stateStore = null)
+        public IStreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>> GroupBy<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, IDataStore<TKey, List<TCurrent>> stateStore = null)
         {
             if (stateStore == null)
             {
@@ -342,7 +342,7 @@ namespace Cortex.Streams
             return new StreamBuilder<TIn, KeyValuePair<TKey, List<TCurrent>>>(_name, _firstOperator, _lastOperator, _sourceAdded);
         }
 
-        public IStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, IStateStore<TKey, TAggregate> stateStore = null)
+        public IStreamBuilder<TIn, KeyValuePair<TKey, TAggregate>> Aggregate<TKey, TAggregate>(Func<TCurrent, TKey> keySelector, Func<TAggregate, TCurrent, TAggregate> aggregateFunction, string stateStoreName = null, IDataStore<TKey, TAggregate> stateStore = null)
         {
             if (stateStore == null)
             {
@@ -394,8 +394,8 @@ namespace Cortex.Streams
             Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
             string windowStateStoreName = null,
             string windowResultsStateStoreName = null,
-            IStateStore<TKey, WindowState<TCurrent>> windowStateStore = null,
-            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
+            IDataStore<TKey, WindowState<TCurrent>> windowStateStore = null,
+            IDataStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
         {
             if (windowStateStore == null)
             {
@@ -453,8 +453,8 @@ namespace Cortex.Streams
             Func<IEnumerable<TCurrent>, TWindowOutput> windowFunction,
             string windowStateStoreName = null,
             string windowResultsStateStoreName = null,
-            IStateStore<WindowKey<TKey>, List<TCurrent>> windowStateStore = null,
-            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
+            IDataStore<WindowKey<TKey>, List<TCurrent>> windowStateStore = null,
+            IDataStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
         {
             if (windowStateStore == null)
             {
@@ -509,8 +509,8 @@ namespace Cortex.Streams
             Func<IEnumerable<TCurrent>, TSessionOutput> sessionFunction,
             string sessionStateStoreName = null,
             string sessionResultsStateStoreName = null,
-            IStateStore<TKey, SessionState<TCurrent>> sessionStateStore = null,
-            IStateStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null)
+            IDataStore<TKey, SessionState<TCurrent>> sessionStateStore = null,
+            IDataStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null)
         {
             if (sessionStateStore == null)
             {

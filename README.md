@@ -93,6 +93,9 @@
 - **Cortex.States.ClickHouse:** Persistent state storage using Clickhouse.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.ClickHouse?label=Cortex.States.ClickHouse)](https://www.nuget.org/packages/Cortex.States.ClickHouse)
 
+- **Cortex.States.SQLite:** Persistent state storage using SQLite.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.SQLite?label=Cortex.States.SQLite)](https://www.nuget.org/packages/Cortex.States.SQLite)
+
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)](https://www.nuget.org/packages/Cortex.Telemetry)
 

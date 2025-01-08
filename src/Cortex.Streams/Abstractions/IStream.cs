@@ -12,7 +12,7 @@ namespace Cortex.Streams
         string GetStatus();
         IReadOnlyDictionary<string, BranchOperator<TCurrent>> GetBranches();
 
-        TStateStore GetStateStoreByName<TStateStore>(string name) where TStateStore : IStateStore;
-        IEnumerable<TStateStore> GetStateStoresByType<TStateStore>() where TStateStore : IStateStore;
+        TStateStore GetStateStoreByName<TStateStore>(string name) where TStateStore : IDataStore;
+        IEnumerable<TStateStore> GetStateStoresByType<TStateStore>() where TStateStore : IDataStore;
     }
 }

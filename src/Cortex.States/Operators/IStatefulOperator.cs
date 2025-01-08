@@ -4,6 +4,6 @@ namespace Cortex.States.Operators
 {
     public interface IStatefulOperator
     {
-        IEnumerable<IStateStore> GetStateStores();
+        IEnumerable<IDataStore> GetStateStores();
     }
 }

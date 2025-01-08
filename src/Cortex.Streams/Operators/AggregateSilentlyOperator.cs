@@ -11,7 +11,7 @@ namespace Cortex.Streams.Operators
     {
         private readonly Func<TInput, TKey> _keySelector;
         private readonly Func<TAggregate, TInput, TAggregate> _aggregateFunction;
-        private readonly IStateStore<TKey, TAggregate> _stateStore;
+        private readonly IDataStore<TKey, TAggregate> _stateStore;
         private IOperator _nextOperator;
 
         // Telemetry fields
@@ -22,7 +22,7 @@ namespace Cortex.Streams.Operators
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
 
-        public AggregateSilentlyOperator(Func<TInput, TKey> keySelector, Func<TAggregate, TInput, TAggregate> aggregateFunction, IStateStore<TKey, TAggregate> stateStore)
+        public AggregateSilentlyOperator(Func<TInput, TKey> keySelector, Func<TAggregate, TInput, TAggregate> aggregateFunction, IDataStore<TKey, TAggregate> stateStore)
         {
             _keySelector = keySelector;
             _aggregateFunction = aggregateFunction;
@@ -124,7 +124,7 @@ namespace Cortex.Streams.Operators
             }
         }
 
-        public IEnumerable<IStateStore> GetStateStores()
+        public IEnumerable<IDataStore> GetStateStores()
         {
             yield return _stateStore;
         }
