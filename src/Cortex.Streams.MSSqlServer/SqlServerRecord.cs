@@ -1,4 +1,7 @@
-﻿namespace Cortex.Streams.MSSqlServer
+﻿using System;
+using System.Collections.Generic;
+
+namespace Cortex.Streams.MSSqlServer
 {
     /// <summary>
     /// Represents a generic CDC record, carrying enough information

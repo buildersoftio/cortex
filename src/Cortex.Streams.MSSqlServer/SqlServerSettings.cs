@@ -1,4 +1,6 @@
-﻿namespace Cortex.Streams.MSSqlServer
+﻿using System;
+
+namespace Cortex.Streams.MSSqlServer
 {
     public class SqlServerSettings
     {

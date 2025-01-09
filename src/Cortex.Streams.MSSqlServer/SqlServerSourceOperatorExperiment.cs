@@ -16,7 +16,7 @@ namespace Cortex.Streams.MSSqlServer
     /// then continues reading incremental changes via CDC.
     /// Now we skip duplicates by storing a hash of the last record we emitted.
     /// </summary>
-    public class SqlServerSourceOperator : ISourceOperator<SqlServerRecord>
+    internal class SqlServerSourceOperatorExperiment : ISourceOperator<SqlServerRecord>
     {
         private readonly string _connectionString;
         private readonly string _schemaName;
@@ -40,7 +40,7 @@ namespace Cortex.Streams.MSSqlServer
         // Key to store the last emitted record's hash
         private readonly string _lastRecordHashKey;
 
-        public SqlServerSourceOperator(
+        public SqlServerSourceOperatorExperiment(
             string connectionString,
             string schemaName,
             string tableName,
@@ -78,8 +78,11 @@ namespace Cortex.Streams.MSSqlServer
             {
                 EnableCdcForTable();
 
-                // Sleep for 10s; believe that MS SQL Server will enable CDC for the connected table!
-                Thread.Sleep(10000);
+                // Wait for the capture instance to appear, 
+                // so we don’t get “insufficient arguments” right away
+                string captureInstanceName = $"{_schemaName}_{_tableName}";
+                WaitForCaptureInstance(captureInstanceName, 5000);
+                Thread.Sleep(5000);
             }
 
             // 1. If doInitialLoad = true and we haven't done it yet, run initial load
@@ -177,10 +180,7 @@ namespace Cortex.Streams.MSSqlServer
                     }
 
                     // Update the LSN checkpoint if new changes arrived
-                    if (changes.Count() <= 0)
-                    {
-                    }
-                    else
+                    if (changes.Count() > 0)
                     {
                         _checkpointStore.Put(_checkpointKey, maxLsn);
                     }
@@ -302,6 +302,43 @@ namespace Cortex.Streams.MSSqlServer
             }
         }
 
+
+        /// <summary>
+        /// Poll cdc.change_tables to confirm the capture instance is created.
+        /// This prevents "insufficient arguments" if we call fn_cdc_get_all_changes too soon.
+        /// </summary>
+        private void WaitForCaptureInstance(string captureInstanceName, int timeoutMs)
+        {
+            int elapsed = 0;
+            while (elapsed < timeoutMs)
+            {
+                Thread.Sleep(500);
+
+                if (CaptureInstanceExists(captureInstanceName))
+                    return;  // Found it
+
+                elapsed += 500;
+            }
+            Console.WriteLine($"Warning: capture instance '{captureInstanceName}' not found within {timeoutMs} ms.");
+        }
+
+        private bool CaptureInstanceExists(string captureInstanceName)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT COUNT(*) 
+                FROM cdc.change_tables
+                WHERE capture_instance = @capInst;
+            ";
+            cmd.Parameters.AddWithValue("@capInst", captureInstanceName);
+
+            int count = (int)cmd.ExecuteScalar();
+            return count > 0;
+        }
+
+
         private byte[] GetMaxLsn()
         {
             using (var conn = new SqlConnection(_connectionString))
@@ -421,6 +458,7 @@ namespace Cortex.Streams.MSSqlServer
 
         /// <summary>
         /// Computes an MD5 hash from the SqlServerRecord's Data dictionary.
+        /// You could also use JSON serialization, SHA256, etc.
         /// </summary>
         private string ComputeHash(SqlServerRecord record)
         {
