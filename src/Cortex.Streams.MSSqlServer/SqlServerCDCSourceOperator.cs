@@ -16,7 +16,7 @@ namespace Cortex.Streams.MSSqlServer
     /// then continues reading incremental changes via CDC.
     /// Now we skip duplicates by storing a hash of the last record we emitted.
     /// </summary>
-    public class SqlServerSourceOperator : ISourceOperator<SqlServerRecord>
+    public class SqlServerCDCSourceOperator : ISourceOperator<SqlServerRecord>
     {
         private readonly string _connectionString;
         private readonly string _schemaName;
@@ -40,7 +40,7 @@ namespace Cortex.Streams.MSSqlServer
         // Key to store the last emitted record's hash
         private readonly string _lastRecordHashKey;
 
-        public SqlServerSourceOperator(
+        public SqlServerCDCSourceOperator(
             string connectionString,
             string schemaName,
             string tableName,
