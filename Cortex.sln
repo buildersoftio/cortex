@@ -49,6 +49,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.States.SQLite", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.MSSqlServer", "src\Cortex.Streams.MSSqlServer\Cortex.Streams.MSSqlServer.csproj", "{81A01446-A8AA-4F9D-BB9B-B66E21B2C348}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.PostgreSQL", "src\Cortex.Streams.PostgreSQL\Cortex.Streams.PostgreSQL.csproj", "{0E60F75D-C44B-428A-9252-A11C365E2C56}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -146,6 +148,10 @@ Global
 		{81A01446-A8AA-4F9D-BB9B-B66E21B2C348}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{81A01446-A8AA-4F9D-BB9B-B66E21B2C348}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{81A01446-A8AA-4F9D-BB9B-B66E21B2C348}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E60F75D-C44B-428A-9252-A11C365E2C56}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E60F75D-C44B-428A-9252-A11C365E2C56}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E60F75D-C44B-428A-9252-A11C365E2C56}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E60F75D-C44B-428A-9252-A11C365E2C56}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
