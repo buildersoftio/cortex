@@ -8,6 +8,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Cortex.States;
+using System.Threading;
 
 namespace Cortex.Streams.MongoDb
 {
