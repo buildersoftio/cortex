@@ -14,12 +14,12 @@
 
 
 		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
-		<PackageTags>cortex cdc mediator eda streaming distributed streams states mssql</PackageTags>
+		<PackageTags>cortex cdc mediator eda streaming distributed streams states postgres</PackageTags>
 
 		<Version>1.0.1</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>cortex.png</PackageIcon>
-		<PackageId>Cortex.Streams.MSSqlServer</PackageId>
+		<PackageId>Cortex.Streams.PostgreSQL</PackageId>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
@@ -45,8 +45,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+		<PackageReference Include="Npgsql" Version="9.0.2" />
 	</ItemGroup>
 
 	<ItemGroup>

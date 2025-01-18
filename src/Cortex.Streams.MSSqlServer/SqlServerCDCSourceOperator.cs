@@ -1,6 +1,7 @@
 ﻿using Cortex.States;
 using Cortex.Streams.Operators;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -12,9 +13,9 @@ using System.Threading;
 namespace Cortex.Streams.MSSqlServer
 {
     /// <summary>
-    /// MSSQL CDC Source Operator that optionally performs an initial load of the table,
-    /// then continues reading incremental changes via CDC.
-    /// Now we skip duplicates by storing a hash of the last record we emitted.
+    /// MSSQL CDC (Change Data Capture) Source Operator that optionally performs an initial load of the table,
+    /// then continues reading incremental changes via CDC. 
+    /// Duplicates are skipped by storing and comparing a hash of the last record emitted.
     /// </summary>
     public class SqlServerCDCSourceOperator : ISourceOperator<SqlServerRecord>
     {
@@ -23,7 +24,6 @@ namespace Cortex.Streams.MSSqlServer
         private readonly string _tableName;
         private readonly bool _autoEnableCdc;
         private readonly bool _doInitialLoad;
-
         private readonly int _pollIntervalMs;
         private Thread _pollingThread;
         private bool _stopRequested;
@@ -40,12 +40,29 @@ namespace Cortex.Streams.MSSqlServer
         // Key to store the last emitted record's hash
         private readonly string _lastRecordHashKey;
 
+        // Optional logger (may be null)
+        private readonly ILogger<SqlServerCDCSourceOperator> _logger;
+
+        /// <summary>
+        /// Creates a new instance of <see cref="SqlServerCDCSourceOperator"/> which can optionally 
+        /// perform an initial load of the table, then read incremental changes via CDC.
+        /// Duplicates are skipped by storing a hash of the last record emitted.
+        /// </summary>
+        /// <param name="connectionString">The connection string to the SQL Server instance.</param>
+        /// <param name="schemaName">The schema name containing the table.</param>
+        /// <param name="tableName">The table name from which to read changes.</param>
+        /// <param name="sqlServerSettings">Optional settings to configure CDC and polling intervals.</param>
+        /// <param name="checkpointStore">Optional data store for saving checkpoints (LSN, last-hash, etc.).</param>
+        /// <param name="logger">
+        /// An optional <see cref="ILogger{SqlServerCDCSourceOperator}"/>. If null, messages will be written to the console.
+        /// </param>
         public SqlServerCDCSourceOperator(
             string connectionString,
             string schemaName,
             string tableName,
             SqlServerSettings sqlServerSettings = null,
-            IDataStore<string, byte[]> checkpointStore = null)
+            IDataStore<string, byte[]> checkpointStore = null,
+            ILogger<SqlServerCDCSourceOperator> logger = null) // <-- Optional ILogger
         {
             _connectionString = connectionString;
             _schemaName = schemaName;
@@ -69,32 +86,42 @@ namespace Cortex.Streams.MSSqlServer
 
             // A unique key to store the last emitted record's hash
             _lastRecordHashKey = $"{_schemaName}.{_tableName}.CDC.LAST_HASH";
+
+            // Store the logger (can be null)
+            _logger = logger;
         }
 
+        /// <summary>
+        /// Starts the CDC operator by optionally enabling CDC on the table (if requested),
+        /// performing a one-time initial load (if requested), and starting the background thread
+        /// that polls for new changes.
+        /// </summary>
+        /// <param name="emit">Action to call for each new record.</param>
         public void Start(Action<SqlServerRecord> emit)
         {
             // Optionally enable CDC if requested
             if (_autoEnableCdc && !IsCdcEnabledForTable())
             {
+                LogInformation("Enabling CDC for table...");
                 EnableCdcForTable();
 
-                // Sleep for 10s; believe that MS SQL Server will enable CDC for the connected table!
+                // Sleep for 10s to allow MS SQL Server to enable CDC on the table
                 Thread.Sleep(10000);
             }
 
             // 1. If doInitialLoad = true and we haven't done it yet, run initial load
             if (_doInitialLoad && _checkpointStore.Get(_initialLoadCheckpointKey) == null)
             {
-                Console.WriteLine("Starting one-time initial load...");
+                LogInformation("Starting one-time initial load...");
                 RunInitialLoad(emit);
 
                 // Mark initial load as completed
                 _checkpointStore.Put(_initialLoadCheckpointKey, new byte[] { 0x01 });
-                Console.WriteLine("Initial load completed.");
+                LogInformation("Initial load completed.");
             }
             else
             {
-                Console.WriteLine("Skipping initial load (already done or disabled).");
+                LogInformation("Skipping initial load (already done or disabled).");
             }
 
             // 2. Initialize the LSN checkpoint if we don’t already have one
@@ -103,26 +130,39 @@ namespace Cortex.Streams.MSSqlServer
             {
                 // By default, start from "current" so we only see future changes
                 lastCommittedLsn = GetMaxLsn();
-                _checkpointStore.Put(_checkpointKey, lastCommittedLsn);
+                if (lastCommittedLsn != null)
+                {
+                    _checkpointStore.Put(_checkpointKey, lastCommittedLsn);
+                    LogInformation("Initialized LSN checkpoint to the current max LSN.");
+                }
             }
 
             // 3. Start CDC polling
             _stopRequested = false;
-            _pollingThread = new Thread(() => PollCdcChanges(emit));
-            _pollingThread.IsBackground = true;
+            _pollingThread = new Thread(() => PollCdcChanges(emit))
+            {
+                IsBackground = true
+            };
             _pollingThread.Start();
-        }
-
-        public void Stop()
-        {
-            _stopRequested = true;
-            _pollingThread?.Join();
+            LogInformation("CDC polling thread started.");
         }
 
         /// <summary>
-        /// Polls the CDC table periodically for new changes,
-        /// using the last LSN from the checkpoint store.
+        /// Stops the CDC operator by signaling the background thread to stop and waiting for it to finish.
         /// </summary>
+        public void Stop()
+        {
+            LogInformation("Stop requested. Waiting for polling thread to complete...");
+            _stopRequested = true;
+            _pollingThread?.Join();
+            LogInformation("Polling thread stopped.");
+        }
+
+        /// <summary>
+        /// Polls the CDC function table periodically for new changes, using the last LSN from
+        /// the checkpoint store, and emits each new record found.
+        /// </summary>
+        /// <param name="emit">Action to call for each new record.</param>
         private void PollCdcChanges(Action<SqlServerRecord> emit)
         {
             string captureInstanceName = $"{_schemaName}_{_tableName}";
@@ -164,9 +204,7 @@ namespace Cortex.Streams.MSSqlServer
 
                         // If it's the same as the last emitted, skip
                         if (currentHash == lastHash)
-                        {
                             continue;
-                        }
 
                         // Otherwise, emit
                         emit(change);
@@ -177,27 +215,27 @@ namespace Cortex.Streams.MSSqlServer
                     }
 
                     // Update the LSN checkpoint if new changes arrived
-                    if (changes.Count() <= 0)
-                    {
-                    }
-                    else
+                    if (changes.Count > 0)
                     {
                         _checkpointStore.Put(_checkpointKey, maxLsn);
+                        LogInformation($"Updated LSN checkpoint to: {BitConverter.ToString(maxLsn)}");
                     }
 
                     Thread.Sleep(_pollIntervalMs);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in CDC polling: {ex}");
+                    LogError("Error in CDC polling.", ex);
+                    // Backoff a bit
                     Thread.Sleep(5000);
                 }
             }
         }
 
         /// <summary>
-        /// Reads all data from the base table and emits it once.
+        /// Reads all data from the base table once and emits it, primarily used for the one-time initial load.
         /// </summary>
+        /// <param name="emit">Action to call for each record.</param>
         private void RunInitialLoad(Action<SqlServerRecord> emit)
         {
             using (var conn = new SqlConnection(_connectionString))
@@ -234,6 +272,10 @@ namespace Cortex.Streams.MSSqlServer
             }
         }
 
+        /// <summary>
+        /// Checks whether CDC is enabled for the current database and table.
+        /// </summary>
+        /// <returns>True if CDC is enabled for this table, otherwise false.</returns>
         private bool IsCdcEnabledForTable()
         {
             using (var conn = new SqlConnection(_connectionString))
@@ -268,6 +310,9 @@ namespace Cortex.Streams.MSSqlServer
             }
         }
 
+        /// <summary>
+        /// Enables CDC at the database level (if needed) and on the specific table.
+        /// </summary>
         private void EnableCdcForTable()
         {
             using (var conn = new SqlConnection(_connectionString))
@@ -298,10 +343,14 @@ namespace Cortex.Streams.MSSqlServer
                 ";
                 cmd.ExecuteNonQuery();
 
-                Console.WriteLine($"CDC enabled for table [{_schemaName}].[{_tableName}].");
+                LogInformation($"CDC enabled for table [{_schemaName}].[{_tableName}].");
             }
         }
 
+        /// <summary>
+        /// Retrieves the current maximum LSN from the server.
+        /// </summary>
+        /// <returns>The varbinary(10) max LSN, or null if none.</returns>
         private byte[] GetMaxLsn()
         {
             using (var conn = new SqlConnection(_connectionString))
@@ -315,20 +364,32 @@ namespace Cortex.Streams.MSSqlServer
             }
         }
 
+        /// <summary>
+        /// Retrieves the minimum LSN for the given capture instance.
+        /// </summary>
+        /// <param name="captureInstanceName">The capture instance name (schema_table).</param>
+        /// <returns>The varbinary(10) min LSN, or null if none.</returns>
         private byte[] GetMinLsn(string captureInstanceName)
         {
             using (var conn = new SqlConnection(_connectionString))
             using (var cmd = conn.CreateCommand())
             {
                 conn.Open();
-                cmd.CommandText =
-                    $"SELECT sys.fn_cdc_get_min_lsn('{captureInstanceName}');";
+                cmd.CommandText = $"SELECT sys.fn_cdc_get_min_lsn('{captureInstanceName}');";
                 object result = cmd.ExecuteScalar();
                 if (result == DBNull.Value) return null;
                 return (byte[])result;
             }
         }
 
+        /// <summary>
+        /// Queries the CDC function table for changes between the specified LSN range.
+        /// Filters out "old" updates (operation 3).
+        /// </summary>
+        /// <param name="captureInstanceName">The capture instance name (schema_table).</param>
+        /// <param name="fromLsn">Starting LSN (inclusive).</param>
+        /// <param name="toLsn">Ending LSN (inclusive).</param>
+        /// <returns>A list of new or updated records.</returns>
         private List<SqlServerRecord> GetChangesSinceLastLsn(
             string captureInstanceName,
             byte[] fromLsn,
@@ -343,9 +404,9 @@ namespace Cortex.Streams.MSSqlServer
                 conn.Open();
                 // Use 'all update old' to get both old & new update rows
                 cmd.CommandText = $@"
-            SELECT *
-            FROM {functionName}(@from_lsn, @to_lsn, 'all update old')
-        ";
+                    SELECT *
+                    FROM {functionName}(@from_lsn, @to_lsn, 'all update old')
+                ";
 
                 cmd.Parameters.Add(new SqlParameter("@from_lsn", SqlDbType.VarBinary, 10) { Value = fromLsn });
                 cmd.Parameters.Add(new SqlParameter("@to_lsn", SqlDbType.VarBinary, 10) { Value = toLsn });
@@ -375,8 +436,7 @@ namespace Cortex.Streams.MSSqlServer
                 }
             }
 
-            // Filter out rows that are the "old" side of an update
-            // (operation code 3 = "Update (old)")
+            // Filter out rows that are the "old" side of an update (operation code 3 = "Update (old)")
             changes = changes
                 .Where(c => c.Operation != "Update (old)")
                 .ToList();
@@ -384,8 +444,11 @@ namespace Cortex.Streams.MSSqlServer
             return changes;
         }
 
-
-
+        /// <summary>
+        /// Returns a human-readable operation name from a CDC operation code.
+        /// </summary>
+        /// <param name="operationCode">The integer CDC operation code.</param>
+        /// <returns>A descriptive string for the operation.</returns>
         private string GetOperationName(int operationCode)
         {
             switch (operationCode)
@@ -401,9 +464,9 @@ namespace Cortex.Streams.MSSqlServer
 
         /// <summary>
         /// Compare two varbinary(10) LSNs:
-        ///  -1 if lsnA < lsnB
-        ///   0 if lsnA == lsnB
-        ///   1 if lsnA > lsnB
+        /// -1 if lsnA &lt; lsnB,
+        ///  0 if lsnA == lsnB,
+        ///  1 if lsnA &gt; lsnB.
         /// </summary>
         private int CompareLsn(byte[] lsnA, byte[] lsnB)
         {
@@ -420,12 +483,13 @@ namespace Cortex.Streams.MSSqlServer
         }
 
         /// <summary>
-        /// Computes an MD5 hash from the SqlServerRecord's Data dictionary.
+        /// Computes an MD5 hash from the SqlServerRecord's Data dictionary 
+        /// to detect duplicates. The data is sorted by key for deterministic ordering.
         /// </summary>
+        /// <param name="record">The <see cref="SqlServerRecord"/> to hash.</param>
+        /// <returns>A Base64-encoded MD5 hash string.</returns>
         private string ComputeHash(SqlServerRecord record)
         {
-            // Build a stable string from the record's Data
-            // Sort by key so that the order is deterministic
             var sb = new StringBuilder();
             foreach (var kv in record.Data.OrderBy(x => x.Key))
             {
@@ -433,7 +497,6 @@ namespace Cortex.Streams.MSSqlServer
                 sb.Append(kv.Key).Append('=').Append(kv.Value ?? "null").Append(';');
             }
 
-            // Get MD5 hash of that string
             using (var md5 = MD5.Create())
             {
                 var bytes = Encoding.UTF8.GetBytes(sb.ToString());
@@ -441,5 +504,33 @@ namespace Cortex.Streams.MSSqlServer
                 return Convert.ToBase64String(hashBytes);
             }
         }
+
+        #region Logging Helpers
+
+        private void LogInformation(string message)
+        {
+            if (_logger != null)
+            {
+                _logger.LogInformation(message);
+            }
+            else
+            {
+                Console.WriteLine(message);
+            }
+        }
+
+        private void LogError(string message, Exception ex)
+        {
+            if (_logger != null)
+            {
+                _logger.LogError(ex, message);
+            }
+            else
+            {
+                Console.WriteLine($"ERROR: {message}\n{ex}");
+            }
+        }
+
+        #endregion
     }
 }
