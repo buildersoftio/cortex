@@ -51,6 +51,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.MSSqlServer"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.PostgreSQL", "src\Cortex.Streams.PostgreSQL\Cortex.Streams.PostgreSQL.csproj", "{0E60F75D-C44B-428A-9252-A11C365E2C56}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.MongoDb", "src\Cortex.Streams.MongoDb\Cortex.Streams.MongoDb.csproj", "{FC86D3AB-778D-45D7-AF36-1F89FC16DE55}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -152,6 +154,10 @@ Global
 		{0E60F75D-C44B-428A-9252-A11C365E2C56}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0E60F75D-C44B-428A-9252-A11C365E2C56}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0E60F75D-C44B-428A-9252-A11C365E2C56}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FC86D3AB-778D-45D7-AF36-1F89FC16DE55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FC86D3AB-778D-45D7-AF36-1F89FC16DE55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FC86D3AB-778D-45D7-AF36-1F89FC16DE55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FC86D3AB-778D-45D7-AF36-1F89FC16DE55}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
