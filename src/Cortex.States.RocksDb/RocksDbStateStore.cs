@@ -6,7 +6,7 @@ using System.Threading;
 
 namespace Cortex.States.RocksDb
 {
-    public class RocksDbStateStore<TKey, TValue> : IStateStore<TKey, TValue>
+    public class RocksDbStateStore<TKey, TValue> : IDataStore<TKey, TValue>
     {
         private readonly RocksDbSharp.RocksDb _db;
         private readonly ColumnFamilyHandle _handle;

@@ -72,6 +72,15 @@
 - **Cortex.Streams.Http:** Implementation of Http Source and Sink operators.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Http?label=Cortex.Streams.Http)](https://www.nuget.org/packages/Cortex.Streams.Http)
 
+- **Cortex.Streams.CDC.MSSqlServer:** CDC adapter for Microsoft Sql Server.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.CDC.MSSqlServer?label=Cortex.Streams.CDC.MSSqlServer)](https://www.nuget.org/packages/Cortex.Streams.CDC.MSSqlServer)
+
+- **Cortex.Streams.CDC.PostgreSQL:** CDC adapter for PostgreSQL.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.CDC.PostgreSQL?label=Cortex.Streams.CDC.PostgreSQL)](https://www.nuget.org/packages/Cortex.Streams.CDC.PostgreSQL)
+
+- **Cortex.Streams.CDC.MongoDb:** CDC adapter for MongoDb.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.CDC.MongoDb?label=Cortex.Streams.CDC.MongoDb)](https://www.nuget.org/packages/Cortex.Streams.CDC.MongoDb)
+
 - **Cortex.States:** Core state management functionalities.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States?label=Cortex.States)](https://www.nuget.org/packages/Cortex.States)
 
@@ -92,6 +101,9 @@
 
 - **Cortex.States.ClickHouse:** Persistent state storage using Clickhouse.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.ClickHouse?label=Cortex.States.ClickHouse)](https://www.nuget.org/packages/Cortex.States.ClickHouse)
+
+- **Cortex.States.SQLite:** Persistent state storage using SQLite.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.States.SQLite?label=Cortex.States.SQLite)](https://www.nuget.org/packages/Cortex.States.SQLite)
 
 - **Cortex.Telemetry:** Core library to add support for Tracing and Matrics.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry?label=Cortex.Telemetry)](https://www.nuget.org/packages/Cortex.Telemetry)

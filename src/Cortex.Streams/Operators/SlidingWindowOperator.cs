@@ -22,8 +22,8 @@ namespace Cortex.Streams.Operators
         private readonly TimeSpan _windowDuration;
         private readonly TimeSpan _slideInterval;
         private readonly Func<IEnumerable<TInput>, TWindowOutput> _windowFunction;
-        private readonly IStateStore<WindowKey<TKey>, List<TInput>> _windowStateStore;
-        private readonly IStateStore<WindowKey<TKey>, TWindowOutput> _windowResultsStateStore;
+        private readonly IDataStore<WindowKey<TKey>, List<TInput>> _windowStateStore;
+        private readonly IDataStore<WindowKey<TKey>, TWindowOutput> _windowResultsStateStore;
         private IOperator _nextOperator;
 
         // Telemetry fields
@@ -43,8 +43,8 @@ namespace Cortex.Streams.Operators
             TimeSpan windowDuration,
             TimeSpan slideInterval,
             Func<IEnumerable<TInput>, TWindowOutput> windowFunction,
-            IStateStore<WindowKey<TKey>, List<TInput>> windowStateStore,
-            IStateStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
+            IDataStore<WindowKey<TKey>, List<TInput>> windowStateStore,
+            IDataStore<WindowKey<TKey>, TWindowOutput> windowResultsStateStore = null)
         {
             _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
             _windowDuration = windowDuration;
@@ -238,7 +238,7 @@ namespace Cortex.Streams.Operators
             return windowStartTimes;
         }
 
-        public IEnumerable<IStateStore> GetStateStores()
+        public IEnumerable<IDataStore> GetStateStores()
         {
             yield return _windowStateStore;
             if (_windowResultsStateStore != null)

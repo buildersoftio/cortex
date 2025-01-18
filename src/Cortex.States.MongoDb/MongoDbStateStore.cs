@@ -11,7 +11,7 @@ namespace Cortex.States.MongoDb
     /// </summary>
     /// <typeparam name="TKey">The type of the key. Must be serializable by MongoDB.</typeparam>
     /// <typeparam name="TValue">The type of the value. Must be serializable by MongoDB.</typeparam>
-    public class MongoDbStateStore<TKey, TValue> : IStateStore<TKey, TValue>
+    public class MongoDbStateStore<TKey, TValue> : IDataStore<TKey, TValue>
     {
         private readonly IMongoCollection<MongoStateEntry<TKey, TValue>> _collection;
         public string Name { get; }

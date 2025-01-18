@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Cortex.States.Cassandra
 {
-    public class CassandraStateStore<TKey, TValue> : IStateStore<TKey, TValue>
+    public class CassandraStateStore<TKey, TValue> : IDataStore<TKey, TValue>
     {
         private readonly ISession _session;
         private readonly string _keyspace;

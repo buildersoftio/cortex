@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Cortex.States
 {
-    public class InMemoryStateStore<TKey, TValue> : IStateStore<TKey, TValue>
+    public class InMemoryStateStore<TKey, TValue> : IDataStore<TKey, TValue>
     {
         private readonly ConcurrentDictionary<TKey, TValue> _store = new ConcurrentDictionary<TKey, TValue>();
 
