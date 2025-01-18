@@ -1,13 +1,14 @@
 ﻿using Cortex.States;
 using Cortex.Streams.Operators;
 using Npgsql;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Cortex.Streams.PostgreSQL
 {
@@ -26,6 +27,7 @@ namespace Cortex.Streams.PostgreSQL
         private readonly string _tableName;
         private readonly bool _autoEnableCdc;
         private readonly bool _doInitialLoad;
+        private readonly ReplicaIdentityMode _replicaIdentity;
 
         private readonly int _pollIntervalMs;
         private readonly int _maxBackOffSeconds;
@@ -46,6 +48,9 @@ namespace Cortex.Streams.PostgreSQL
         private bool _stopRequested;
         private bool _disposed;
 
+        // Optional logger
+        private readonly ILogger<PostgresSourceOperator> _logger;
+
         public PostgresSourceOperator(
             string connectionString,
             string schemaName,
@@ -53,7 +58,8 @@ namespace Cortex.Streams.PostgreSQL
             string slotName = "my_slot",
             string publicationName = "my_publication",
             PostgresSettings postgresSettings = null,
-            IDataStore<string, byte[]> checkpointStore = null)
+            IDataStore<string, byte[]> checkpointStore = null,
+            ILogger<PostgresSourceOperator> logger = null) // <-- Optional ILogger
         {
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
@@ -65,7 +71,7 @@ namespace Cortex.Streams.PostgreSQL
             postgresSettings ??= new PostgresSettings();
 
             _checkpointStore = checkpointStore
-                ?? new InMemoryStateStore<string, byte[]>($"{_schemaName}.{_tableName}.STORE");
+                ?? new InMemoryStateStore<string, byte[]>($"{schemaName}.{tableName}.STORE");
 
             _connectionString = connectionString;
             _schemaName = schemaName;
@@ -73,6 +79,7 @@ namespace Cortex.Streams.PostgreSQL
 
             _autoEnableCdc = postgresSettings.ConfigureCDCInServer;
             _doInitialLoad = postgresSettings.DoInitialLoad;
+            _replicaIdentity = postgresSettings.ReplicaIdentity;
             _pollIntervalMs = (int)postgresSettings.PullInterval.TotalMilliseconds;
             _maxBackOffSeconds = postgresSettings.MaxBackOffSeconds;
 
@@ -83,6 +90,9 @@ namespace Cortex.Streams.PostgreSQL
 
             _slotName = slotName;
             _publicationName = publicationName;
+
+            // Store logger (can be null)
+            _logger = logger;
         }
 
         /// <summary>
@@ -92,7 +102,7 @@ namespace Cortex.Streams.PostgreSQL
         {
             if (emit == null) throw new ArgumentNullException(nameof(emit));
 
-            Console.WriteLine($"Starting PostgreSQL CDC operator for {_schemaName}.{_tableName}...");
+            LogInformation($"Starting PostgreSQL CDC operator for {_schemaName}.{_tableName}...");
 
             // 1. Optionally configure logical replication (publication + slot).
             if (_autoEnableCdc)
@@ -103,29 +113,26 @@ namespace Cortex.Streams.PostgreSQL
             // 2. Perform initial load if needed.
             if (_doInitialLoad && _checkpointStore.Get(_initialLoadCheckpointKey) == null)
             {
-                Console.WriteLine($"Performing initial load for {_schemaName}.{_tableName}...");
+                LogInformation($"Performing initial load for {_schemaName}.{_tableName}...");
                 RunInitialLoad(emit);
                 _checkpointStore.Put(_initialLoadCheckpointKey, new byte[] { 0x01 });
-                Console.WriteLine($"Initial load completed for {_schemaName}.{_tableName}");
+                LogInformation($"Initial load completed for {_schemaName}.{_tableName}");
             }
             else
             {
-                Console.WriteLine($"Skipping initial load for {_schemaName}.{_tableName} (already done or disabled).");
+                LogInformation($"Skipping initial load for {_schemaName}.{_tableName} (already done or disabled).");
             }
 
             // 3. If we have no saved LSN, we can either start from the slot's current position or from scratch.
             var lastLsnBytes = _checkpointStore.Get(_checkpointKey);
             if (lastLsnBytes == null)
             {
-                // For production, it's typical to set the checkpoint to the current tip
-                // so we only see future changes. But you can also read from the slot's
-                // start if you want old changes that are still retained.
-                Console.WriteLine($"No existing LSN checkpoint found for {_schemaName}.{_tableName}. Will start from slot's current position.");
+                LogInformation($"No existing LSN checkpoint found for {_schemaName}.{_tableName}. Will start from slot's current position.");
             }
             else
             {
                 var lastLsn = Encoding.UTF8.GetString(lastLsnBytes);
-                Console.WriteLine($"Found existing LSN checkpoint = {lastLsn} for {_schemaName}.{_tableName}.");
+                LogInformation($"Found existing LSN checkpoint = {lastLsn} for {_schemaName}.{_tableName}.");
             }
 
             // 4. Spin up the background polling thread.
@@ -143,10 +150,10 @@ namespace Cortex.Streams.PostgreSQL
         /// </summary>
         public void Stop()
         {
-            Console.WriteLine($"Stop requested for PostgreSQL CDC operator {_schemaName}.{_tableName}.");
+            LogInformation($"Stop requested for PostgreSQL CDC operator {_schemaName}.{_tableName}.");
             _stopRequested = true;
             _pollingThread?.Join();
-            Console.WriteLine($"PostgreSQL CDC operator stopped for {_schemaName}.{_tableName}.");
+            LogInformation($"PostgreSQL CDC operator stopped for {_schemaName}.{_tableName}.");
         }
 
         /// <summary>
@@ -179,7 +186,7 @@ namespace Cortex.Streams.PostgreSQL
                         var currentHash = ComputeHash(change);
                         if (currentHash == lastHash)
                         {
-                            Console.WriteLine($"Skipping duplicate record for {_schemaName}.{_tableName}.");
+                            LogInformation($"Skipping duplicate record for {_schemaName}.{_tableName}.");
                             continue;
                         }
 
@@ -194,7 +201,7 @@ namespace Cortex.Streams.PostgreSQL
                     if (newChanges.Any() && !string.IsNullOrEmpty(latestLsn))
                     {
                         _checkpointStore.Put(_checkpointKey, Encoding.UTF8.GetBytes(latestLsn));
-                        Console.WriteLine($"Updated LSN checkpoint to {latestLsn} for {_schemaName}.{_tableName}.");
+                        LogInformation($"Updated LSN checkpoint to {latestLsn} for {_schemaName}.{_tableName}.");
                     }
 
                     // Reset back-off if we succeeded
@@ -205,7 +212,7 @@ namespace Cortex.Streams.PostgreSQL
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in Postgres CDC polling loop for {_schemaName}.{_tableName}.");
+                    LogError($"Error in Postgres CDC polling loop for {_schemaName}.{_tableName}.", ex);
 
                     // Exponential back-off
                     Thread.Sleep(TimeSpan.FromSeconds(backOffSeconds));
@@ -258,14 +265,33 @@ namespace Cortex.Streams.PostgreSQL
         /// </summary>
         private void EnsureLogicalReplicationSetup()
         {
-            Console.WriteLine($"Ensuring logical replication setup for table {_schemaName}.{_tableName}...");
+            LogInformation($"Ensuring logical replication setup for table {_schemaName}.{_tableName}...");
 
             using var conn = new NpgsqlConnection(_connectionString);
             conn.Open();
 
-            // 1. Create publication if it doesn't exist
-            //    We do not have an IF NOT EXISTS for CREATE PUBLICATION in older PG versions,
-            //    so we can check pg_publication or catch an error.
+            // 1. Adjust REPLICA IDENTITY if requested
+            if (_replicaIdentity != ReplicaIdentityMode.None)
+            {
+                // Build the SQL statement for altering the table
+                string replicaIdentitySql = _replicaIdentity switch
+                {
+                    ReplicaIdentityMode.Default =>
+                        $@"ALTER TABLE ""{_schemaName}"".""{_tableName}"" REPLICA IDENTITY DEFAULT;",
+                    ReplicaIdentityMode.Full =>
+                        $@"ALTER TABLE ""{_schemaName}"".""{_tableName}"" REPLICA IDENTITY FULL;",
+                    _ => null
+                };
+
+                if (!string.IsNullOrEmpty(replicaIdentitySql))
+                {
+                    using var alterCmd = new NpgsqlCommand(replicaIdentitySql, conn);
+                    alterCmd.ExecuteNonQuery();
+                    LogInformation($"Set table {_schemaName}.{_tableName} to REPLICA IDENTITY = {_replicaIdentity}.");
+                }
+            }
+
+            // 2. Create publication if it doesn't exist
             try
             {
                 string createPubSql = $@"
@@ -274,16 +300,14 @@ namespace Cortex.Streams.PostgreSQL
                 ";
                 using var pubCmd = new NpgsqlCommand(createPubSql, conn);
                 pubCmd.ExecuteNonQuery();
-                Console.WriteLine($"Created publication '{_publicationName}' for {_schemaName}.{_tableName}.");
+                LogInformation($"Created publication '{_publicationName}' for {_schemaName}.{_tableName}.");
             }
-            catch (PostgresException ex) when (ex.SqlState == "42710")
+            catch (PostgresException ex) when (ex.SqlState == "42710") // 42710 = duplicate_object
             {
-                // 42710 = duplicate_object
-                Console.WriteLine($"Publication '{_publicationName}' already exists, skipping.");
+                LogInformation($"Publication '{_publicationName}' already exists, skipping.");
             }
 
-            // 2. Create replication slot if it doesn't exist
-            //    Similar approach with a try/catch.
+            // 3. Create replication slot if it doesn't exist
             try
             {
                 string createSlotSql = $@"
@@ -291,14 +315,15 @@ namespace Cortex.Streams.PostgreSQL
                 ";
                 using var slotCmd = new NpgsqlCommand(createSlotSql, conn);
                 slotCmd.ExecuteNonQuery();
-                Console.WriteLine($"Created logical replication slot '{_slotName}' for {_schemaName}.{_tableName}.");
+                LogInformation($"Created logical replication slot '{_slotName}' for {_schemaName}.{_tableName}.");
             }
-            catch (PostgresException ex) when (ex.SqlState == "42710")
+            catch (PostgresException ex) when (ex.SqlState == "42710") // 42710 = duplicate_object
             {
-                Console.WriteLine($"Logical replication slot '{_slotName}' already exists, skipping." );
+                LogInformation($"Logical replication slot '{_slotName}' already exists, skipping.");
             }
 
-            Console.WriteLine($"Logical replication enabled for table {_schemaName}.{_tableName}. Publication: {_publicationName}, Slot: {_slotName}");
+            LogInformation($"Logical replication enabled for table {_schemaName}.{_tableName}. "
+                         + $"Publication: {_publicationName}, Slot: {_slotName}");
         }
 
         /// <summary>
@@ -310,16 +335,10 @@ namespace Cortex.Streams.PostgreSQL
             var changes = new List<PostgresRecord>();
             string newLastLsn = lastLsn;
 
-            // Choose whether to pass lastLsn or NULL
-            // If lastLsn is NULL, we start from slot's current position
-            var sql = lastLsn == null
-                ? $@"SELECT location, xid, data
+            // For simplicity, ignoring lastLsn in the query and letting the slot's position track:
+            var sql =
+                  $@"SELECT lsn::text, xid::text, data
                      FROM pg_logical_slot_get_changes('{_slotName}', NULL, NULL,
-                          'pretty-print', 'false',
-                          'include-lsn', 'true',
-                          'include-timestamp', 'true');"
-                : $@"SELECT location, xid, data
-                     FROM pg_logical_slot_get_changes('{_slotName}', '{lastLsn}', NULL,
                           'pretty-print', 'false',
                           'include-lsn', 'true',
                           'include-timestamp', 'true');";
@@ -327,39 +346,17 @@ namespace Cortex.Streams.PostgreSQL
             using var conn = new NpgsqlConnection(_connectionString);
             conn.Open();
 
-            using var cmd = new NpgsqlCommand(sql, conn)
-            {
-                CommandTimeout = 60
-            };
-
+            using var cmd = new NpgsqlCommand(sql, conn) { CommandTimeout = 60 };
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
                 if (_stopRequested) break;
 
-                // location: text (LSN), e.g. "0/16B6A98"
-                // xid: int
-                // data: JSON describing the changes
-                var location = reader.GetString(0);
-                var xid = reader.GetInt32(1);
-                var json = reader.GetString(2);
+                string lsnString = reader.GetString(0);
+                string xidString = reader.GetString(1);
+                string json = reader.GetString(2);
 
-                newLastLsn = location; // track the highest location
-
-                // Parse the wal2json output
-                // Typically, it looks like:
-                // {
-                //   "change": [
-                //     {
-                //       "kind": "insert",
-                //       "schema": "public",
-                //       "table": "mytable",
-                //       "columnnames": ["id","name"],
-                //       "columntypes": ["integer","text"],
-                //       "columnvalues": [1,"Alice"]
-                //     }
-                //   ]
-                // }
+                newLastLsn = lsnString; // track the highest LSN
 
                 try
                 {
@@ -376,10 +373,6 @@ namespace Cortex.Streams.PostgreSQL
                         var colNames = changeObj?["columnnames"] as JsonArray;
                         var colValues = changeObj?["columnvalues"] as JsonArray;
 
-                        // For updates or deletes, wal2json can present different fields, e.g. "oldkeys"
-                        // or "keynames"/"keyvalues". We simplify by focusing on inserts/updates here,
-                        // but handle "delete" with oldkeys if needed.
-
                         var record = new PostgresRecord
                         {
                             Operation = kind switch
@@ -393,27 +386,29 @@ namespace Cortex.Streams.PostgreSQL
                             ChangeTime = DateTime.UtcNow
                         };
 
+                        // If REPLICA IDENTITY FULL is set, wal2json includes colNames/colValues for delete 
+                        // Otherwise it might only have "oldkeys"
                         if (colNames != null && colValues != null)
                         {
                             for (int i = 0; i < colNames.Count; i++)
                             {
-                                string name = colNames[i]?.ToString();
-                                JsonNode val = colValues[i];
-                                record.Data[name] = val?.GetValue<object>();
+                                string name = colNames[i]?.ToString()!;
+                                record.Data[name] = colValues[i]?.GetValue<object>()!;
                             }
                         }
                         else if (kind == "delete")
                         {
-                            // For DELETE, wal2json can present "oldkeys": { "keynames": [...], "keyvalues": [...] }
+                            // Fallback to oldkeys if no colNames for DELETE
                             var oldKeys = changeObj?["oldkeys"];
                             var keyNames = oldKeys?["keynames"] as JsonArray;
                             var keyValues = oldKeys?["keyvalues"] as JsonArray;
+
                             if (keyNames != null && keyValues != null)
                             {
                                 for (int i = 0; i < keyNames.Count; i++)
                                 {
-                                    string name = keyNames[i]?.ToString();
-                                    record.Data[name] = keyValues[i]?.GetValue<object>();
+                                    string name = keyNames[i]?.ToString()!;
+                                    record.Data[name] = keyValues[i]?.GetValue<object>()!;
                                 }
                             }
                         }
@@ -423,7 +418,7 @@ namespace Cortex.Streams.PostgreSQL
                 }
                 catch (Exception parseEx)
                 {
-                    Console.WriteLine($"Failed to parse wal2json output for XID={xid} at LSN={location}. JSON: {json}");
+                    LogError($"Failed to parse wal2json output for XID={xidString} at LSN={lsnString}. JSON: {json}.", parseEx);
                 }
             }
 
@@ -463,6 +458,41 @@ namespace Cortex.Streams.PostgreSQL
                 Stop();
             }
             _disposed = true;
+        }
+
+        // --------------------------------------------------------------------
+        // LOGGING HELPERS: If _logger is null, we fall back to Console.WriteLine
+        // --------------------------------------------------------------------
+        private void LogInformation(string message)
+        {
+            if (_logger != null)
+            {
+                _logger.LogInformation(message);
+            }
+            else
+            {
+                Console.WriteLine(message);
+            }
+        }
+
+        private void LogError(string message, Exception ex = null)
+        {
+            if (_logger != null)
+            {
+                _logger.LogError(ex, message);
+            }
+            else
+            {
+                // Log with exception details on console if present
+                if (ex != null)
+                {
+                    Console.WriteLine($"ERROR: {message}\n{ex}");
+                }
+                else
+                {
+                    Console.WriteLine($"ERROR: {message}");
+                }
+            }
         }
     }
 }

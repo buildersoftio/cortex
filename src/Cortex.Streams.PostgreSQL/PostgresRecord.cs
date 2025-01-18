@@ -1,4 +1,7 @@
-﻿namespace Cortex.Streams.PostgreSQL
+﻿using System;
+using System.Collections.Generic;
+
+namespace Cortex.Streams.PostgreSQL
 {
     /// <summary>
     /// Represents a generic CDC record for PostgreSQL.
