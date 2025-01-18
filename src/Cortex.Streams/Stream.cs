@@ -123,15 +123,15 @@ namespace Cortex.Streams
             return branchDict;
         }
 
-        public IEnumerable<IStateStore> GetStateStores()
+        public IEnumerable<IDataStore> GetStateStores()
         {
             var visitedOperators = new HashSet<IOperator>();
-            var stateStores = new List<IStateStore>();
+            var stateStores = new List<IDataStore>();
             CollectStateStores(_operatorChain, stateStores, visitedOperators);
             return stateStores;
         }
 
-        private void CollectStateStores(IOperator op, List<IStateStore> stateStores, HashSet<IOperator> visitedOperators)
+        private void CollectStateStores(IOperator op, List<IDataStore> stateStores, HashSet<IOperator> visitedOperators)
         {
             if (op == null || visitedOperators.Contains(op))
                 return;
@@ -161,14 +161,14 @@ namespace Cortex.Streams
             }
         }
 
-        public TStateStore GetStateStoreByName<TStateStore>(string name) where TStateStore : IStateStore
+        public TStateStore GetStateStoreByName<TStateStore>(string name) where TStateStore : IDataStore
         {
             return GetStateStores()
                 .OfType<TStateStore>()
                 .FirstOrDefault(store => store.Name == name);
         }
 
-        public IEnumerable<TStateStore> GetStateStoresByType<TStateStore>() where TStateStore : IStateStore
+        public IEnumerable<TStateStore> GetStateStoresByType<TStateStore>() where TStateStore : IDataStore
         {
             return GetStateStores()
                 .OfType<TStateStore>();

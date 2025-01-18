@@ -8,7 +8,7 @@
 		<Product>Buildersoft Cortex Framework</Product>
 		<Company>Buildersoft</Company>
 		<Authors>Buildersoft,EnesHoxha</Authors>
-		<Copyright>Copyright © Buildersoft 2024</Copyright>
+		<Copyright>Copyright © Buildersoft 2025</Copyright>
 
 		<Description>
 			Buildersoft Cortex Mediator is a library for .NET applications that implements the mediator pattern. It helps to reduce dependencies between objects by allowing in-process messaging without direct communication. Instead, objects communicate through Cortex Mediator, making them less coupled and more maintainable..

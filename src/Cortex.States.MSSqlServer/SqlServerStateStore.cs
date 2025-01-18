@@ -8,7 +8,7 @@ using System.Threading;
 
 namespace Cortex.States.MSSqlServer
 {
-    public class SqlServerStateStore<TKey, TValue> : IStateStore<TKey, TValue>, IDisposable
+    public class SqlServerStateStore<TKey, TValue> : IDataStore<TKey, TValue>, IDisposable
             where TValue : new()
     {
         private readonly string _connectionString;

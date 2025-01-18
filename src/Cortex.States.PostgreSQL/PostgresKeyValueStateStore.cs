@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Cortex.States.PostgreSQL
 {
-    public class PostgresKeyValueStateStore<TKey, TValue> : IStateStore<TKey, TValue>, IDisposable
+    public class PostgresKeyValueStateStore<TKey, TValue> : IDataStore<TKey, TValue>, IDisposable
     {
         private readonly string _connectionString;
         private readonly string _schemaName;
