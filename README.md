@@ -6,7 +6,7 @@
 [![GitHub License](https://img.shields.io/github/license/buildersoftio/cortex)](https://github.com/buildersoftio/cortex/blob/master/LICENSE)
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams?label=Cortex.Streams)](https://www.nuget.org/packages/Cortex.Streams)
 [![GitHub contributors](https://img.shields.io/github/contributors/buildersoftio/cortex)](https://github.com/buildersoftio/cortex)
-[![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/4Gfe6mhJ)
+[![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.gg/JnMJV33QHu)
 
 ## Key Features
 - **Modular Architecture**: Comprises distinct, interchangeable modules for streaming, state management, and connectors, allowing developers to choose components that best fit their requirements.
@@ -71,6 +71,9 @@
 
 - **Cortex.Streams.Http:** Implementation of Http Source and Sink operators.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Http?label=Cortex.Streams.Http)](https://www.nuget.org/packages/Cortex.Streams.Http)
+
+- **Cortex.Streams.Elasticsearch:** Implementation of Elasticsearch Sink operators.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Elasticsearch?label=Cortex.Streams.Elasticsearch)](https://www.nuget.org/packages/Cortex.Streams.Elasticsearch)
 
 - **Cortex.Streams.CDC.MSSqlServer:** CDC adapter for Microsoft Sql Server.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.CDC.MSSqlServer?label=Cortex.Streams.CDC.MSSqlServer)](https://www.nuget.org/packages/Cortex.Streams.CDC.MSSqlServer)
@@ -324,7 +327,7 @@ We'd love to hear from you! Whether you have questions, feedback, or need suppor
 - Email: cortex@buildersoft.io
 - Website: https://buildersoft.io
 - GitHub Issues: [Cortex Data Framework Issues](https://github.com/buildersoftio/cortex/issues)
-- Join our Discord Community: [![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.com/invite/4Gfe6mhJ)
+- Join our Discord Community: [![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.gg/JnMJV33QHu)
 
 
 Thank you for using Cortex Data Framework! We hope it empowers you to build scalable and efficient data processing pipelines effortlessly.

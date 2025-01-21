@@ -1,0 +1,56 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net9.0;net8.0</TargetFrameworks>
+
+		<AssemblyVersion>1.0.1</AssemblyVersion>
+		<FileVersion>1.0.1</FileVersion>
+		<Product>Buildersoft Cortex Framework</Product>
+		<Company>Buildersoft</Company>
+		<Authors>Buildersoft,EnesHoxha</Authors>
+		<Copyright>Copyright © Buildersoft 2025</Copyright>
+
+		<Description>Cortex Data Framework is a robust, extensible platform designed to facilitate real-time data streaming, processing, and state management. It provides developers with a comprehensive suite of tools and libraries to build scalable, high-performance data pipelines tailored to diverse use cases. By abstracting underlying streaming technologies and state management solutions, Cortex Data Framework enables seamless integration, simplified development workflows, and enhanced maintainability for complex data-driven applications.	</Description>
+
+
+		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
+		<PackageTags>cortex cdc eda streaming distributed streams states elasticsearch</PackageTags>
+
+		<Version>1.0.1</Version>
+		<PackageLicenseFile>license.md</PackageLicenseFile>
+		<PackageIcon>cortex.png</PackageIcon>
+		<PackageId>Cortex.Streams.Elasticsearch</PackageId>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<IsPublishable>True</IsPublishable>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+		<RepositoryType></RepositoryType>
+		<PackageReleaseNotes>Just as the Cortex in our brains handles complex processing efficiently, Cortex Data Framework brings brainpower to your data management!	</PackageReleaseNotes>
+		<PackageProjectUrl>https://buildersoft.io/</PackageProjectUrl>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+		<None Include="Assets\cortex.png">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+		<None Include="Assets\license.md">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.17.1" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Cortex.Streams\Cortex.Streams.csproj" />
+	</ItemGroup>
+
+</Project>
