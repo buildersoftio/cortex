@@ -1,3 +1,5 @@
+![Cortex](./Assets/cortex-all.svg)
+
 # Cortex Data Framework
 
 **Cortex Data Framework** is a robust, extensible platform designed to facilitate real-time data streaming, processing, and state management. It provides developers with a comprehensive suite of tools and libraries to build scalable, high-performance data pipelines tailored to diverse use cases. By abstracting underlying streaming technologies and state management solutions, Cortex Data Framework enables seamless integration, simplified development workflows, and enhanced maintainability for complex data-driven applications.
@@ -113,6 +115,9 @@
 
 - **Cortex.Telemetry.OpenTelemetry:** Adds support for Open Telemetry.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry.OpenTelemetry?label=Cortex.Telemetry.OpenTelemetry)](https://www.nuget.org/packages/Cortex.Telemetry.OpenTelemetry)
+
+- **Cortex.Types:** Use complex types like OneOf, AllOf and AnyOf
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Types?label=Cortex.Types)](https://www.nuget.org/packages/Cortex.Types)
 
 
 ## Getting Started
