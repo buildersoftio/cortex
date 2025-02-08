@@ -1,3 +1,5 @@
+![Cortex](./Assets/cortex-all.svg)
+
 # Cortex Data Framework
 
 **Cortex Data Framework** is a robust, extensible platform designed to facilitate real-time data streaming, processing, and state management. It provides developers with a comprehensive suite of tools and libraries to build scalable, high-performance data pipelines tailored to diverse use cases. By abstracting underlying streaming technologies and state management solutions, Cortex Data Framework enables seamless integration, simplified development workflows, and enhanced maintainability for complex data-driven applications.
@@ -6,7 +8,7 @@
 [![GitHub License](https://img.shields.io/github/license/buildersoftio/cortex)](https://github.com/buildersoftio/cortex/blob/master/LICENSE)
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams?label=Cortex.Streams)](https://www.nuget.org/packages/Cortex.Streams)
 [![GitHub contributors](https://img.shields.io/github/contributors/buildersoftio/cortex)](https://github.com/buildersoftio/cortex)
-[![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.gg/tbJVd33x)
+[![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.gg/JnMJV33QHu)
 
 ## Key Features
 - **Modular Architecture**: Comprises distinct, interchangeable modules for streaming, state management, and connectors, allowing developers to choose components that best fit their requirements.
@@ -72,6 +74,9 @@
 - **Cortex.Streams.Http:** Implementation of Http Source and Sink operators.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Http?label=Cortex.Streams.Http)](https://www.nuget.org/packages/Cortex.Streams.Http)
 
+- **Cortex.Streams.Elasticsearch:** Implementation of Elasticsearch Sink operators.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.Elasticsearch?label=Cortex.Streams.Elasticsearch)](https://www.nuget.org/packages/Cortex.Streams.Elasticsearch)
+
 - **Cortex.Streams.CDC.MSSqlServer:** CDC adapter for Microsoft Sql Server.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Streams.CDC.MSSqlServer?label=Cortex.Streams.CDC.MSSqlServer)](https://www.nuget.org/packages/Cortex.Streams.CDC.MSSqlServer)
 
@@ -110,6 +115,9 @@
 
 - **Cortex.Telemetry.OpenTelemetry:** Adds support for Open Telemetry.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry.OpenTelemetry?label=Cortex.Telemetry.OpenTelemetry)](https://www.nuget.org/packages/Cortex.Telemetry.OpenTelemetry)
+
+- **Cortex.Types:** Use complex types like OneOf, AllOf and AnyOf
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Types?label=Cortex.Types)](https://www.nuget.org/packages/Cortex.Types)
 
 
 ## Getting Started
@@ -324,7 +332,7 @@ We'd love to hear from you! Whether you have questions, feedback, or need suppor
 - Email: cortex@buildersoft.io
 - Website: https://buildersoft.io
 - GitHub Issues: [Cortex Data Framework Issues](https://github.com/buildersoftio/cortex/issues)
-- Join our Discord Community: [![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.gg/tbJVd33x)
+- Join our Discord Community: [![Discord Shield](https://discord.com/api/guilds/1310034212371566612/widget.png?style=shield)](https://discord.gg/JnMJV33QHu)
 
 
 Thank you for using Cortex Data Framework! We hope it empowers you to build scalable and efficient data processing pipelines effortlessly.
