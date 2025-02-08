@@ -29,12 +29,13 @@ namespace Cortex.Types
         public static AllOf<T1> Create<T>(T value) where T : T1 => new AllOf<T1>(value);
 
 
-        public static implicit operator AllOf<T1>(T1 value)
-        {
-            if (value is T1)
-                return new AllOf<T1>(value);
-            throw new InvalidCastException($"{typeof(T1).Name} is not compatible.");
-        }
+        // For now we are skipping the implicit operations
+        //public static implicit operator AllOf<T1>(T1 value)
+        //{
+        //    if (value is T1)
+        //        return new AllOf<T1>(value);
+        //    throw new InvalidCastException($"{typeof(T1).Name} is not compatible.");
+        //}
 
 
 

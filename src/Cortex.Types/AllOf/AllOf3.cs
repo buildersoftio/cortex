@@ -29,26 +29,28 @@ namespace Cortex.Types
         /// <typeparam name="T">Type of the value which must implement all type parameters</typeparam>
         public static AllOf<T1, T2, T3> Create<T>(T value) where T : T1, T2, T3 => new AllOf<T1, T2, T3>(value);
 
-        public static implicit operator AllOf<T1, T2, T3>(T1 value)
-        {
-            if (value is T2 && value is T3)
-                return new AllOf<T1, T2, T3>(value);
-            throw new InvalidCastException($"{typeof(T1).Name} is not compatible with all required types.");
-        }
 
-        public static implicit operator AllOf<T1, T2, T3>(T2 value)
-        {
-            if (value is T1 && value is T3)
-                return new AllOf<T1, T2, T3>(value);
-            throw new InvalidCastException($"{typeof(T2).Name} is not compatible with all required types.");
-        }
+        // For now we are skipping the implicit operations
+        //public static implicit operator AllOf<T1, T2, T3>(T1 value)
+        //{
+        //    if (value is T2 && value is T3)
+        //        return new AllOf<T1, T2, T3>(value);
+        //    throw new InvalidCastException($"{typeof(T1).Name} is not compatible with all required types.");
+        //}
 
-        public static implicit operator AllOf<T1, T2, T3>(T3 value)
-        {
-            if (value is T1 && value is T2)
-                return new AllOf<T1, T2, T3>(value);
-            throw new InvalidCastException($"{typeof(T3).Name} is not compatible with all required types.");
-        }
+        //public static implicit operator AllOf<T1, T2, T3>(T2 value)
+        //{
+        //    if (value is T1 && value is T3)
+        //        return new AllOf<T1, T2, T3>(value);
+        //    throw new InvalidCastException($"{typeof(T2).Name} is not compatible with all required types.");
+        //}
+
+        //public static implicit operator AllOf<T1, T2, T3>(T3 value)
+        //{
+        //    if (value is T1 && value is T2)
+        //        return new AllOf<T1, T2, T3>(value);
+        //    throw new InvalidCastException($"{typeof(T3).Name} is not compatible with all required types.");
+        //}
 
         public bool Is<T>() => _value is T;
 
