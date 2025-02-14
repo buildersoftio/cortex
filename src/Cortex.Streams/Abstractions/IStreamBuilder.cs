@@ -198,6 +198,33 @@ namespace Cortex.Streams.Abstractions
             IDataStore<TKey, SessionState<TCurrent>> sessionStateStore = null,
             IDataStore<SessionKey<TKey>, TSessionOutput> sessionResultsStateStore = null);
 
+        /// <summary>
+        /// Joins the current stream with a state-backed table (right side) based on a shared key.
+        /// For each item in the left (current) stream, a key is extracted and matched against entries
+        /// in <paramref name="rightStateStore"/>. If a match is found, the two items are combined
+        /// by <paramref name="joinFunction"/> to form a result of type <typeparamref name="TResult"/>.
+        /// </summary>
+        /// <typeparam name="TRight">The type of the elements stored in the right state store.</typeparam>
+        /// <typeparam name="TKey">The type of the key used for matching left stream elements to right elements.</typeparam>
+        /// <typeparam name="TResult">The type of the result produced by joining a left element with a right element.</typeparam>
+        /// <param name="rightStateStore">
+        /// The state store mapping keys of type <typeparamref name="TKey"/> to values of type <typeparamref name="TRight"/>.
+        /// </param>
+        /// <param name="keySelector">
+        /// A function that extracts the key from the left (current) stream element of type <c>TCurrent</c>.
+        /// </param>
+        /// <param name="joinFunction">
+        /// A function that combines the left element (of type <c>TCurrent</c>) and the matching right element
+        /// (of type <typeparamref name="TRight"/>) to produce a result of type <typeparamref name="TResult"/>.
+        /// </param>
+        /// <returns>
+        /// An <see cref="IStreamBuilder{TIn, TResult}"/> representing the pipeline after the join operation.
+        /// </returns>
+        IStreamBuilder<TIn, TResult> Join<TRight, TKey, TResult>(
+            IDataStore<TKey, TRight> rightStateStore,
+            Func<TCurrent, TKey> keySelector,
+            Func<TCurrent, TRight, TResult> joinFunction);
+
 
         IStreamBuilder<TIn, TCurrent> SetNext(IOperator customOperator);
     }
