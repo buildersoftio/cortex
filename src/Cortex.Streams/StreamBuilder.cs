@@ -1,6 +1,7 @@
 ﻿using Cortex.States;
 using Cortex.Streams.Abstractions;
 using Cortex.Streams.Operators;
+using Cortex.Streams.Windows;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
@@ -454,6 +455,50 @@ namespace Cortex.Streams
             return new StreamBuilder<TIn, TResult>(_name, _firstOperator, _lastOperator, _sourceAdded)
             {
                 _telemetryProvider = this._telemetryProvider
+            };
+        }
+
+
+        public IStreamBuilder<TIn, List<TCurrent>> TumblingWindow(
+           TimeSpan windowSize,
+           IDataStore<WindowKey, List<TCurrent>> activeWindowsStore,
+           bool useEventTime = false,
+           Func<TCurrent, DateTimeOffset> eventTimeExtractor = null,
+           TimeSpan? allowedLateness = null,
+           bool storeResultsForAudit = false,
+           IDataStore<WindowKey, List<TCurrent>> auditStore = null,
+           bool enableCheckpointing = false,
+           IDataStore<string, TumblingCheckpointState> checkpointStore = null,
+           double closingTimerIntervalMs = 1000 // pass down to the operator
+       )
+        {
+            var operatorInstance = new TumblingWindowOperator<TCurrent>(
+                windowSize: windowSize,
+                activeWindowsStore: activeWindowsStore,
+                useEventTime: useEventTime,
+                eventTimeExtractor: eventTimeExtractor,
+                allowedLateness: allowedLateness,
+                storeResultsForAudit: storeResultsForAudit,
+                auditStore: auditStore,
+                enableCheckpointing: enableCheckpointing,
+                checkpointStore: checkpointStore,
+                closingTimerIntervalMs
+            );
+
+            if (_firstOperator == null)
+            {
+                _firstOperator = operatorInstance;
+                _lastOperator = operatorInstance;
+            }
+            else
+            {
+                _lastOperator.SetNext(operatorInstance);
+                _lastOperator = operatorInstance;
+            }
+
+            return new StreamBuilder<TIn, List<TCurrent>>(_name, _firstOperator, _lastOperator, _sourceAdded)
+            {
+                _telemetryProvider = _telemetryProvider
             };
         }
     }

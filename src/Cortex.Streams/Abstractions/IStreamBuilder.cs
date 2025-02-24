@@ -1,5 +1,6 @@
 ﻿using Cortex.States;
 using Cortex.Streams.Operators;
+using Cortex.Streams.Windows;
 using System;
 using System.Collections.Generic;
 
@@ -154,6 +155,39 @@ namespace Cortex.Streams.Abstractions
             IDataStore<TKey, TRight> rightStateStore,
             Func<TCurrent, TKey> keySelector,
             Func<TCurrent, TRight, TResult> joinFunction);
+
+
+        /// <summary>
+        /// Adds a TumblingWindowOperator to the pipeline, producing a stream of <c>List&lt;TCurrent&gt;</c>.
+        /// This operator can use either processing-time or event-time/watermarks to close windows.
+        /// Active windows are stored in <paramref name="activeWindowsStore"/>, and if desired,
+        /// final windows are stored in <paramref name="auditStore"/>.
+        /// </summary>
+        /// <param name="windowSize">Duration for each tumbling window.</param>
+        /// <param name="activeWindowsStore">
+        ///   Data store for active windows (keys = WindowKey, values = List of TCurrent).
+        ///   Must not be null.
+        /// </param>
+        /// <param name="useEventTime">True => rely on event-time/watermarks; false => processing-time.</param>
+        /// <param name="eventTimeExtractor">Required if <paramref name="useEventTime"/>=true, extracts timestamp from record.</param>
+        /// <param name="allowedLateness">For event-time, how late can records arrive. Watermark = maxEventTime - allowedLateness.</param>
+        /// <param name="storeResultsForAudit">If true, final windows are saved to <paramref name="auditStore"/>.</param>
+        /// <param name="auditStore">Used if <paramref name="storeResultsForAudit"/>=true.</param>
+        /// <param name="enableCheckpointing">If true, boundary fields are saved in <paramref name="checkpointStore"/>.</param>
+        /// <param name="checkpointStore">Data store for checkpoint TumblingCheckpointState if checkpointing is enabled.</param>
+        /// <returns>A new <see cref="IStreamBuilder{TIn, List{TCurrent}}"/> representing the pipeline after this operator.</returns>
+        IStreamBuilder<TIn, List<TCurrent>> TumblingWindow(
+            TimeSpan windowSize,
+            IDataStore<WindowKey, List<TCurrent>> activeWindowsStore,
+            bool useEventTime = false,
+            Func<TCurrent, DateTimeOffset> eventTimeExtractor = null,
+            TimeSpan? allowedLateness = null,
+            bool storeResultsForAudit = false,
+            IDataStore<WindowKey, List<TCurrent>> auditStore = null,
+            bool enableCheckpointing = false,
+            IDataStore<string, TumblingCheckpointState> checkpointStore = null,
+            double closingTimerIntervalMs = 1000 // pass down to the operator
+        );
 
 
         IStreamBuilder<TIn, TCurrent> SetNext(IOperator customOperator);
