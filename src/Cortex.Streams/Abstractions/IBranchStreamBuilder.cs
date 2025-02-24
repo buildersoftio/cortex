@@ -127,9 +127,5 @@ namespace Cortex.Streams.Abstractions
         /// </summary>
         /// <param name="sinkOperator">A sink operator to consume data.</param>
         void Sink(ISinkOperator<TCurrent> sinkOperator);
-
-
-
-
     }
 }
