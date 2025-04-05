@@ -7,6 +7,7 @@
 		<FileVersion>1.0.0</FileVersion>
 		<Product>Buildersoft Cortex Framework</Product>
 		<Company>Buildersoft</Company>
+		<LangVersion>12</LangVersion>
 		<Authors>Buildersoft,EnesHoxha</Authors>
 		<Copyright>Copyright © Buildersoft 2025</Copyright>
 
@@ -16,7 +17,7 @@
 
 
 		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
-		<PackageTags>cortex vortex mediator eda streaming distributed</PackageTags>
+		<PackageTags>cortex vortex mediator eda cqrs streaming</PackageTags>
 
 		<Version>1.0.0</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
@@ -26,7 +27,7 @@
 		<IsPublishable>True</IsPublishable>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 		<RepositoryType></RepositoryType>
-		<PackageReleaseNotes>Added Mediator logic for Merlin.AI</PackageReleaseNotes>
+		<PackageReleaseNotes>Just as the Cortex in our brains handles complex processing efficiently, Cortex Data Framework brings brainpower to your data management!	</PackageReleaseNotes>
 		<PackageProjectUrl>https://buildersoft.io/</PackageProjectUrl>
 
 	</PropertyGroup>
@@ -46,6 +47,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="FluentValidation" Version="11.11.0" />
+		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+		<PackageReference Include="Scrutor" Version="6.0.1" />
 	</ItemGroup>
 </Project>
