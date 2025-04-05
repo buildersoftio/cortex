@@ -32,4 +32,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Mediator\Tests\" />
+  </ItemGroup>
+
 </Project>
