@@ -116,8 +116,11 @@
 - **Cortex.Telemetry.OpenTelemetry:** Adds support for Open Telemetry.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Telemetry.OpenTelemetry?label=Cortex.Telemetry.OpenTelemetry)](https://www.nuget.org/packages/Cortex.Telemetry.OpenTelemetry)
 
-- **Cortex.Types:** Use complex types like OneOf, AllOf and AnyOf
+- **Cortex.Types:** Use complex types like OneOf, AllOf and AnyOf.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Types?label=Cortex.Types)](https://www.nuget.org/packages/Cortex.Types)
+
+- **Cortex.Mediator:** implementation of the Mediator pattern for .NET applications, designed to power clean, modular architectures like **Vertical Slice Architecture** and **CQRS**.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Mediator?label=Cortex.Mediator)](https://www.nuget.org/packages/Cortex.Mediator)
 
 
 ## Getting Started

@@ -51,10 +51,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="OpenTelemetry" Version="1.10.0" />
-		<PackageReference Include="OpenTelemetry.Api" Version="1.10.0" />
-		<PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.10.0" />
-		<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.10.0" />
+		<PackageReference Include="OpenTelemetry" Version="1.11.2" />
+		<PackageReference Include="OpenTelemetry.Api" Version="1.11.2" />
+		<PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.11.2" />
+		<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.11.2" />
 	</ItemGroup>
 
 	<ItemGroup>

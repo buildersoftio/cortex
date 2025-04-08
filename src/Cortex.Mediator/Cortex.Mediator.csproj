@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>net9;net8;net7;net6</TargetFrameworks>
+		<TargetFrameworks>net9;net8;net7;netstandard2.1</TargetFrameworks>
 
 		<AssemblyVersion>1.0.0</AssemblyVersion>
 		<FileVersion>1.0.0</FileVersion>
@@ -29,8 +29,22 @@
 		<RepositoryType></RepositoryType>
 		<PackageReleaseNotes>Just as the Cortex in our brains handles complex processing efficiently, Cortex Data Framework brings brainpower to your data management!	</PackageReleaseNotes>
 		<PackageProjectUrl>https://buildersoft.io/</PackageProjectUrl>
+		<Title>Cortex Mediator</Title>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <None Remove="README.md" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Include="README.md">
+	    <Pack>True</Pack>
+	    <PackagePath>\</PackagePath>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
 	<ItemGroup>
 		<None Include="Assets\andyX.png">
 			<Pack>True</Pack>
@@ -49,9 +63,9 @@
 	<ItemGroup>
 		<PackageReference Include="FluentValidation" Version="11.11.0" />
 		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
-		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.3" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
 		<PackageReference Include="Scrutor" Version="6.0.1" />
 	</ItemGroup>
 </Project>

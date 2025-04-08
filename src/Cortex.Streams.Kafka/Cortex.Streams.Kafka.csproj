@@ -52,9 +52,9 @@
 
 
 	<ItemGroup>
-		<PackageReference Include="Confluent.Kafka" Version="2.6.0" />
-		<PackageReference Include="Google.Protobuf" Version="3.28.3" />
-		<PackageReference Include="protobuf-net" Version="3.2.45" />
+		<PackageReference Include="Confluent.Kafka" Version="2.9.0" />
+		<PackageReference Include="Google.Protobuf" Version="3.30.2" />
+		<PackageReference Include="protobuf-net" Version="3.2.46" />
 	</ItemGroup>
 
 	<ItemGroup>
