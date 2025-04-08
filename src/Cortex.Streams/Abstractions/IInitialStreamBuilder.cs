@@ -28,20 +28,5 @@ namespace Cortex.Streams.Abstractions
         /// <returns></returns>
         /// <exception cref="InvalidOperationException"></exception>
         IInitialStreamBuilder<TIn, TCurrent> WithTelemetry(ITelemetryProvider telemetryProvider);
-
-        /// <summary>
-        /// Adds a map operator to the branch to transform data.
-        /// </summary>
-        /// <typeparam name="TNext">The type of data after the transformation.</typeparam>
-        /// <param name="mapFunction">A function to transform data.</param>
-        /// <returns>The branch stream builder with the new data type.</returns>
-        //IStreamBuilder<TIn, TNext> Map<TNext>(Func<TCurrent, TNext> mapFunction);
-
-        /// <summary>
-        /// Adds a filter operator to the branch.
-        /// </summary>
-        /// <param name="predicate">A function to filter data.</param>
-        /// <returns>The branch stream builder for method chaining.</returns>
-        //IStreamBuilder<TIn, TCurrent> Filter(Func<TCurrent, bool> predicate);
     }
 }
