@@ -46,7 +46,7 @@
 
 
 	<ItemGroup>
-		<PackageReference Include="RocksDB" Version="9.4.0.50294" />
+		<PackageReference Include="RocksDB" Version="9.10.0.55496" />
 	</ItemGroup>
 
 
