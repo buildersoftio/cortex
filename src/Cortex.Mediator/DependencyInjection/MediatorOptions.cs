@@ -1,4 +1,4 @@
-﻿using Cortex.Mediator.Commands;
+using Cortex.Mediator.Commands;
 using Cortex.Mediator.Queries;
 using System;
 using System.Collections.Generic;
@@ -10,6 +10,8 @@ namespace Cortex.Mediator.DependencyInjection
     {
         internal List<Type> CommandBehaviors { get; } = new();
         internal List<Type> QueryBehaviors { get; } = new();
+
+        public bool OnlyPublicClasses { get; set; } = true;
 
         public MediatorOptions AddCommandPipelineBehavior<TBehavior>()
             where TBehavior : ICommandPipelineBehavior<ICommand> // Add constraint
