@@ -1,6 +1,7 @@
 ﻿using Cortex.Mediator.Commands;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,7 +10,7 @@ namespace Cortex.Mediator.Behaviors
     /// <summary>
     /// Pipeline behavior for logging command/query execution.
     /// </summary>
-    public class LoggingCommandBehavior<TCommand> : ICommandPipelineBehavior<TCommand>
+    public sealed class LoggingCommandBehavior<TCommand> : ICommandPipelineBehavior<TCommand>
         where TCommand : ICommand
     {
         private readonly ILogger<LoggingCommandBehavior<TCommand>> _logger;
@@ -27,14 +28,25 @@ namespace Cortex.Mediator.Behaviors
             var commandName = typeof(TCommand).Name;
             _logger.LogInformation("Executing command {CommandName}", commandName);
 
+            var stopwatch = Stopwatch.StartNew();   // start timing
             try
             {
                 await next();
-                _logger.LogInformation("Command {CommandName} executed successfully", commandName);
+
+                stopwatch.Stop();
+                _logger.LogInformation(
+                    "Command {CommandName} executed successfully in {ElapsedMilliseconds} ms",
+                    commandName,
+                    stopwatch.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error executing command {CommandName}", commandName);
+                stopwatch.Stop();
+                _logger.LogError(
+                    ex,
+                    "Error executing command {CommandName} after {ElapsedMilliseconds} ms",
+                    commandName,
+                    stopwatch.ElapsedMilliseconds);
                 throw;
             }
         }

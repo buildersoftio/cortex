@@ -2,7 +2,6 @@
 using Cortex.Mediator.Infrastructure;
 using Cortex.Mediator.Notifications;
 using Cortex.Mediator.Queries;
-using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -24,7 +23,10 @@ namespace Cortex.Mediator.DependencyInjection
             configure?.Invoke(options);
 
             services.AddScoped<IMediator, Mediator>();
-            services.AddValidatorsFromAssemblies(handlerAssemblyMarkerTypes.Select(t => t.Assembly));
+
+            // Validation has been removed for issue #118
+            //services.AddValidatorsFromAssemblies(handlerAssemblyMarkerTypes.Select(t => t.Assembly));
+
             services.AddUnitOfWork();
 
             RegisterHandlers(services, handlerAssemblyMarkerTypes);

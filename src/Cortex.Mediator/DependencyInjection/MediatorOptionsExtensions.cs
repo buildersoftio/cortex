@@ -8,9 +8,7 @@ namespace Cortex.Mediator.DependencyInjection
         public static MediatorOptions AddDefaultBehaviors(this MediatorOptions options)
         {
             return options
-                .AddCommandPipelineBehavior<ValidationCommandBehavior<ICommand>>()
-                .AddCommandPipelineBehavior<LoggingCommandBehavior<ICommand>>()
-                .AddCommandPipelineBehavior<TransactionCommandBehavior<ICommand>>();
+                .AddCommandPipelineBehavior<LoggingCommandBehavior<ICommand>>();
         }
     }
 }
