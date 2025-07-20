@@ -1,4 +1,4 @@
-﻿using Cortex.Mediator.Commands;
+using Cortex.Mediator.Commands;
 using Cortex.Mediator.Infrastructure;
 using Cortex.Mediator.Notifications;
 using Cortex.Mediator.Queries;
@@ -29,7 +29,7 @@ namespace Cortex.Mediator.DependencyInjection
 
             services.AddUnitOfWork();
 
-            RegisterHandlers(services, handlerAssemblyMarkerTypes);
+            RegisterHandlers(services, handlerAssemblyMarkerTypes, options);
             RegisterPipelineBehaviors(services, options);
 
             return services;
@@ -37,28 +37,29 @@ namespace Cortex.Mediator.DependencyInjection
 
         private static void RegisterHandlers(
             IServiceCollection services,
-            IEnumerable<Type> assemblyMarkerTypes)
+            IEnumerable<Type> assemblyMarkerTypes,
+            MediatorOptions options)
         {
             var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
-                    .AssignableTo(typeof(ICommandHandler<>)))
+                    .AssignableTo(typeof(ICommandHandler<>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
-                    .AssignableTo(typeof(IQueryHandler<,>)))
+                    .AssignableTo(typeof(IQueryHandler<,>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
-                    .AssignableTo(typeof(INotificationHandler<>)))
+                    .AssignableTo(typeof(INotificationHandler<>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
         }
@@ -77,7 +78,6 @@ namespace Cortex.Mediator.DependencyInjection
                 services.AddTransient(typeof(IQueryPipelineBehavior<,>), behaviorType);
             }
         }
-
 
         private static void AddUnitOfWork(this IServiceCollection services)
         {
