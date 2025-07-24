@@ -1,4 +1,4 @@
-﻿using Cortex.Mediator.Commands;
+﻿using Cortex.Mediator.Queries;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Diagnostics;
@@ -10,23 +10,23 @@ namespace Cortex.Mediator.Behaviors
     /// <summary>
     /// Pipeline behavior for logging command/query execution.
     /// </summary>
-    public sealed class LoggingCommandBehavior<TCommand, TResult> : ICommandPipelineBehavior<TCommand, TResult>
-        where TCommand : ICommand<TResult>
+    public sealed class LoggingQueryBehavior<TQuery, TResult> : IQueryPipelineBehavior<TQuery, TResult>
+        where TQuery : IQuery<TResult>
     {
-        private readonly ILogger<LoggingCommandBehavior<TCommand, TResult>> _logger;
+        private readonly ILogger<LoggingQueryBehavior<TQuery, TResult>> _logger;
 
-        public LoggingCommandBehavior(ILogger<LoggingCommandBehavior<TCommand, TResult>> logger)
+        public LoggingQueryBehavior(ILogger<LoggingQueryBehavior<TQuery, TResult>> logger)
         {
             _logger = logger;
         }
 
         public async Task<TResult> Handle(
-            TCommand command,
-            CommandHandlerDelegate<TResult> next,
+            TQuery command,
+            QueryHandlerDelegate<TResult> next,
             CancellationToken cancellationToken)
         {
-            var commandName = typeof(TCommand).Name;
-            _logger.LogInformation("Executing command {CommandName}", commandName);
+            var queryName = typeof(TQuery).Name;
+            _logger.LogInformation("Executing query {QueryName}", queryName);
 
             var stopwatch = Stopwatch.StartNew();   // start timing
             try
@@ -35,8 +35,8 @@ namespace Cortex.Mediator.Behaviors
 
                 stopwatch.Stop();
                 _logger.LogInformation(
-                    "Command {CommandName} executed successfully in {ElapsedMilliseconds} ms",
-                    commandName,
+                    "Query {QueryName} executed successfully in {ElapsedMilliseconds} ms",
+                    queryName,
                     stopwatch.ElapsedMilliseconds);
 
                 return result;
@@ -46,8 +46,8 @@ namespace Cortex.Mediator.Behaviors
                 stopwatch.Stop();
                 _logger.LogError(
                     ex,
-                    "Error executing command {CommandName} after {ElapsedMilliseconds} ms",
-                    commandName,
+                    "Error executing query {QueryName} after {ElapsedMilliseconds} ms",
+                    queryName,
                     stopwatch.ElapsedMilliseconds);
                 throw;
             }

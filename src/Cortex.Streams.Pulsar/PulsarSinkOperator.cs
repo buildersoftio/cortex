@@ -28,6 +28,10 @@ namespace Cortex.Streams.Pulsar
             _client = PulsarClient.Builder()
                 .ServiceUrl(new Uri(_serviceUrl))
                 .Build();
+
+            // BUG #103 Start PulsarSink Operator when Sink is initialized
+            // Pulsar Producer doesnot start when the production happens, we have to start the Producer when it is initialized.
+            Start();
         }
 
         public void Start()

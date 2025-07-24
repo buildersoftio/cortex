@@ -1,5 +1,4 @@
 ﻿using Cortex.Mediator.Behaviors;
-using Cortex.Mediator.Commands;
 
 namespace Cortex.Mediator.DependencyInjection
 {
@@ -8,9 +7,9 @@ namespace Cortex.Mediator.DependencyInjection
         public static MediatorOptions AddDefaultBehaviors(this MediatorOptions options)
         {
             return options
-                .AddCommandPipelineBehavior<ValidationCommandBehavior<ICommand>>()
-                .AddCommandPipelineBehavior<LoggingCommandBehavior<ICommand>>()
-                .AddCommandPipelineBehavior<TransactionCommandBehavior<ICommand>>();
+                // Register the open generic logging behavior for commands that return TResult
+                .AddOpenCommandPipelineBehavior(typeof(LoggingCommandBehavior<,>))
+                .AddOpenQueryPipelineBehavior(typeof(LoggingQueryBehavior<,>));
         }
     }
 }
