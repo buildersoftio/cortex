@@ -45,7 +45,7 @@ namespace Cortex.Mediator.DependencyInjection
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
-                    .AssignableTo(typeof(ICommandHandler<>)), options.OnlyPublicClasses)
+                    .AssignableTo(typeof(ICommandHandler<,>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
 
@@ -69,7 +69,7 @@ namespace Cortex.Mediator.DependencyInjection
             // Command behaviors
             foreach (var behaviorType in options.CommandBehaviors)
             {
-                services.AddTransient(typeof(ICommandPipelineBehavior<>), behaviorType);
+                services.AddTransient(typeof(ICommandPipelineBehavior<,>), behaviorType);
             }
 
             // Query behaviors (if needed)

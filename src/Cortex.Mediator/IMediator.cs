@@ -11,12 +11,12 @@ namespace Cortex.Mediator
     /// </summary>
     public interface IMediator
     {
-        Task SendAsync<TCommand>(
+        Task<TResult> SendCommandAsync<TCommand, TResult>(
             TCommand command,
             CancellationToken cancellationToken = default)
-            where TCommand : ICommand;
+            where TCommand : ICommand<TResult>;
 
-        Task<TResult> SendAsync<TQuery, TResult>(
+        Task<TResult> SendQueryAsync<TQuery, TResult>(
             TQuery query,
             CancellationToken cancellationToken = default)
             where TQuery : IQuery<TResult>;
