@@ -13,23 +13,60 @@ namespace Cortex.Mediator.DependencyInjection
 
         public bool OnlyPublicClasses { get; set; } = true;
 
+
+        /// <summary>
+        /// Register a *closed* command pipeline behavior.
+        /// </summary>
         public MediatorOptions AddCommandPipelineBehavior<TBehavior>()
-            where TBehavior : ICommandPipelineBehavior<ICommand> // Add constraint
+            where TBehavior : class // Add constraint
         {
             var behaviorType = typeof(TBehavior);
+
             if (behaviorType.IsGenericTypeDefinition)
             {
                 throw new ArgumentException("Open generic types must be registered using AddOpenCommandPipelineBehavior");
             }
+
+            var implementsInterface = behaviorType
+                .GetInterfaces()
+                .Any(i => i.IsGenericType &&
+                          i.GetGenericTypeDefinition() == typeof(ICommandPipelineBehavior<,>));
+
+            if (!implementsInterface)
+            {
+                throw new ArgumentException("Type must implement ICommandPipelineBehavior<,>");
+            }
+
             CommandBehaviors.Add(behaviorType);
             return this;
         }
 
+        /// <summary>
+        /// Register an *open generic* command pipeline behavior, e.g. typeof(LoggingCommandBehavior&lt;,&gt;).
+        /// </summary>
         public MediatorOptions AddOpenCommandPipelineBehavior(Type openGenericBehaviorType)
         {
             if (!openGenericBehaviorType.IsGenericTypeDefinition)
             {
                 throw new ArgumentException("Type must be an open generic type definition");
+            }
+
+            var implementsInterface = openGenericBehaviorType
+                .GetInterfaces()
+                .Any(i => i.IsGenericType &&
+                          i.GetGenericTypeDefinition() == typeof(ICommandPipelineBehavior<,>));
+
+            // For open generics, interface might not appear in GetInterfaces() yet; check by definition instead.
+            if (!implementsInterface &&
+                !(openGenericBehaviorType.IsGenericTypeDefinition &&
+                  openGenericBehaviorType.GetGenericTypeDefinition() == openGenericBehaviorType))
+            {
+                // Fall back to checking generic arguments count to give a clear error
+                var ok = openGenericBehaviorType.GetGenericArguments().Length == 2;
+                if (!ok)
+                {
+                    throw new ArgumentException("Type must implement ICommandPipelineBehavior<,>");
+                }
             }
 
             CommandBehaviors.Add(openGenericBehaviorType);
