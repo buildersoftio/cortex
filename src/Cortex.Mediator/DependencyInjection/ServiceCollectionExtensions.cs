@@ -1,8 +1,7 @@
-﻿using Cortex.Mediator.Commands;
+using Cortex.Mediator.Commands;
 using Cortex.Mediator.Infrastructure;
 using Cortex.Mediator.Notifications;
 using Cortex.Mediator.Queries;
-using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -24,10 +23,13 @@ namespace Cortex.Mediator.DependencyInjection
             configure?.Invoke(options);
 
             services.AddScoped<IMediator, Mediator>();
-            services.AddValidatorsFromAssemblies(handlerAssemblyMarkerTypes.Select(t => t.Assembly));
+
+            // Validation has been removed for issue #118
+            //services.AddValidatorsFromAssemblies(handlerAssemblyMarkerTypes.Select(t => t.Assembly));
+
             services.AddUnitOfWork();
 
-            RegisterHandlers(services, handlerAssemblyMarkerTypes);
+            RegisterHandlers(services, handlerAssemblyMarkerTypes, options);
             RegisterPipelineBehaviors(services, options);
 
             return services;
@@ -35,28 +37,29 @@ namespace Cortex.Mediator.DependencyInjection
 
         private static void RegisterHandlers(
             IServiceCollection services,
-            IEnumerable<Type> assemblyMarkerTypes)
+            IEnumerable<Type> assemblyMarkerTypes,
+            MediatorOptions options)
         {
             var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
-                    .AssignableTo(typeof(ICommandHandler<>)))
+                    .AssignableTo(typeof(ICommandHandler<,>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
-                    .AssignableTo(typeof(IQueryHandler<,>)))
+                    .AssignableTo(typeof(IQueryHandler<,>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
-                    .AssignableTo(typeof(INotificationHandler<>)))
+                    .AssignableTo(typeof(INotificationHandler<>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
         }
@@ -66,7 +69,7 @@ namespace Cortex.Mediator.DependencyInjection
             // Command behaviors
             foreach (var behaviorType in options.CommandBehaviors)
             {
-                services.AddTransient(typeof(ICommandPipelineBehavior<>), behaviorType);
+                services.AddTransient(typeof(ICommandPipelineBehavior<,>), behaviorType);
             }
 
             // Query behaviors (if needed)
@@ -75,7 +78,6 @@ namespace Cortex.Mediator.DependencyInjection
                 services.AddTransient(typeof(IQueryPipelineBehavior<,>), behaviorType);
             }
         }
-
 
         private static void AddUnitOfWork(this IServiceCollection services)
         {
