@@ -5,7 +5,7 @@ using System;
 
 namespace Cortex.Streams.Kafka
 {
-    public class KafkaSinkOperator<TInput> : ISinkOperator<TInput>
+    public sealed class KafkaSinkOperator<TInput> : ISinkOperator<TInput>
     {
         private readonly string _bootstrapServers;
         private readonly string _topic;

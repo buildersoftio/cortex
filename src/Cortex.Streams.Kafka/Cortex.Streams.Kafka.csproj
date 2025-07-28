@@ -4,8 +4,8 @@
 		<TargetFrameworks>net8.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 
-		<AssemblyVersion>1.0.1</AssemblyVersion>
-		<FileVersion>1.0.1</FileVersion>
+		<AssemblyVersion>2.0.0</AssemblyVersion>
+		<FileVersion>2.0.0</FileVersion>
 		<Product>Buildersoft Cortex Framework</Product>
 		<Company>Buildersoft</Company>
 		<Authors>Buildersoft,EnesHoxha</Authors>
@@ -16,7 +16,7 @@
 		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
 		<PackageTags>cortex vortex eda streaming distributed streams states kafka pulsar rocksdb</PackageTags>
 
-		<Version>1.0.1</Version>
+		<Version>2.0.0</Version>
 		<PackageLicenseFile>license.md</PackageLicenseFile>
 		<PackageIcon>cortex.png</PackageIcon>
 		<PackageId>Cortex.Streams.Kafka</PackageId>
@@ -52,9 +52,9 @@
 
 
 	<ItemGroup>
-		<PackageReference Include="Confluent.Kafka" Version="2.9.0" />
-		<PackageReference Include="Google.Protobuf" Version="3.30.2" />
-		<PackageReference Include="protobuf-net" Version="3.2.46" />
+		<PackageReference Include="Confluent.Kafka" Version="2.11.0" />
+		<PackageReference Include="Google.Protobuf" Version="3.31.1" />
+		<PackageReference Include="protobuf-net" Version="3.2.55" />
 	</ItemGroup>
 
 	<ItemGroup>
