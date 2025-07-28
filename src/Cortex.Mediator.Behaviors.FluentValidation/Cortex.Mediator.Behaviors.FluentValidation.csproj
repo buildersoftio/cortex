@@ -1,0 +1,72 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net9;net8;net7;netstandard2.1</TargetFrameworks>
+
+		<AssemblyVersion>1.0.0</AssemblyVersion>
+		<FileVersion>1.0.0</FileVersion>
+		<Product>Buildersoft Cortex Framework</Product>
+		<Company>Buildersoft</Company>
+		<LangVersion>12</LangVersion>
+		<Authors>Buildersoft,EnesHoxha</Authors>
+		<Copyright>Copyright © Buildersoft 2025</Copyright>
+
+		<Description>
+			Buildersoft Cortex Mediator is a library for .NET applications that implements the mediator pattern. It helps to reduce dependencies between objects by allowing in-process messaging without direct communication. Instead, objects communicate through Cortex Mediator, making them less coupled and more maintainable..
+		</Description>
+
+
+		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
+		<PackageTags>cortex vortex mediator eda cqrs streaming</PackageTags>
+
+		<Version>1.0.0</Version>
+		<PackageLicenseFile>license.md</PackageLicenseFile>
+		<PackageIcon>andyX.png</PackageIcon>
+		<PackageId>Cortex.Mediator.Behaviors.FluentValidation</PackageId>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<IsPublishable>True</IsPublishable>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+		<RepositoryType></RepositoryType>
+		<PackageReleaseNotes>Just as the Cortex in our brains handles complex processing efficiently, Cortex Data Framework brings brainpower to your data management!	</PackageReleaseNotes>
+		<PackageProjectUrl>https://buildersoft.io/</PackageProjectUrl>
+		<Title>Cortex Mediator Behaviors FluentValidation</Title>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="README.md" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+	<ItemGroup>
+		<None Include="Assets\andyX.png">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+		<None Include="Assets\license.md">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Assets\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Cortex.Mediator\Cortex.Mediator.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="FluentValidation" Version="11.11.0" />
+		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
+	</ItemGroup>
+
+</Project>
