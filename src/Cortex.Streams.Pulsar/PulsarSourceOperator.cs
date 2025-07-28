@@ -1,16 +1,17 @@
-﻿using DotPulsar.Abstractions;
-using DotPulsar;
-using DotPulsar.Extensions;
+﻿using Cortex.Streams.Operators;
 using Cortex.Streams.Pulsar.Deserializers;
+using DotPulsar;
+using DotPulsar.Abstractions;
+using DotPulsar.Extensions;
+using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using System;
-using Cortex.Streams.Operators;
 
 namespace Cortex.Streams.Pulsar
 {
-    public class PulsarSourceOperator<TOutput> : ISourceOperator<TOutput>
+    public class PulsarSourceOperator<TOutput> : ISourceOperator<KeyValuePair<string, TOutput>>
     {
         private readonly string _serviceUrl;
         private readonly ConsumerOptions<ReadOnlySequence<byte>> _consumerOptions;
@@ -51,24 +52,17 @@ namespace Cortex.Streams.Pulsar
                 .Build();
         }
 
-        public void Start(Action<TOutput> emit)
+        public void Start(Action<KeyValuePair<string, TOutput>> emit)
         {
             _cts = new CancellationTokenSource();
 
-            if (_consumerOptions == null)
-            {
-                _consumer = _client.NewConsumer()
+            _consumer = _consumerOptions == null
+                ? _client.NewConsumer()
                     .Topic(_topic)
                     .InitialPosition(SubscriptionInitialPosition.Earliest)
                     .SubscriptionName($"subscription-{Guid.NewGuid()}")
-                    .Create();
-            }
-            else
-            {
-                _consumer = _client
-                    .CreateConsumer(_consumerOptions);
-            }
-
+                    .Create()
+                : _client.CreateConsumer(_consumerOptions);
 
             _consumeTask = Task.Run(async () =>
             {
@@ -76,15 +70,15 @@ namespace Cortex.Streams.Pulsar
                 {
                     await foreach (var message in _consumer.Messages(_cts.Token))
                     {
-                        var data = message.Data;
-                        var output = _deserializer.Deserialize(data);
-                        emit(output);
+                        var key = message.Key ?? string.Empty; // Handle null keys gracefully
+                        var output = _deserializer.Deserialize(message.Data);
+                        emit(new KeyValuePair<string, TOutput>(key, output));
                         await _consumer.Acknowledge(message, _cts.Token);
                     }
                 }
                 catch (OperationCanceledException)
                 {
-                    // Consume loop canceled
+                    // Cancellation requested
                 }
                 finally
                 {

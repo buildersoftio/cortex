@@ -32,11 +32,20 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 
 	</PropertyGroup>
+
 	<ItemGroup>
-		<None Include="..\..\README.md">
-		  <Pack>True</Pack>
-		  <PackagePath>\</PackagePath>
-		</None>
+		<None Remove="README.md" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="Assets\cortex.png">
 			<Pack>True</Pack>
 			<PackagePath></PackagePath>
