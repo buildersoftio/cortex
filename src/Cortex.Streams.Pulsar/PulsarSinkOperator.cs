@@ -16,7 +16,12 @@ namespace Cortex.Streams.Pulsar
         private readonly IPulsarClient _client;
         private IProducer<ReadOnlySequence<byte>> _producer;
 
-        public PulsarSinkOperator(string serviceUrl, string topic, ISerializer<TInput> serializer = null)
+        private readonly Func<TInput, string> _keySelector; // optional
+
+        public PulsarSinkOperator(string serviceUrl,
+            string topic,
+            Func<TInput, string> keySelector = null,
+            ISerializer<TInput> serializer = null)
         {
             _serviceUrl = serviceUrl;
             _topic = topic;
@@ -24,6 +29,7 @@ namespace Cortex.Streams.Pulsar
 
             _serializer ??= new DefaultJsonSerializer<TInput>();
 
+            _keySelector = keySelector;
 
             _client = PulsarClient.Builder()
                 .ServiceUrl(new Uri(_serviceUrl))
@@ -44,7 +50,15 @@ namespace Cortex.Streams.Pulsar
         public void Process(TInput input)
         {
             var data = _serializer.Serialize(input);
-            _producer.Send(data);
+            if (_keySelector is null)
+            {
+                _producer.Send(data); // current behavior :contentReference[oaicite:17]{index=17}
+            }
+            else
+            {
+                var metadata = new MessageMetadata { Key = _keySelector(input) };
+                _producer.Send(metadata, new ReadOnlySequence<byte>(data));
+            }
         }
 
         public void Stop()

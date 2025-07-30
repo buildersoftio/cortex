@@ -32,11 +32,20 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 
 	</PropertyGroup>
+
 	<ItemGroup>
-		<None Include="..\..\README.md">
-		  <Pack>True</Pack>
-		  <PackagePath>\</PackagePath>
-		</None>
+		<None Remove="README.md" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="Assets\cortex.png">
 			<Pack>True</Pack>
 			<PackagePath></PackagePath>
@@ -53,10 +62,10 @@
 
 
 	<ItemGroup>
-		<PackageReference Include="DotPulsar" Version="4.2.2" />
+		<PackageReference Include="DotPulsar" Version="4.3.1" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-		<PackageReference Include="Google.Protobuf" Version="3.30.2" />
-		<PackageReference Include="protobuf-net" Version="3.2.46" />
+		<PackageReference Include="Google.Protobuf" Version="3.31.1" />
+		<PackageReference Include="protobuf-net" Version="3.2.55" />
 	</ItemGroup>
 
 	<ItemGroup>

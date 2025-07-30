@@ -26,6 +26,7 @@
 
 ## Use Cases
 
+
 - Real-time analytics and monitoring
 - Event-driven architectures
 - Stateful stream processing (e.g., aggregations, joins)
@@ -121,6 +122,9 @@
 
 - **Cortex.Mediator:** implementation of the Mediator pattern for .NET applications, designed to power clean, modular architectures like **Vertical Slice Architecture** and **CQRS**.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Mediator?label=Cortex.Mediator)](https://www.nuget.org/packages/Cortex.Mediator)
+
+- **Cortex.Mediator.Behaviors.FluentValidation:** implementation of the FluentValidation validation for Commands and Queries
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Mediator.Behaviors.FluentValidation?label=Cortex.Mediator.Behaviors.FluentValidation)](https://www.nuget.org/packages/Cortex.Mediator.Behaviors.FluentValidation)
 
 
 ## Getting Started

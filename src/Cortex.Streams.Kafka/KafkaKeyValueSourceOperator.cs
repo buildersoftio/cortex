@@ -2,26 +2,32 @@
 using Cortex.Streams.Kafka.Deserializers;
 using Cortex.Streams.Operators;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Cortex.Streams.Kafka
 {
-    public sealed class KafkaSourceOperator<TOutput> : ISourceOperator<TOutput>
+    /// <summary>
+    /// Kafka source that emits KeyValuePair<TKey, TValue> so the pipeline can use message keys.
+    /// </summary>
+    public sealed class KafkaSourceOperator<TKey, TValue> : ISourceOperator<KeyValuePair<TKey, TValue>>
     {
         private readonly string _bootstrapServers;
         private readonly string _topic;
-        private readonly IConsumer<Ignore, TOutput> _consumer;
+        private readonly IConsumer<TKey, TValue> _consumer;
         private CancellationTokenSource _cts;
         private Task _consumeTask;
+
 
         public KafkaSourceOperator(string bootstrapServers,
             string topic,
             ConsumerConfig config = null,
-            IDeserializer<TOutput> deserializer = null)
+            IDeserializer<TKey> keyDeserializer = null,
+            IDeserializer<TValue> valueDeserializer = null)
         {
-            _bootstrapServers = bootstrapServers;
-            _topic = topic;
+            _bootstrapServers = bootstrapServers ?? throw new ArgumentNullException(nameof(bootstrapServers));
+            _topic = topic ?? throw new ArgumentNullException(nameof(topic));
 
             var consumerConfig = config ?? new ConsumerConfig
             {
@@ -31,16 +37,20 @@ namespace Cortex.Streams.Kafka
                 EnableAutoCommit = true,
             };
 
-            if (deserializer == null)
-                deserializer = new DefaultJsonDeserializer<TOutput>();
+            keyDeserializer ??= new DefaultJsonDeserializer<TKey>();
+            valueDeserializer ??= new DefaultJsonDeserializer<TValue>();
 
-            _consumer = new ConsumerBuilder<Ignore, TOutput>(consumerConfig)
-                .SetValueDeserializer(deserializer)
+            _consumer = new ConsumerBuilder<TKey, TValue>(consumerConfig)
+                .SetKeyDeserializer(keyDeserializer)
+                .SetValueDeserializer(valueDeserializer)
                 .Build();
         }
 
-        public void Start(Action<TOutput> emit)
+
+        public void Start(Action<KeyValuePair<TKey, TValue>> emit)
         {
+            if (emit == null) throw new ArgumentNullException(nameof(emit));
+
             _cts = new CancellationTokenSource();
             _consumer.Subscribe(_topic);
 
@@ -51,7 +61,7 @@ namespace Cortex.Streams.Kafka
                     while (!_cts.Token.IsCancellationRequested)
                     {
                         var result = _consumer.Consume(_cts.Token);
-                        emit(result.Message.Value);
+                        emit(new KeyValuePair<TKey, TValue>(result.Message.Key, result.Message.Value));
                     }
                 }
                 catch (OperationCanceledException)
