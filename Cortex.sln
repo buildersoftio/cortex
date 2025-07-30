@@ -1,4 +1,3 @@
-﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.34607.79
@@ -56,6 +55,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Streams.Elasticsearch", "src\Cortex.Streams.Elasticsearch\Cortex.Streams.Elasticsearch.csproj", "{4D1F117D-48D7-47AD-9DAC-3B2DB45E628A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Types", "src\Cortex.Types\Cortex.Types.csproj", "{64E12D4C-FBB2-4004-8316-C886CBFC614B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Vectors", "src\Cortex.Vectors\Cortex.Vectors.csproj", "{268BA5C7-C6FB-4A6B-875A-492659ED4573}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cortex.Mediator.Behaviors.FluentValidation", "src\Cortex.Mediator.Behaviors.FluentValidation\Cortex.Mediator.Behaviors.FluentValidation.csproj", "{44A166BD-01E9-4A4B-9BC5-7DE01B472E73}"
 EndProject
@@ -172,6 +173,10 @@ Global
 		{64E12D4C-FBB2-4004-8316-C886CBFC614B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{64E12D4C-FBB2-4004-8316-C886CBFC614B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{64E12D4C-FBB2-4004-8316-C886CBFC614B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{268BA5C7-C6FB-4A6B-875A-492659ED4573}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{268BA5C7-C6FB-4A6B-875A-492659ED4573}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{268BA5C7-C6FB-4A6B-875A-492659ED4573}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{268BA5C7-C6FB-4A6B-875A-492659ED4573}.Release|Any CPU.Build.0 = Release|Any CPU
 		{44A166BD-01E9-4A4B-9BC5-7DE01B472E73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{44A166BD-01E9-4A4B-9BC5-7DE01B472E73}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{44A166BD-01E9-4A4B-9BC5-7DE01B472E73}.Release|Any CPU.ActiveCfg = Release|Any CPU
