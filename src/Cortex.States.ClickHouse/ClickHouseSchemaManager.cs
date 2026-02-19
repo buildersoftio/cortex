@@ -1,5 +1,5 @@
-﻿using ClickHouse.Client.ADO.Parameters;
-using ClickHouse.Client.ADO;
+﻿using ClickHouse.Driver.ADO.Parameters;
+using ClickHouse.Driver.ADO;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -199,7 +199,7 @@ namespace Cortex.States.ClickHouse
             if (type == typeof(bool))
                 return "UInt8"; // or use Int8, but bool->UInt8 is common
             if (type == typeof(DateTime))
-                return "DateTime64(3)";
+                return "DateTime64(3, 'UTC')"; // Use UTC for deterministic behavior regardless of server timezone
             if (type == typeof(decimal))
                 return "Decimal(18,4)"; // adjust as needed
             if (type == typeof(double))

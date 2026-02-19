@@ -31,7 +31,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="ClickHouse.Client" Version="7.13.1" />
+		<PackageReference Include="ClickHouse.Driver" Version="1.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>
