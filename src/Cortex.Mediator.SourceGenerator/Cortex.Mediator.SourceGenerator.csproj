@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<LangVersion>12</LangVersion>
+		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+		<IsRoslynComponent>true</IsRoslynComponent>
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+		<DevelopmentDependency>true</DevelopmentDependency>
+		<SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+
+		<AssemblyVersion>1.0.0</AssemblyVersion>
+		<FileVersion>1.0.0</FileVersion>
+		<Product>Buildersoft Cortex Framework</Product>
+		<Company>Buildersoft</Company>
+		<Authors>Buildersoft,EnesHoxha</Authors>
+		<Copyright>Copyright © Buildersoft 2026</Copyright>
+
+		<Description>
+			Roslyn source generator for Cortex.Mediator that eliminates runtime reflection by generating compile-time dispatch. Produces a GeneratedMediator with switch-based routing and explicit DI registrations, enabling NativeAOT compatibility and faster cold starts.
+		</Description>
+
+		<RepositoryUrl>https://github.com/buildersoftio/cortex</RepositoryUrl>
+		<PackageTags>cortex vortex mediator eda cqrs source-generator</PackageTags>
+
+		<Version>1.0.0</Version>
+		<PackageLicenseFile>license.md</PackageLicenseFile>
+		<PackageIcon>andyX.png</PackageIcon>
+		<PackageId>Cortex.Mediator.SourceGenerator</PackageId>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<IsPublishable>True</IsPublishable>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+		<RepositoryType></RepositoryType>
+		<PackageReleaseNotes>Just as the Cortex in our brains handles complex processing efficiently, Cortex Data Framework brings brainpower to your data management!</PackageReleaseNotes>
+		<PackageProjectUrl>https://buildersoft.io/</PackageProjectUrl>
+		<Title>Cortex Mediator Source Generator</Title>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="README.md" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+	<ItemGroup>
+		<None Include="Assets\andyX.png">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+		<None Include="Assets\license.md">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Assets\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true"
+		      PackagePath="analyzers/dotnet/cs" Visible="false" />
+	</ItemGroup>
+
+</Project>

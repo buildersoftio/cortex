@@ -31,7 +31,7 @@ namespace Cortex.Mediator.DependencyInjection
         /// Defaults to <see cref="ParallelNotificationStrategy"/>.
         /// Use <see cref="UseNotificationPublishStrategy{TStrategy}"/> to change.
         /// </summary>
-        internal Type NotificationPublishStrategyType { get; private set; } = typeof(ParallelNotificationStrategy);
+        public Type NotificationPublishStrategyType { get; private set; } = typeof(ParallelNotificationStrategy);
 
         /// <summary>
         /// Sets the strategy used to publish notifications to multiple handlers.
