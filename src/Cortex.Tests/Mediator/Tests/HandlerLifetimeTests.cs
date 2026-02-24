@@ -10,7 +10,7 @@ namespace Cortex.Tests.Mediator.Tests
 {
     #region Test Types for Handler Lifetime Tests
 
-    // These types live in this assembly so Scrutor can discover them via the marker type.
+    // These types live in this assembly so assembly scanning can discover them via the marker type.
 
     public class LifetimeTestCommand : ICommand<string>
     {
