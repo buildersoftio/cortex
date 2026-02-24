@@ -2,6 +2,7 @@ using Cortex.Mediator.Commands;
 using Cortex.Mediator.Notifications;
 using Cortex.Mediator.Queries;
 using Cortex.Mediator.Streaming;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,6 +18,13 @@ namespace Cortex.Mediator.DependencyInjection
         internal List<Type> StreamQueryBehaviors { get; } = new();
 
         public bool OnlyPublicClasses { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the service lifetime for handler registrations
+        /// (command handlers, query handlers, notification handlers, and stream query handlers).
+        /// Defaults to <see cref="ServiceLifetime.Scoped"/>.
+        /// </summary>
+        public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Scoped;
 
 
         /// <summary>

@@ -40,13 +40,14 @@ namespace Cortex.Mediator.DependencyInjection
             MediatorOptions options)
         {
             var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
+            var lifetime = options.HandlerLifetime;
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
                     .AssignableTo(typeof(ICommandHandler<,>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
-                .WithScopedLifetime());
+                .WithLifetime(lifetime));
 
             // feature #141 - Register void command handlers
             services.Scan(scan => scan
@@ -54,21 +55,21 @@ namespace Cortex.Mediator.DependencyInjection
                 .AddClasses(classes => classes
                     .AssignableTo(typeof(ICommandHandler<>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
-                .WithScopedLifetime());
+                .WithLifetime(lifetime));
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
                     .AssignableTo(typeof(IQueryHandler<,>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
-                .WithScopedLifetime());
+                .WithLifetime(lifetime));
 
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
                 .AddClasses(classes => classes
                     .AssignableTo(typeof(INotificationHandler<>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
-                .WithScopedLifetime());
+                .WithLifetime(lifetime));
 
             // Register streaming query handlers
             services.Scan(scan => scan
@@ -76,7 +77,7 @@ namespace Cortex.Mediator.DependencyInjection
                 .AddClasses(classes => classes
                     .AssignableTo(typeof(IStreamQueryHandler<,>)), options.OnlyPublicClasses)
                 .AsImplementedInterfaces()
-                .WithScopedLifetime());
+                .WithLifetime(lifetime));
         }
 
         private static void RegisterProcessors(
