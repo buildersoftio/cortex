@@ -26,6 +26,29 @@ namespace Cortex.Mediator.DependencyInjection
         /// </summary>
         public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Scoped;
 
+        /// <summary>
+        /// Gets the type of notification publish strategy to use.
+        /// Defaults to <see cref="ParallelNotificationStrategy"/>.
+        /// Use <see cref="UseNotificationPublishStrategy{TStrategy}"/> to change.
+        /// </summary>
+        internal Type NotificationPublishStrategyType { get; private set; } = typeof(ParallelNotificationStrategy);
+
+        /// <summary>
+        /// Sets the strategy used to publish notifications to multiple handlers.
+        /// </summary>
+        /// <typeparam name="TStrategy">
+        /// The strategy implementation. Built-in options:
+        /// <see cref="ParallelNotificationStrategy"/> (default) — all handlers run in parallel via Task.WhenAll,
+        /// <see cref="SequentialNotificationStrategy"/> — handlers run one at a time in registration order,
+        /// <see cref="StopOnFirstFailureNotificationStrategy"/> — sequential, stops on first exception.
+        /// </typeparam>
+        public MediatorOptions UseNotificationPublishStrategy<TStrategy>()
+            where TStrategy : class, INotificationPublishStrategy
+        {
+            NotificationPublishStrategyType = typeof(TStrategy);
+            return this;
+        }
+
 
         /// <summary>
         /// Register a *closed* command pipeline behavior.
