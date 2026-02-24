@@ -117,5 +117,17 @@ namespace Cortex.Mediator
             TNotification notification,
             CancellationToken cancellationToken = default)
             where TNotification : INotification;
+
+        /// <summary>
+        /// Publishes a notification to all registered handlers.
+        /// The notification type is resolved at runtime, enabling scenarios where the concrete
+        /// type is not known at compile time (e.g., dispatching domain events from a collection,
+        /// deserializing events from a message bus).
+        /// </summary>
+        /// <param name="notification">The notification to publish.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        Task PublishAsync(
+            INotification notification,
+            CancellationToken cancellationToken = default);
     }
 }
