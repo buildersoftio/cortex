@@ -49,6 +49,7 @@ namespace Cortex.Mediator.DependencyInjection
                 .AsImplementedInterfaces()
                 .WithLifetime(lifetime));
 
+
             // feature #141 - Register void command handlers
             services.Scan(scan => scan
                 .FromAssemblies(assemblies)
