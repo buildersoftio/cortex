@@ -7,8 +7,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
+using System.Reflection;
 
 namespace Cortex.Mediator.DependencyInjection
 {
@@ -43,43 +43,17 @@ namespace Cortex.Mediator.DependencyInjection
             var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
             var lifetime = options.HandlerLifetime;
 
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(ICommandHandler<,>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithLifetime(lifetime));
-
+            ScanAndRegister(services, assemblies, typeof(ICommandHandler<,>), options.OnlyPublicClasses, lifetime);
 
             // feature #141 - Register void command handlers
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(ICommandHandler<>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithLifetime(lifetime));
+            ScanAndRegister(services, assemblies, typeof(ICommandHandler<>), options.OnlyPublicClasses, lifetime);
 
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(IQueryHandler<,>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithLifetime(lifetime));
+            ScanAndRegister(services, assemblies, typeof(IQueryHandler<,>), options.OnlyPublicClasses, lifetime);
 
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(INotificationHandler<>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithLifetime(lifetime));
+            ScanAndRegister(services, assemblies, typeof(INotificationHandler<>), options.OnlyPublicClasses, lifetime);
 
             // Register streaming query handlers
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(IStreamQueryHandler<,>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithLifetime(lifetime));
+            ScanAndRegister(services, assemblies, typeof(IStreamQueryHandler<,>), options.OnlyPublicClasses, lifetime);
         }
 
         private static void RegisterProcessors(
@@ -90,28 +64,51 @@ namespace Cortex.Mediator.DependencyInjection
             var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
 
             // Register pre-processors
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(IRequestPreProcessor<>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithTransientLifetime());
+            ScanAndRegister(services, assemblies, typeof(IRequestPreProcessor<>), options.OnlyPublicClasses, ServiceLifetime.Transient);
 
             // Register post-processors with response
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(IRequestPostProcessor<,>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithTransientLifetime());
+            ScanAndRegister(services, assemblies, typeof(IRequestPostProcessor<,>), options.OnlyPublicClasses, ServiceLifetime.Transient);
 
             // Register post-processors without response (for void commands)
-            services.Scan(scan => scan
-                .FromAssemblies(assemblies)
-                .AddClasses(classes => classes
-                    .AssignableTo(typeof(IRequestPostProcessor<>)), options.OnlyPublicClasses)
-                .AsImplementedInterfaces()
-                .WithTransientLifetime());
+            ScanAndRegister(services, assemblies, typeof(IRequestPostProcessor<>), options.OnlyPublicClasses, ServiceLifetime.Transient);
+        }
+
+        private static void ScanAndRegister(
+            IServiceCollection services,
+            IEnumerable<Assembly> assemblies,
+            Type openGenericInterface,
+            bool onlyPublicClasses,
+            ServiceLifetime lifetime)
+        {
+            foreach (var assembly in assemblies)
+            {
+                Type[] types;
+                try
+                {
+                    types = onlyPublicClasses
+                        ? assembly.GetExportedTypes()
+                        : assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    types = ex.Types.Where(t => t != null).ToArray();
+                }
+
+                foreach (var type in types)
+                {
+                    if (type.IsInterface || type.IsAbstract || type.IsGenericTypeDefinition)
+                        continue;
+
+                    var matchingInterfaces = type.GetInterfaces()
+                        .Where(i => i.IsGenericType &&
+                                    i.GetGenericTypeDefinition() == openGenericInterface);
+
+                    foreach (var serviceType in matchingInterfaces)
+                    {
+                        services.Add(new ServiceDescriptor(serviceType, type, lifetime));
+                    }
+                }
+            }
         }
 
         private static void RegisterPipelineBehaviors(IServiceCollection services, MediatorOptions options)
