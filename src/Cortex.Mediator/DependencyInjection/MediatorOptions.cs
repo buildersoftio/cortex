@@ -11,11 +11,11 @@ namespace Cortex.Mediator.DependencyInjection
 {
     public class MediatorOptions
     {
-        internal List<Type> CommandBehaviors { get; } = new();
-        internal List<Type> VoidCommandBehaviors { get; } = new();
-        internal List<Type> QueryBehaviors { get; } = new();
-        internal List<Type> NotificationBehaviors { get; } = new();
-        internal List<Type> StreamQueryBehaviors { get; } = new();
+        internal List<(Type BehaviorType, int Order)> CommandBehaviors { get; } = new();
+        internal List<(Type BehaviorType, int Order)> VoidCommandBehaviors { get; } = new();
+        internal List<(Type BehaviorType, int Order)> QueryBehaviors { get; } = new();
+        internal List<(Type BehaviorType, int Order)> NotificationBehaviors { get; } = new();
+        internal List<(Type BehaviorType, int Order)> StreamQueryBehaviors { get; } = new();
 
         public bool OnlyPublicClasses { get; set; } = true;
 
@@ -53,7 +53,11 @@ namespace Cortex.Mediator.DependencyInjection
         /// <summary>
         /// Register a *closed* command pipeline behavior.
         /// </summary>
-        public MediatorOptions AddCommandPipelineBehavior<TBehavior>()
+        /// <param name="order">
+        /// Execution order. Lower values run first (outermost in the pipeline).
+        /// Behaviors with the same order preserve registration order. Defaults to 0.
+        /// </param>
+        public MediatorOptions AddCommandPipelineBehavior<TBehavior>(int order = 0)
             where TBehavior : class // Add constraint
         {
             var behaviorType = typeof(TBehavior);
@@ -73,10 +77,10 @@ namespace Cortex.Mediator.DependencyInjection
                 throw new ArgumentException("Type must implement ICommandPipelineBehavior<,> or ICommandPipelineBehavior<>");
 
             if (implementsReturning)
-                CommandBehaviors.Add(behaviorType);
+                CommandBehaviors.Add((behaviorType, order));
 
             if (implementsNonReturning)
-                VoidCommandBehaviors.Add(behaviorType);
+                VoidCommandBehaviors.Add((behaviorType, order));
 
             return this;
         }
@@ -84,7 +88,12 @@ namespace Cortex.Mediator.DependencyInjection
         /// <summary>
         /// Register an *open generic* command pipeline behavior, e.g. typeof(LoggingCommandBehavior&lt;,&gt;).
         /// </summary>
-        public MediatorOptions AddOpenCommandPipelineBehavior(Type openGenericBehaviorType)
+        /// <param name="openGenericBehaviorType">The open generic behavior type.</param>
+        /// <param name="order">
+        /// Execution order. Lower values run first (outermost in the pipeline).
+        /// Behaviors with the same order preserve registration order. Defaults to 0.
+        /// </param>
+        public MediatorOptions AddOpenCommandPipelineBehavior(Type openGenericBehaviorType, int order = 0)
         {
             if (!openGenericBehaviorType.IsGenericTypeDefinition)
                 throw new ArgumentException("Type must be an open generic type definition");
@@ -101,10 +110,10 @@ namespace Cortex.Mediator.DependencyInjection
                 throw new ArgumentException("Type must implement ICommandPipelineBehavior<,> or ICommandPipelineBehavior<>");
 
             if (implementsReturning)
-                CommandBehaviors.Add(openGenericBehaviorType);
+                CommandBehaviors.Add((openGenericBehaviorType, order));
 
             if (implementsNonReturning)
-                VoidCommandBehaviors.Add(openGenericBehaviorType);
+                VoidCommandBehaviors.Add((openGenericBehaviorType, order));
 
             return this;
         }
@@ -112,7 +121,11 @@ namespace Cortex.Mediator.DependencyInjection
         /// <summary>
         /// Register a *closed* query pipeline behavior.
         /// </summary>
-        public MediatorOptions AddQueryPipelineBehavior<TBehavior>()
+        /// <param name="order">
+        /// Execution order. Lower values run first (outermost in the pipeline).
+        /// Behaviors with the same order preserve registration order. Defaults to 0.
+        /// </param>
+        public MediatorOptions AddQueryPipelineBehavior<TBehavior>(int order = 0)
             where TBehavior : class
         {
             var behaviorType = typeof(TBehavior);
@@ -127,14 +140,19 @@ namespace Cortex.Mediator.DependencyInjection
             if (!implementsQueryBehavior)
                 throw new ArgumentException("Type must implement IQueryPipelineBehavior<,>");
 
-            QueryBehaviors.Add(behaviorType);
+            QueryBehaviors.Add((behaviorType, order));
             return this;
         }
 
         /// <summary>
         /// Register an *open generic* query pipeline behavior, e.g. typeof(CachingQueryBehavior&lt;,&gt;).
         /// </summary>
-        public MediatorOptions AddOpenQueryPipelineBehavior(Type openGenericBehaviorType)
+        /// <param name="openGenericBehaviorType">The open generic behavior type.</param>
+        /// <param name="order">
+        /// Execution order. Lower values run first (outermost in the pipeline).
+        /// Behaviors with the same order preserve registration order. Defaults to 0.
+        /// </param>
+        public MediatorOptions AddOpenQueryPipelineBehavior(Type openGenericBehaviorType, int order = 0)
         {
             if (!openGenericBehaviorType.IsGenericTypeDefinition)
             {
@@ -150,14 +168,18 @@ namespace Cortex.Mediator.DependencyInjection
                 throw new ArgumentException("Type must implement IQueryPipelineBehavior<,>");
             }
 
-            QueryBehaviors.Add(openGenericBehaviorType);
+            QueryBehaviors.Add((openGenericBehaviorType, order));
             return this;
         }
 
         /// <summary>
         /// Register a *closed* notification pipeline behavior.
         /// </summary>
-        public MediatorOptions AddNotificationPipelineBehavior<TBehavior>()
+        /// <param name="order">
+        /// Execution order. Lower values run first (outermost in the pipeline).
+        /// Behaviors with the same order preserve registration order. Defaults to 0.
+        /// </param>
+        public MediatorOptions AddNotificationPipelineBehavior<TBehavior>(int order = 0)
             where TBehavior : class
         {
             var behaviorType = typeof(TBehavior);
@@ -172,14 +194,19 @@ namespace Cortex.Mediator.DependencyInjection
             if (!implementsNotificationBehavior)
                 throw new ArgumentException("Type must implement INotificationPipelineBehavior<>");
 
-            NotificationBehaviors.Add(behaviorType);
+            NotificationBehaviors.Add((behaviorType, order));
             return this;
         }
 
         /// <summary>
         /// Register an *open generic* notification pipeline behavior, e.g. typeof(LoggingNotificationBehavior&lt;&gt;).
         /// </summary>
-        public MediatorOptions AddOpenNotificationPipelineBehavior(Type openGenericBehaviorType)
+        /// <param name="openGenericBehaviorType">The open generic behavior type.</param>
+        /// <param name="order">
+        /// Execution order. Lower values run first (outermost in the pipeline).
+        /// Behaviors with the same order preserve registration order. Defaults to 0.
+        /// </param>
+        public MediatorOptions AddOpenNotificationPipelineBehavior(Type openGenericBehaviorType, int order = 0)
         {
             if (!openGenericBehaviorType.IsGenericTypeDefinition)
             {
@@ -195,14 +222,19 @@ namespace Cortex.Mediator.DependencyInjection
                 throw new ArgumentException("Type must implement INotificationPipelineBehavior<>");
             }
 
-            NotificationBehaviors.Add(openGenericBehaviorType);
+            NotificationBehaviors.Add((openGenericBehaviorType, order));
             return this;
         }
 
         /// <summary>
         /// Register an *open generic* streaming query pipeline behavior, e.g. typeof(LoggingStreamQueryBehavior&lt;,&gt;).
         /// </summary>
-        public MediatorOptions AddOpenStreamQueryPipelineBehavior(Type openGenericBehaviorType)
+        /// <param name="openGenericBehaviorType">The open generic behavior type.</param>
+        /// <param name="order">
+        /// Execution order. Lower values run first (outermost in the pipeline).
+        /// Behaviors with the same order preserve registration order. Defaults to 0.
+        /// </param>
+        public MediatorOptions AddOpenStreamQueryPipelineBehavior(Type openGenericBehaviorType, int order = 0)
         {
             if (!openGenericBehaviorType.IsGenericTypeDefinition)
             {
@@ -218,7 +250,7 @@ namespace Cortex.Mediator.DependencyInjection
                 throw new ArgumentException("Type must implement IStreamQueryPipelineBehavior<,>");
             }
 
-            StreamQueryBehaviors.Add(openGenericBehaviorType);
+            StreamQueryBehaviors.Add((openGenericBehaviorType, order));
             return this;
         }
     }
