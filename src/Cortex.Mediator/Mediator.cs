@@ -27,6 +27,7 @@ namespace Cortex.Mediator
         private static readonly ConcurrentDictionary<Type, MethodInfo> _sendQueryMethodCache = new();
         private static readonly ConcurrentDictionary<Type, MethodInfo> _sendVoidCommandMethodCache = new();
         private static readonly ConcurrentDictionary<Type, MethodInfo> _createStreamMethodCache = new();
+        private static readonly ConcurrentDictionary<Type, MethodInfo> _publishMethodCache = new();
 
         public Mediator(IServiceProvider serviceProvider)
         {
@@ -175,6 +176,27 @@ namespace Cortex.Mediator
             }
 
             await Task.WhenAll(tasks);
+        }
+
+        public Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)
+        {
+            if (notification == null)
+                throw new ArgumentNullException(nameof(notification));
+
+            var notificationType = notification.GetType();
+
+            var method = _publishMethodCache.GetOrAdd(notificationType, type =>
+            {
+                var genericMethod = typeof(Mediator)
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .First(m => m.Name == nameof(PublishAsync) &&
+                                m.IsGenericMethodDefinition &&
+                                m.GetGenericArguments().Length == 1);
+
+                return genericMethod.MakeGenericMethod(type);
+            });
+
+            return (Task)method.Invoke(this, new object[] { notification, cancellationToken })!;
         }
 
         public IAsyncEnumerable<TResult> CreateStream<TQuery, TResult>(
