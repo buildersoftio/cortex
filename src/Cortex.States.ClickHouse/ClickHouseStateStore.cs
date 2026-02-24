@@ -1,5 +1,5 @@
-﻿using ClickHouse.Client.ADO.Parameters;
-using ClickHouse.Client.ADO;
+﻿using ClickHouse.Driver.ADO.Parameters;
+using ClickHouse.Driver.ADO;
 using System;
 using System.Collections.Generic;
 using System.Linq;
