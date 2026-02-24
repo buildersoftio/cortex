@@ -23,6 +23,7 @@ namespace Cortex.Mediator.DependencyInjection
             configure?.Invoke(options);
 
             services.AddScoped<IMediator, Mediator>();
+            services.AddSingleton(typeof(INotificationPublishStrategy), options.NotificationPublishStrategyType);
 
             // Validation has been removed for issue #118
             //services.AddValidatorsFromAssemblies(handlerAssemblyMarkerTypes.Select(t => t.Assembly));

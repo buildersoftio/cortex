@@ -148,20 +148,19 @@ namespace Cortex.Mediator
             var behaviors = _serviceProvider.GetServices<INotificationPipelineBehavior<TNotification>>();
 
             // Materialize behaviors once since we need to iterate multiple times
-            // Use stackalloc-friendly pattern for small counts
             var behaviorList = behaviors as INotificationPipelineBehavior<TNotification>[] ?? behaviors.ToArray();
             Array.Reverse(behaviorList);
 
-            // Count handlers to pre-allocate task array
+            // Count handlers to pre-allocate delegate list
             var handlerList = handlers as INotificationHandler<TNotification>[] ?? handlers.ToArray();
             if (handlerList.Length == 0)
                 return;
 
-            var tasks = new Task[handlerList.Length];
+            // Build a pipeline delegate for each handler
+            var handlerDelegates = new Func<Task>[handlerList.Length];
             for (int i = 0; i < handlerList.Length; i++)
             {
                 var handler = handlerList[i];
-                // Build the pipeline for this specific handler
                 NotificationHandlerDelegate handlerDelegate = () => handler.Handle(notification, cancellationToken);
 
                 // Wrap the handler with all behaviors (already reversed)
@@ -172,10 +171,21 @@ namespace Cortex.Mediator
                     handlerDelegate = () => currentBehavior.Handle(notification, currentDelegate, cancellationToken);
                 }
 
-                tasks[i] = handlerDelegate();
+                var finalDelegate = handlerDelegate;
+                handlerDelegates[i] = () => finalDelegate();
             }
 
-            await Task.WhenAll(tasks);
+            // Delegate to the publish strategy
+            var strategy = _serviceProvider.GetService<INotificationPublishStrategy>();
+            if (strategy != null)
+            {
+                await strategy.PublishAsync(handlerDelegates, cancellationToken);
+            }
+            else
+            {
+                // Fallback to parallel when no strategy is registered (e.g., manual DI without AddCortexMediator)
+                await Task.WhenAll(handlerDelegates.Select(d => d()));
+            }
         }
 
         public Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)
