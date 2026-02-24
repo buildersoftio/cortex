@@ -78,6 +78,31 @@ namespace Cortex.Mediator.DependencyInjection
             return this;
         }
 
+        /// <summary>
+        /// Register a *closed* query pipeline behavior.
+        /// </summary>
+        public MediatorOptions AddQueryPipelineBehavior<TBehavior>()
+            where TBehavior : class
+        {
+            var behaviorType = typeof(TBehavior);
+
+            if (behaviorType.IsGenericTypeDefinition)
+                throw new ArgumentException("Open generic types must be registered using AddOpenQueryPipelineBehavior");
+
+            var implementsQueryBehavior =
+                behaviorType.GetInterfaces().Any(i => i.IsGenericType &&
+                                                      i.GetGenericTypeDefinition() == typeof(IQueryPipelineBehavior<,>));
+
+            if (!implementsQueryBehavior)
+                throw new ArgumentException("Type must implement IQueryPipelineBehavior<,>");
+
+            QueryBehaviors.Add(behaviorType);
+            return this;
+        }
+
+        /// <summary>
+        /// Register an *open generic* query pipeline behavior, e.g. typeof(CachingQueryBehavior&lt;,&gt;).
+        /// </summary>
         public MediatorOptions AddOpenQueryPipelineBehavior(Type openGenericBehaviorType)
         {
             if (!openGenericBehaviorType.IsGenericTypeDefinition)

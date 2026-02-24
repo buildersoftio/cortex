@@ -125,10 +125,25 @@ namespace Cortex.Mediator.DependencyInjection
                 services.AddTransient(typeof(ICommandPipelineBehavior<>), behaviorType);
             }
 
-            // Query behaviors (if needed)
+            // Query behaviors
             foreach (var behaviorType in options.QueryBehaviors)
             {
-                services.AddTransient(typeof(IQueryPipelineBehavior<,>), behaviorType);
+                if (behaviorType.IsGenericTypeDefinition)
+                {
+                    // Open generic behavior - register against open generic interface
+                    services.AddTransient(typeof(IQueryPipelineBehavior<,>), behaviorType);
+                }
+                else
+                {
+                    // Closed behavior - find and register against specific implemented interfaces
+                    var implementedInterfaces = behaviorType.GetInterfaces()
+                        .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IQueryPipelineBehavior<,>));
+
+                    foreach (var iface in implementedInterfaces)
+                    {
+                        services.AddTransient(iface, behaviorType);
+                    }
+                }
             }
 
             // Notification behaviors
