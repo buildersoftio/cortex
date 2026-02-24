@@ -116,20 +116,23 @@ namespace Cortex.Mediator.DependencyInjection
 
         private static void RegisterPipelineBehaviors(IServiceCollection services, MediatorOptions options)
         {
+            // Sort each behavior list by Order (stable sort preserves registration order for equal values).
+            // OrderBy in LINQ is a stable sort.
+
             // Command behaviors
-            foreach (var behaviorType in options.CommandBehaviors)
+            foreach (var (behaviorType, _) in options.CommandBehaviors.OrderBy(b => b.Order))
             {
                 services.AddTransient(typeof(ICommandPipelineBehavior<,>), behaviorType);
             }
 
             // feature #141 - Register non-returning command pipeline behaviors
-            foreach (var behaviorType in options.VoidCommandBehaviors)
+            foreach (var (behaviorType, _) in options.VoidCommandBehaviors.OrderBy(b => b.Order))
             {
                 services.AddTransient(typeof(ICommandPipelineBehavior<>), behaviorType);
             }
 
             // Query behaviors
-            foreach (var behaviorType in options.QueryBehaviors)
+            foreach (var (behaviorType, _) in options.QueryBehaviors.OrderBy(b => b.Order))
             {
                 if (behaviorType.IsGenericTypeDefinition)
                 {
@@ -150,7 +153,7 @@ namespace Cortex.Mediator.DependencyInjection
             }
 
             // Notification behaviors
-            foreach (var behaviorType in options.NotificationBehaviors)
+            foreach (var (behaviorType, _) in options.NotificationBehaviors.OrderBy(b => b.Order))
             {
                 if (behaviorType.IsGenericTypeDefinition)
                 {
@@ -171,7 +174,7 @@ namespace Cortex.Mediator.DependencyInjection
             }
 
             // Stream query behaviors
-            foreach (var behaviorType in options.StreamQueryBehaviors)
+            foreach (var (behaviorType, _) in options.StreamQueryBehaviors.OrderBy(b => b.Order))
             {
                 services.AddTransient(typeof(IStreamQueryPipelineBehavior<,>), behaviorType);
             }
