@@ -86,6 +86,15 @@ Depends on: Task 3
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: docs(streams): document branch merge and dynamic branching
+### Task 5: Add real-life examples to the wiki
+- [x] Done
+Files: `docs/wiki/Branch-and-Merge.md` (modify)
+Depends on: Task 4
+- [x] Add a "Real-World Examples" section (order fulfilment, fraud signals, security log normalisation, IoT monitoring with a runtime debug tap, per-tenant webhook subscriptions), a "Choosing Between AddBranch, FanOut and Merge" table and a "Pitfalls" list; each example declares its own records and service interfaces.
+- [x] Compile and run every example verbatim in a throwaway test file with fakes and assertions for each claim the wiki makes, then delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(streams): add real-life branch and merge examples
 ## Risks
 - Adding members to public `IStream<TIn>` and `IStreamBuilder<TIn,TCurrent>` breaks third-party implementations of those interfaces; called out in the PR.
 - Concurrency tests can be timing-dependent; they assert absence of exceptions and final counts with joins, never sleeps.
@@ -114,3 +123,6 @@ Commit: docs(streams): document branch merge and dynamic branching
 - 2026-11-20 Critic: completeness stand-in → COMPLETE, 0 findings ≥80; POSSIBLE: the concurrent phase of the end-to-end test asserts a count, not exact contents.
 - 2026-11-20 Verification: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → "Failed: 4, Passed: 915, Skipped: 6"; the 4 failures are exactly the issue-#238 tests.
 - 2026-11-20 Review: 7 findings (1 spec, 6 test gaps), 7 confirmed, 7 fixed, 0 deferred; minor test ideas from qa-engineer (items 7-12) not pursued.
+- 2026-11-20 Ruling: Task 5 was added after the PR at the user's request ("in the Wiki, please add real-life examples on using Branches and merges") and run without a separate plan approval — docs only, one file, the user named the change — cost if wrong: one docs commit to revise.
+- 2026-11-20 Task 5: examples checked — a throwaway test file with the 5 examples copied verbatim → "Total tests: 5, Passed: 5"; a line-by-line comparison of the wiki code blocks against it → "Checked 171 code lines, missing 1" (only a trailing comment differs); the file was deleted, not committed.
+- 2026-11-20 Task 5: complete (see commit docs(streams): add real-life branch and merge examples).

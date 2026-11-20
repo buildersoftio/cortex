@@ -8,6 +8,14 @@ Cortex.Streams can split a stream into named branches, let a branch accept only 
 - [Conditional Branches](#conditional-branches)
 - [Merging Branches](#merging-branches)
 - [Dynamic Branching](#dynamic-branching)
+- [Real-World Examples](#real-world-examples)
+  - [E-Commerce Order Fulfilment](#e-commerce-order-fulfilment)
+  - [Payment Fraud Signals](#payment-fraud-signals)
+  - [Security Log Normalisation](#security-log-normalisation)
+  - [IoT Sensor Monitoring with a Live Debug Tap](#iot-sensor-monitoring-with-a-live-debug-tap)
+  - [Per-Tenant Webhook Subscriptions](#per-tenant-webhook-subscriptions)
+- [Choosing Between AddBranch, FanOut and Merge](#choosing-between-addbranch-fanout-and-merge)
+- [Pitfalls](#pitfalls)
 - [Thread Safety and Ordering](#thread-safety-and-ordering)
 - [Errors](#errors)
 - [API Reference](#api-reference)
@@ -100,6 +108,279 @@ Runtime branch names must be unique across the whole stream; adding a name that 
 ### What removal releases
 
 `RemoveBranch` disposes the operators that belong only to the removed branch, such as window and stream-stream join operators, which stops their timers. Windows still open in the removed branch are dropped, not emitted. When the branch belongs to a `Merge`, the merge and the operators after it are shared with the other branches and keep running.
+
+## Real-World Examples
+
+Each example declares the records and service interfaces it uses, so you can paste it into a project that references `Cortex.Streams` and plug in your own implementations.
+
+### E-Commerce Order Fulfilment
+
+Every order triggers a confirmation email. Standard and express orders take different routes through fulfilment, but both routes end in the same work item, a pick task for the warehouse. `Merge` joins the two routes, so the warehouse queue is written in one place.
+
+```csharp
+public record OrderLine(string Sku, int Quantity, string Warehouse);
+public record Order(string Id, string CustomerId, bool IsExpress, IReadOnlyList<OrderLine> Lines);
+public record PickTask(string OrderId, string Sku, int Quantity, string Warehouse, string Priority);
+
+public interface IEmailService { void SendConfirmation(string customerId, string orderId); }
+public interface IWarehouseQueue { void Enqueue(PickTask task); }
+
+public class FulfilmentPipeline
+{
+    private readonly IEmailService _email;
+    private readonly IWarehouseQueue _warehouse;
+
+    public FulfilmentPipeline(IEmailService email, IWarehouseQueue warehouse)
+    {
+        _email = email;
+        _warehouse = warehouse;
+    }
+
+    public IStream<Order> Create()
+    {
+        return StreamBuilder<Order>.CreateNewStream("Fulfilment")
+            .Stream()
+            // A side effect for every order; it does not change what flows on
+            .AddBranch("confirmation-email", b => b
+                .Sink(order => _email.SendConfirmation(order.CustomerId, order.Id)))
+            // Two routes that produce the same kind of work item
+            .Merge<PickTask>(routes => routes
+                .Branch("standard", order => !order.IsExpress, b => b
+                    .FlatMap(order => order.Lines.Select(line =>
+                        new PickTask(order.Id, line.Sku, line.Quantity, line.Warehouse, "standard"))))
+                .Branch("express", order => order.IsExpress, b => b
+                    .FlatMap(order => order.Lines.Select(line =>
+                        new PickTask(order.Id, line.Sku, line.Quantity, "express-hub", "express")))))
+            .Sink(task => _warehouse.Enqueue(task))
+            .Build();
+    }
+}
+```
+
+An express order with two lines produces two pick tasks for `express-hub`; a standard order produces one pick task per line, each for the line's own warehouse. The two conditions cover every order, so no order is lost at the merge.
+
+### Payment Fraud Signals
+
+Each fraud rule is a conditional merge branch that emits a `RiskSignal` only when it fires. The merged signals go to the fraud team's case queue, and `AggregateSilently` keeps a running risk score per payment in a state store that other services can read.
+
+```csharp
+public record Payment(string Id, decimal Amount, string Country, string CardCountry, bool IsNewCard);
+public record RiskSignal(string PaymentId, string Rule, int Points);
+
+public interface IFraudCaseQueue { void Add(RiskSignal signal); }
+
+public class FraudSignalsPipeline
+{
+    public const string ScoreStoreName = "payment-risk-scores";
+
+    private readonly IFraudCaseQueue _cases;
+
+    public FraudSignalsPipeline(IFraudCaseQueue cases)
+    {
+        _cases = cases;
+    }
+
+    public IStream<Payment> Create()
+    {
+        return StreamBuilder<Payment>.CreateNewStream("FraudSignals")
+            .Stream()
+            .Merge<RiskSignal>(rules => rules
+                .Branch("large-amount", p => p.Amount > 5_000m, b => b
+                    .Map(p => new RiskSignal(p.Id, "large-amount", 40)))
+                .Branch("foreign-card", p => p.Country != p.CardCountry, b => b
+                    .Map(p => new RiskSignal(p.Id, "foreign-card", 30)))
+                .Branch("new-card", p => p.IsNewCard, b => b
+                    .Map(p => new RiskSignal(p.Id, "new-card", 20))))
+            // Running score per payment; the signal itself flows on unchanged
+            .AggregateSilently<string, int>(s => s.PaymentId, (score, s) => score + s.Points, ScoreStoreName)
+            .Sink(signal => _cases.Add(signal))
+            .Build();
+    }
+}
+```
+
+Reading the score:
+
+```csharp
+var stream = new FraudSignalsPipeline(caseQueue).Create();
+stream.Start();
+stream.Emit(new Payment("pay-42", 7_500m, "AT", "US", IsNewCard: true));
+
+var scores = stream.GetStateStoreByName<InMemoryStateStore<string, int>>(FraudSignalsPipeline.ScoreStoreName);
+int score = scores.Get("pay-42"); // 90: large amount + foreign card + new card
+```
+
+A payment that triggers no rule produces no signal at all, which is what you want here. Adding a rule is one more `.Branch(...)` line.
+
+### Security Log Normalisation
+
+Logs arrive from several sources in different formats. Each source gets a conditional merge branch that parses its format into one `SecurityEvent` type, and the merged events go to the SIEM. A catch-all branch keeps lines from unknown sources instead of dropping them, and `ErrorHandlingStrategy.Skip` makes a malformed line skip only its own branch instead of failing the stream.
+
+```csharp
+public record RawLog(string Source, string Line, DateTime ReceivedAt);
+public record SecurityEvent(string Source, string Action, string User, DateTime Timestamp);
+
+public interface ISiemClient { void Send(SecurityEvent securityEvent); }
+
+public class SecurityLogPipeline
+{
+    private readonly ISiemClient _siem;
+
+    public SecurityLogPipeline(ISiemClient siem)
+    {
+        _siem = siem;
+    }
+
+    public IStream<RawLog> Create()
+    {
+        return StreamBuilder<RawLog>.CreateNewStream("SecurityLogs")
+            .WithErrorHandling(new StreamExecutionOptions { ErrorHandlingStrategy = ErrorHandlingStrategy.Skip })
+            .Stream()
+            .Merge<SecurityEvent>(sources => sources
+                // nginx access log: "<ip> <user> <method> <path>"
+                .Branch("nginx", log => log.Source == "nginx", b => b
+                    .Map(ParseNginx))
+                // auth service: "<action>:<user>", without its health checks
+                .Branch("auth", log => log.Source == "auth", b => b
+                    .Map(ParseAuth)
+                    .Filter(e => e.Action != "heartbeat"))
+                // Everything else is forwarded as unparsed, never silently dropped
+                .Branch("unknown", log => log.Source != "nginx" && log.Source != "auth", b => b
+                    .Map(log => new SecurityEvent(log.Source, "unparsed", null, log.ReceivedAt))))
+            .Sink(e => _siem.Send(e))
+            .Build();
+    }
+
+    private static SecurityEvent ParseNginx(RawLog log)
+    {
+        var parts = log.Line.Split(' ');
+        return new SecurityEvent("nginx", $"{parts[2]} {parts[3]}", parts[1], log.ReceivedAt);
+    }
+
+    private static SecurityEvent ParseAuth(RawLog log)
+    {
+        var parts = log.Line.Split(':');
+        return new SecurityEvent("auth", parts[0], parts[1], log.ReceivedAt);
+    }
+}
+```
+
+`"10.0.0.7 alice GET /admin"` from nginx becomes `SecurityEvent("nginx", "GET /admin", "alice", …)`. A truncated nginx line throws inside `ParseNginx`, is skipped, and the next log flows normally.
+
+### IoT Sensor Monitoring with a Live Debug Tap
+
+Every reading is checked for overheating and averaged per sensor over a tumbling window. While investigating an incident, support can switch on a debug tap for one site and switch it off again, without restarting the pipeline.
+
+```csharp
+public record SensorReading(string SensorId, string Site, double Temperature, DateTime Timestamp);
+public record SensorAverage(string SensorId, DateTime WindowStart, double AverageTemperature);
+
+public interface IPager { void Page(string message); }
+public interface ITimeSeriesStore { void Write(SensorAverage average); }
+public interface IDebugLog { void Write(SensorReading reading); }
+
+public class SensorTelemetry
+{
+    private readonly IStream<SensorReading> _stream;
+    private readonly IDebugLog _debugLog;
+
+    public SensorTelemetry(IPager pager, ITimeSeriesStore timeSeries, IDebugLog debugLog, TimeSpan averageWindow)
+    {
+        _debugLog = debugLog;
+        _stream = StreamBuilder<SensorReading>.CreateNewStream("SensorTelemetry")
+            .Stream()
+            .AddBranch("overheat", r => r.Temperature > 90, b => b
+                .Sink(r => pager.Page($"{r.SensorId} at {r.Site} reports {r.Temperature:F1} C")))
+            .AddBranch("averages", b => b
+                .TumblingWindow(r => r.SensorId, r => r.Timestamp, averageWindow)
+                .Map(w => new SensorAverage(w.Key, w.WindowStart, w.Items.Average(r => r.Temperature)))
+                .Sink(average => timeSeries.Write(average)))
+            .Build();
+        _stream.Start();
+    }
+
+    public void Publish(SensorReading reading) => _stream.Emit(reading);
+
+    // Attaches to the branch point declared by "overheat" and "averages"
+    public void StartDebugTap(string site) =>
+        _stream.AddBranch<SensorReading>($"debug-{site}", r => r.Site == site, b => b
+            .Sink(r => _debugLog.Write(r)));
+
+    public bool StopDebugTap(string site) => _stream.RemoveBranch($"debug-{site}");
+}
+```
+
+- Readings need UTC timestamps close to the current time: the window closes when the wall clock passes the window's end.
+- Starting a tap for a site that already has one throws `ArgumentException`, because the branch name is taken. `StopDebugTap` returns `false` when no tap was running.
+
+### Per-Tenant Webhook Subscriptions
+
+A SaaS platform lets each tenant subscribe to order events through webhooks. Each subscription is a runtime branch with a condition on the tenant and the event status. Subscribing and unsubscribing never restarts the stream, and events keep flowing to every other subscriber while a subscription changes.
+
+```csharp
+public record OrderEvent(string TenantId, string OrderId, string Status, DateTime OccurredAt);
+public record WebhookDelivery(string SubscriptionId, Uri Endpoint, OrderEvent Event);
+
+public interface IEventStore { void Append(OrderEvent orderEvent); }
+public interface IWebhookOutbox { void Enqueue(WebhookDelivery delivery); }
+
+public class OrderWebhooks
+{
+    private const string Prefix = "webhook-";
+
+    private readonly IStream<OrderEvent> _stream;
+    private readonly IWebhookOutbox _outbox;
+
+    public OrderWebhooks(IEventStore eventStore, IWebhookOutbox outbox)
+    {
+        _outbox = outbox;
+        _stream = StreamBuilder<OrderEvent>.CreateNewStream("OrderWebhooks")
+            .Stream()
+            // Also declares the branch point that subscriptions attach to
+            .AddBranch("event-store", b => b.Sink(e => eventStore.Append(e)))
+            .Build();
+        _stream.Start();
+    }
+
+    public void Publish(OrderEvent orderEvent) => _stream.Emit(orderEvent);
+
+    public void Subscribe(string subscriptionId, string tenantId, Uri endpoint, params string[] statuses)
+    {
+        _stream.AddBranch<OrderEvent>(
+            Prefix + subscriptionId,
+            e => e.TenantId == tenantId && (statuses.Length == 0 || statuses.Contains(e.Status)),
+            b => b
+                .Map(e => new WebhookDelivery(subscriptionId, endpoint, e))
+                .Sink(delivery => _outbox.Enqueue(delivery)));
+    }
+
+    public bool Unsubscribe(string subscriptionId) => _stream.RemoveBranch(Prefix + subscriptionId);
+
+    public IEnumerable<string> ActiveSubscriptions() =>
+        _stream.GetBranches().Keys
+            .Where(name => name.StartsWith(Prefix))
+            .Select(name => name.Substring(Prefix.Length));
+}
+```
+
+- The sink only enqueues the delivery into an outbox. A sink runs on the thread that emitted the event, so a slow HTTP call there would slow every publisher; a separate worker sends the outbox.
+- Deterministic branch names (`webhook-<id>`) let `Unsubscribe` and `ActiveSubscriptions` find the branches without a separate registry of subscriptions.
+
+## Choosing Between AddBranch, FanOut and Merge
+
+| You need | Use |
+|----------|-----|
+| Side effects next to the main pipeline (audit, notifications, metrics) | `AddBranch`, with a condition if only some items qualify |
+| The same item delivered to several sinks, with little processing per sink | `FanOut` (see [FanOut - Multiple Sinks](FanOut-Multiple-Sinks.md)) |
+| Several routes or rules whose results continue as one stream | `Merge` |
+| Consumers that come and go while the stream runs | `stream.AddBranch<T>` and `stream.RemoveBranch`, attached to a branch point declared with `AddBranch` or `FanOut` |
+
+## Pitfalls
+
+- **Items can vanish at a merge.** An item that matches no merge branch produces no output. Make the conditions cover every case, or add a catch-all branch as in [Security Log Normalisation](#security-log-normalisation).
+- **No sink inside a merge branch.** A merge branch must return its builder so its output can reach the merge. Put sinks after the merge, or side effects in an `AddBranch` before it.
+- **Runtime branches need a branch point.** `stream.AddBranch<T>` only attaches where the stream was built with `AddBranch` or `FanOut` for `T`. Declare one there, even a small audit or metrics branch.
+- **Sinks after a merge may run concurrently.** When several threads emit at once, the operators after a merge are called from all of them. Keep those sinks thread-safe.
 
 ## Thread Safety and Ordering
 
