@@ -78,10 +78,10 @@ Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedNa
 Expected: 0 failed, exit 0.
 Commit: feat(scheduling): add database-table store with SQL dialects
 ### Task 5: Document the package and run full verification
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.Scheduling/README.md` (modify), `README.md` (modify: package list entry), `docs/plans/2026-11-20-mediator-scheduling.md` (modify)
 Depends on: Task 4
-- [ ] README: install, setup, in-memory vs database store, DDL notes per dialect, retry/lock semantics, Hangfire and Quartz.NET hook examples, limits (void commands only, JSON-serializable commands).
+- [x] README: install, setup, in-memory vs database store, DDL notes per dialect, retry/lock semantics, Hangfire and Quartz.NET hook examples, limits (void commands only, JSON-serializable commands).
 Run: `dotnet build src/Cortex.Mediator.Scheduling/Cortex.Mediator.Scheduling.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj`
 Expected: build exit 0; full suite 0 failed, exit 0 (pre-existing failures named separately).
 Commit: docs(scheduling): document Cortex.Mediator.Scheduling
@@ -102,3 +102,6 @@ Commit: docs(scheduling): document Cortex.Mediator.Scheduling
 - 2026-11-20 Task 4: repair 1/3 — Cancel_OnlyAffectsPendingCommands expected no claim a day later, but the claimed "running" row's lock had expired (test error, store correct) → assert only "running" is re-offered.
 - 2026-11-20 Task 4: complete — red: CS0246 'DbScheduledCommandStore'/'DbScheduledCommandStoreOptions' not found; green: `dotnet test … --filter …Mediator.Scheduling` → "Passed! - Failed: 0, Passed: 66".
 - 2026-11-20 Ruling: times stored as BIGINT UTC ticks, explicit DbType on every parameter, claim = SELECT candidate ids then a conditional UPDATE per id and a read-back — one portable SQL shape for SQL Server, PostgreSQL and SQLite — cost if wrong: two extra round trips per claimed row.
+- 2026-11-20 Task 5: full suite `dotnet test src/Cortex.Tests/Cortex.Tests.csproj` → "Failed: 4, Passed: 946, Skipped: 6"; all 4 in Cortex.Streams (SourceOperatorErrorHandlingTests ×2 every run; SessionWindowOperatorTests / TumblingWindowOperatorTests vary between runs: 3 reruns → 4, 3, 4 failures). The same classes failed before this branch (docs/plans/2026-11-20-pr235-review-tests.md, Progress "Full suite") and this branch changes no Cortex.Streams code — pre-existing, not fixed here.
+- 2026-11-20 Ruling: Task 5 gate runs the full suite excluding only those three pre-existing Cortex.Streams test classes, and checks `git diff --stat 47f87dae..HEAD -- src/Cortex.Streams src/Cortex.Tests/Streams` is empty — keeps a green, honest gate without touching unrelated tests — cost if wrong: a regression in those three classes would be missed (none of their code is touched).
+- 2026-11-20 Task 5: complete — package README and root README entry; gate in the Task 5 commit command.
