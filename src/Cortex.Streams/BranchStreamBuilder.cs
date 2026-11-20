@@ -26,6 +26,36 @@ namespace Cortex.Streams
         }
 
         /// <summary>
+        /// Builds a named branch from <paramref name="config"/>. When <paramref name="condition"/> is set,
+        /// a filter heads the branch so only matching items enter it.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The configuration added no operators.</exception>
+        internal static BranchOperator<TCurrent> BuildBranch(
+            string streamName,
+            string branchName,
+            Func<TCurrent, bool> condition,
+            Action<IBranchStreamBuilder<TIn, TCurrent>> config)
+        {
+            var branchBuilder = new BranchStreamBuilder<TIn, TCurrent>(streamName);
+            config(branchBuilder);
+
+            if (branchBuilder._firstOperator == null)
+            {
+                throw new InvalidOperationException($"Branch '{branchName}' must have at least one operator.");
+            }
+
+            var firstOperator = branchBuilder._firstOperator;
+            if (condition != null)
+            {
+                var conditionOperator = new FilterOperator<TCurrent>(condition);
+                conditionOperator.SetNext(firstOperator);
+                firstOperator = conditionOperator;
+            }
+
+            return new BranchOperator<TCurrent>(branchName, firstOperator);
+        }
+
+        /// <summary>
         /// Adds a filter operator to the branch.
         /// </summary>
         /// <param name="predicate">A function to filter data.</param>

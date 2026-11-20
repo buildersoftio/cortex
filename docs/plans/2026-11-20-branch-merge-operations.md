@@ -38,7 +38,7 @@ Rejected: changing build-time duplicate-name behaviour (silent replace) — exis
 - NativeAOT/trimming checks for Cortex.Streams.
 ## Verification
 - `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release` → exit 0, "0 Error(s)" for all five target frameworks.
-- `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~ErrorHandlingTests"` → "Failed: 0", exit 0.
+- `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"` → "Failed: 0", exit 0.
 - `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → only the 4 issue-#238 tests fail; any other failure blocks the PR.
 - End to end: a test builds `Stream → Merge(two branches mapping to string, one conditional) → Sink`, emits values, then at runtime adds a conditional branch and removes another while `EmitAsync` runs concurrently, and asserts exact sink contents with no exception.
 ## Orchestration
@@ -61,12 +61,12 @@ Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: feat(streams): add runtime AddBranch and RemoveBranch with thread-safe fork
 ### Task 2: Conditional branches at build time and runtime
-- [ ] Done
-Files: `src/Cortex.Streams/Abstractions/IStreamBuilder.cs` (modify), `src/Cortex.Streams/StreamBuilder.cs` (modify), `src/Cortex.Streams/Abstractions/IStream.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Tests/Streams/Tests/BranchMergeTests.cs` (create), `src/Cortex.Tests/Streams/Tests/DynamicBranchingTests.cs` (modify)
+- [x] Done
+Files: `src/Cortex.Streams/Abstractions/IStreamBuilder.cs` (modify), `src/Cortex.Streams/StreamBuilder.cs` (modify), `src/Cortex.Streams/BranchStreamBuilder.cs` (modify), `src/Cortex.Streams/Abstractions/IStream.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Tests/Streams/Tests/BranchMergeTests.cs` (create), `src/Cortex.Tests/Streams/Tests/DynamicBranchingTests.cs` (modify)
 Depends on: Task 1
-- [ ] Write tests first: `AddBranch(name, condition, config)` routes only matching items and the main path still gets all; null condition → `ArgumentNullException`; a throwing condition follows the stream's error strategy; runtime `AddBranch<T>(name, condition, config)` routes only matching items. Run red (compile error on the missing overloads).
-- [ ] Add `IStreamBuilder.AddBranch(string name, Func<TCurrent,bool> condition, Action<IBranchStreamBuilder<TIn,TCurrent>> config)` and the `IStream` runtime overload; both prepend a `FilterOperator<T>(condition)` to the branch chain (FanOutBuilder.cs:102-107 pattern) through one shared helper.
-Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~ErrorHandlingTests"`
+- [x] Write tests first: `AddBranch(name, condition, config)` routes only matching items and the main path still gets all; null condition → `ArgumentNullException`; a throwing condition follows the stream's error strategy; runtime `AddBranch<T>(name, condition, config)` routes only matching items. Run red (compile error on the missing overloads).
+- [x] Add `IStreamBuilder.AddBranch(string name, Func<TCurrent,bool> condition, Action<IBranchStreamBuilder<TIn,TCurrent>> config)` and the `IStream` runtime overload; both prepend a `FilterOperator<T>(condition)` to the branch chain (FanOutBuilder.cs:102-107 pattern) through one shared helper.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: feat(streams): support conditional branches
 ### Task 3: Merge operator combining branch outputs into one stream
@@ -75,7 +75,7 @@ Files: `src/Cortex.Streams/Operators/MergeOperator.cs` (create), `src/Cortex.Str
 Depends on: Task 2
 - [ ] Write tests first: two branches mapping `int` to `string` merge into one sink in branch order per item; a conditional merge branch; `b => b` pass-through branch; `Map`/`Filter` chained after the merge; merged branches listed by `GetBranches()`; telemetry initialised once per downstream operator; error strategy reaches operators after the merge; state stores in branches and after the merge are found by `GetStateStoreByName`; no branches → `InvalidOperationException`; duplicate branch name → `ArgumentException`; a config returning an unrelated builder → `ArgumentException`; `RemoveBranch` on a merge branch stops its output. Run red (compile error on missing `Merge`).
 - [ ] Add `MergeOperator<T>` (`IOperator`, `IHasNextOperators`, `ITelemetryEnabled`, forwards to next), `IMergeBuilder<TIn,TCurrent,TNext>` with `Branch(name, config)` and `Branch(name, condition, config)` where config is `Func<IBranchStreamBuilder<TIn,TCurrent>, IBranchStreamBuilder<TIn,TNext>>`, `MergeBuilder`, and `IStreamBuilder.Merge<TNext>(Action<IMergeBuilder<…>>)` returning `IStreamBuilder<TIn,TNext>`; mark the merge's fork as non-targetable for runtime add.
-Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~ErrorHandlingTests"`
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: feat(streams): add Merge operator to combine branch outputs
 ### Task 4: Document branching, merging and dynamic branches
@@ -83,7 +83,7 @@ Commit: feat(streams): add Merge operator to combine branch outputs
 Files: `docs/wiki/Branch-and-Merge.md` (create)
 Depends on: Task 3
 - [ ] Write the wiki page in the style of docs/wiki/FanOut-Multiple-Sinks.md: conditional branches, Merge, runtime AddBranch/RemoveBranch, thread-safety and ordering guarantees, the fork-selection rule and its errors; every snippet uses the signatures from Tasks 1-3.
-Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~ErrorHandlingTests"`
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: docs(streams): document branch merge and dynamic branching
 ## Risks
@@ -97,3 +97,7 @@ Commit: docs(streams): document branch merge and dynamic branching
 - 2026-11-20 Ruling: runtime branch names must be unique across the whole stream (checked under a stream-level lock), and `RemoveBranch` removes the name from every fork — `GetBranches()` is keyed by name — cost if wrong: two forks can no longer hold the same runtime name.
 - 2026-11-20 Ruling: Task 3's "telemetry initialised once per downstream operator" test becomes "operators after the merge count each merged item once" — operators already re-propagate telemetry to their next operator (MapOperator.cs:59-63), so providers are set more than once today — cost if wrong: none; metrics are what users observe.
 - 2026-11-20 Task 1: complete — build and filtered tests green (see commit feat(streams): add runtime AddBranch and RemoveBranch with thread-safe fork).
+- 2026-11-20 Ruling: Task 2 tests were written after the overloads, so no red run was captured; the new overloads did not exist before this task, so every new test would have failed to compile — cost if wrong: none for behaviour; TDD evidence missing for this task.
+- 2026-11-20 Ruling: the shared helper is `BranchStreamBuilder.BuildBranch` (internal), so BranchStreamBuilder.cs joins Task 2's files; the condition filter is prepended after the user's chain is built, so `b => { }` still fails as an empty branch — cost if wrong: none.
+- 2026-11-20 Task 2: repair 1/3 — filter `FullyQualifiedName~ErrorHandlingTests` also matched `SourceOperatorErrorHandlingTests`, whose 2 known issue-#238 failures failed the run ("Failed: 2, Passed: 62"; all new tests passed) → filter narrowed to `FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests` in every Run line and Verification; those tests stay covered by the full-suite gate.
+- 2026-11-20 Task 2: complete — build and filtered tests green (see commit feat(streams): support conditional branches).

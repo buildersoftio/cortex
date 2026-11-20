@@ -66,6 +66,26 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void AddConditionalBranch_AtRuntime_ReceivesOnlyMatchingItems()
+        {
+            var evens = new List<int>();
+            var main = new List<int>();
+            var stream = BuildStreamWithBranch("RuntimeConditional", new List<int>(), main);
+            stream.Start();
+
+            stream.AddBranch<int>("evens", x => x % 2 == 0, b => b.Sink(x => evens.Add(x)));
+            stream.Emit(1);
+            stream.Emit(2);
+            stream.Emit(4);
+
+            Assert.Equal(new[] { 2, 4 }, evens);
+            Assert.Equal(new[] { 1, 2, 4 }, main);
+            Assert.Throws<ArgumentNullException>(() =>
+                stream.AddBranch<int>("nullCondition", (Func<int, bool>)null, b => b.Sink(_ => { })));
+            Assert.Equal(new[] { "evens", "static" }, stream.GetBranches().Keys.OrderBy(k => k));
+        }
+
+        [Fact]
         public void RemoveBranch_UnknownOrEmptyName_ReturnsFalse()
         {
             var stream = BuildStreamWithBranch("RemoveUnknown", new List<int>(), new List<int>());

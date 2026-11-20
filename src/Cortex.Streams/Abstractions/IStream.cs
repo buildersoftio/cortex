@@ -85,6 +85,21 @@ namespace Cortex.Streams
         void AddBranch<TBranch>(string name, Action<IBranchStreamBuilder<TIn, TBranch>> config);
 
         /// <summary>
+        /// Adds a conditional branch to the running stream: only items matching <paramref name="condition"/> enter it.
+        /// The branch point is chosen as for <see cref="AddBranch{TBranch}(string, Action{IBranchStreamBuilder{TIn, TBranch}})"/>.
+        /// </summary>
+        /// <typeparam name="TBranch">The type of the items at the branch point.</typeparam>
+        /// <param name="name">The unique name of the branch.</param>
+        /// <param name="condition">A predicate deciding which items enter the branch. It follows the stream's error handling.</param>
+        /// <param name="config">An action that configures the branch's operators.</param>
+        /// <exception cref="System.ArgumentException">The name is null or empty, or a branch with this name already exists.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="condition"/> or <paramref name="config"/> is null.</exception>
+        /// <exception cref="System.InvalidOperationException">
+        /// The stream has no branch point, or more than one, for <typeparamref name="TBranch"/>; or the branch has no operators.
+        /// </exception>
+        void AddBranch<TBranch>(string name, Func<TBranch, bool> condition, Action<IBranchStreamBuilder<TIn, TBranch>> config);
+
+        /// <summary>
         /// Removes a branch from the running stream. Items that enter the branch point after this call
         /// returns no longer reach the branch; an item already being processed may still complete in it.
         /// </summary>

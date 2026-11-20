@@ -233,6 +233,32 @@ namespace Cortex.Streams
         /// <exception cref="InvalidOperationException"></exception>
         public IStreamBuilder<TIn, TCurrent> AddBranch(string name, Action<IBranchStreamBuilder<TIn, TCurrent>> config)
         {
+            return AddBranchCore(name, null, config);
+        }
+
+        /// <summary>
+        /// Adds a branch that receives only the items matching <paramref name="condition"/>.
+        /// The main pipeline still receives every item.
+        /// </summary>
+        /// <param name="name">Name of the branch</param>
+        /// <param name="condition">Predicate deciding which items enter the branch</param>
+        /// <param name="config">Action of configuring the branch</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="InvalidOperationException"></exception>
+        public IStreamBuilder<TIn, TCurrent> AddBranch(string name, Func<TCurrent, bool> condition, Action<IBranchStreamBuilder<TIn, TCurrent>> config)
+        {
+            if (condition == null)
+            {
+                throw new ArgumentNullException(nameof(condition));
+            }
+
+            return AddBranchCore(name, condition, config);
+        }
+
+        private IStreamBuilder<TIn, TCurrent> AddBranchCore(string name, Func<TCurrent, bool> condition, Action<IBranchStreamBuilder<TIn, TCurrent>> config)
+        {
             if (string.IsNullOrEmpty(name))
             {
                 throw new ArgumentException("Branch name cannot be null or empty.", nameof(name));
@@ -259,16 +285,7 @@ namespace Cortex.Streams
                 }
             }
 
-            // Create a new branch builder
-            var branchBuilder = new BranchStreamBuilder<TIn, TCurrent>(_name);
-            config(branchBuilder);
-
-            if (branchBuilder._firstOperator == null)
-            {
-                throw new InvalidOperationException($"Branch '{name}' must have at least one operator.");
-            }
-
-            var branchOperator = new BranchOperator<TCurrent>(name, branchBuilder._firstOperator);
+            var branchOperator = BranchStreamBuilder<TIn, TCurrent>.BuildBranch(_name, name, condition, config);
             _forkOperator.AddBranch(name, branchOperator);
             _branchOperators.Add(branchOperator);
 

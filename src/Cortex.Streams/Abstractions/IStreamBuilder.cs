@@ -73,6 +73,16 @@ namespace Cortex.Streams.Abstractions
         IStreamBuilder<TIn, TCurrent> AddBranch(string name, Action<IBranchStreamBuilder<TIn, TCurrent>> config);
 
         /// <summary>
+        /// Adds a conditional branch: only items matching <paramref name="condition"/> enter it,
+        /// while the main pipeline still receives every item.
+        /// </summary>
+        /// <param name="name">The name of the branch.</param>
+        /// <param name="condition">A predicate deciding which items enter the branch. It follows the stream's error handling.</param>
+        /// <param name="config">An action to configure the branch.</param>
+        /// <returns>The stream builder for method chaining.</returns>
+        IStreamBuilder<TIn, TCurrent> AddBranch(string name, Func<TCurrent, bool> condition, Action<IBranchStreamBuilder<TIn, TCurrent>> config);
+
+        /// <summary>
         /// Creates a fan-out pattern to send data to multiple sinks simultaneously.
         /// Use this when you need to send the same data to multiple destinations
         /// without intermediate transformations between sinks.

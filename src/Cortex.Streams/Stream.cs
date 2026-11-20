@@ -384,20 +384,27 @@ namespace Cortex.Streams
         /// <inheritdoc />
         public void AddBranch<TBranch>(string name, Action<IBranchStreamBuilder<TIn, TBranch>> config)
         {
+            AddBranchCore(name, null, config);
+        }
+
+        /// <inheritdoc />
+        public void AddBranch<TBranch>(string name, Func<TBranch, bool> condition, Action<IBranchStreamBuilder<TIn, TBranch>> config)
+        {
+            if (condition == null)
+                throw new ArgumentNullException(nameof(condition));
+
+            AddBranchCore(name, condition, config);
+        }
+
+        private void AddBranchCore<TBranch>(string name, Func<TBranch, bool> condition, Action<IBranchStreamBuilder<TIn, TBranch>> config)
+        {
             if (string.IsNullOrEmpty(name))
                 throw new ArgumentException("Branch name cannot be null or empty.", nameof(name));
             if (config == null)
                 throw new ArgumentNullException(nameof(config));
 
             var fork = FindRuntimeBranchPoint<TBranch>();
-
-            var branchBuilder = new BranchStreamBuilder<TIn, TBranch>(_name);
-            config(branchBuilder);
-
-            if (branchBuilder._firstOperator == null)
-                throw new InvalidOperationException($"Branch '{name}' must have at least one operator.");
-
-            var branchOperator = new BranchOperator<TBranch>(name, branchBuilder._firstOperator);
+            var branchOperator = BranchStreamBuilder<TIn, TBranch>.BuildBranch(_name, name, condition, config);
 
             // Configure the whole branch before any item can reach it
             InitializeOperators(branchOperator);
