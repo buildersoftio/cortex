@@ -3,6 +3,7 @@ using Cortex.Mediator.Scheduling.Stores;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System;
+using System.Data.Common;
 
 namespace Cortex.Mediator.Scheduling.DependencyInjection
 {
@@ -40,6 +41,39 @@ namespace Cortex.Mediator.Scheduling.DependencyInjection
 
             if (options.EnableProcessor)
                 services.AddHostedService(sp => sp.GetRequiredService<ScheduledCommandProcessor>());
+
+            return services;
+        }
+
+        /// <summary>
+        /// Stores scheduled commands in a database table through <see cref="DbScheduledCommandStore"/>,
+        /// replacing any store registered before. Can be called before or after
+        /// <see cref="AddCortexMediatorScheduling"/>.
+        /// </summary>
+        /// <param name="services">The service collection.</param>
+        /// <param name="connectionFactory">Creates a new, unopened connection, for example <c>_ =&gt; new SqlConnection(connectionString)</c>.</param>
+        /// <param name="dialect">The SQL dialect: <see cref="SqlServerDialect"/>, <see cref="PostgreSqlDialect"/>, <see cref="SqliteDialect"/> or your own.</param>
+        /// <param name="configure">Optional table options.</param>
+        /// <returns>The service collection for chaining.</returns>
+        public static IServiceCollection AddDbScheduledCommandStore(
+            this IServiceCollection services,
+            Func<IServiceProvider, DbConnection> connectionFactory,
+            ISqlDialect dialect,
+            Action<DbScheduledCommandStoreOptions> configure = null)
+        {
+            if (services == null)
+                throw new ArgumentNullException(nameof(services));
+            if (connectionFactory == null)
+                throw new ArgumentNullException(nameof(connectionFactory));
+            if (dialect == null)
+                throw new ArgumentNullException(nameof(dialect));
+
+            var options = new DbScheduledCommandStoreOptions();
+            configure?.Invoke(options);
+            options.Validate();
+
+            services.Replace(ServiceDescriptor.Singleton<IScheduledCommandStore>(
+                sp => new DbScheduledCommandStore(() => connectionFactory(sp), dialect, options)));
 
             return services;
         }

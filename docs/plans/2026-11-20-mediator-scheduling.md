@@ -70,10 +70,10 @@ Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedNa
 Expected: 0 failed, exit 0.
 Commit: feat(scheduling): add hosted processor and DI registration
 ### Task 4: Add the database-table store with SQL dialects
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.Scheduling/Stores/DbScheduledCommandStore.cs` (create), `src/Cortex.Mediator.Scheduling/Stores/DbScheduledCommandStoreOptions.cs` (create), `src/Cortex.Mediator.Scheduling/Stores/ISqlDialect.cs` (create), `src/Cortex.Mediator.Scheduling/Stores/SqlDialects.cs` (create), `src/Cortex.Mediator.Scheduling/DependencyInjection/ServiceCollectionExtensions.cs` (modify), `src/Cortex.Tests/Cortex.Tests.csproj` (modify: Microsoft.Data.Sqlite 9.0.3), `src/Cortex.Tests/Mediator/Scheduling/Tests/DbScheduledCommandStoreTests.cs` (create), `docs/plans/2026-11-20-mediator-scheduling.md` (modify)
 Depends on: Task 3
-- [ ] Tests first on SQLite (temp file): table auto-created; schedule/claim/complete/fail/cancel persist across store instances; two stores claiming concurrently never return the same row; invalid table name → ArgumentException; end-to-end Goal check through the processor.
+- [x] Tests first on SQLite (temp file): table auto-created; schedule/claim/complete/fail/cancel persist across store instances; two stores claiming concurrently never return the same row; invalid table name → ArgumentException; end-to-end Goal check through the processor.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedName~Cortex.Tests.Mediator.Scheduling`
 Expected: 0 failed, exit 0.
 Commit: feat(scheduling): add database-table store with SQL dialects
@@ -99,3 +99,6 @@ Commit: docs(scheduling): document Cortex.Mediator.Scheduling
 - 2026-11-20 Task 3: complete — red: CS0234 'Cortex.Mediator.Scheduling.DependencyInjection' missing, CS0246 'SchedulingOptions'; green: `dotnet test … --filter …Mediator.Scheduling` → "Passed! - Failed: 0, Passed: 49".
 - 2026-11-20 Ruling: the store increments Attempts on claim; a command reclaimed after lock expiry with Attempts > MaxAttempts is marked Failed without dispatch, and an unreadable command fails at once without retry — stops crash loops and pointless retries — cost if wrong: a slow handler that outlives LockDuration burns an attempt.
 - 2026-11-20 Ruling: on shutdown the in-flight command is left Processing (no LastError) and is re-offered after LockDuration; state writes use CancellationToken.None — avoids losing a completed mark during shutdown — cost if wrong: up to LockDuration delay before redelivery after a restart.
+- 2026-11-20 Task 4: repair 1/3 — Cancel_OnlyAffectsPendingCommands expected no claim a day later, but the claimed "running" row's lock had expired (test error, store correct) → assert only "running" is re-offered.
+- 2026-11-20 Task 4: complete — red: CS0246 'DbScheduledCommandStore'/'DbScheduledCommandStoreOptions' not found; green: `dotnet test … --filter …Mediator.Scheduling` → "Passed! - Failed: 0, Passed: 66".
+- 2026-11-20 Ruling: times stored as BIGINT UTC ticks, explicit DbType on every parameter, claim = SELECT candidate ids then a conditional UPDATE per id and a read-back — one portable SQL shape for SQL Server, PostgreSQL and SQLite — cost if wrong: two extra round trips per claimed row.
