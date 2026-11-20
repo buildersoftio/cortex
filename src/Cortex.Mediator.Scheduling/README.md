@@ -140,7 +140,23 @@ With `AutoCreateTable = true` the store creates the table and an index on `(Stat
 | `LastError` | text, nullable | message of the last failure |
 | `LockedUntil` | 64-bit integer, nullable | UTC ticks |
 
-`ISqlDialect.GetCreateTableSql` returns the exact DDL for each dialect. Table and schema names must be plain identifiers (letters, digits and underscores, starting with a letter or underscore); anything else throws `ArgumentException`. All values are sent as parameters.
+The column types each dialect creates:
+
+| Column | SQL Server | PostgreSQL | SQLite |
+|---|---|---|---|
+| `Id` | `NVARCHAR(64) NOT NULL PRIMARY KEY` | `VARCHAR(64) NOT NULL PRIMARY KEY` | `TEXT NOT NULL PRIMARY KEY` |
+| `CommandType` | `NVARCHAR(1024) NOT NULL` | `VARCHAR(1024) NOT NULL` | `TEXT NOT NULL` |
+| `Payload` | `NVARCHAR(MAX) NOT NULL` | `TEXT NOT NULL` | `TEXT NOT NULL` |
+| `ExecuteAt`, `CreatedAt` | `BIGINT NOT NULL` | `BIGINT NOT NULL` | `INTEGER NOT NULL` |
+| `Status`, `Attempts` | `INT NOT NULL` | `INTEGER NOT NULL` | `INTEGER NOT NULL` |
+| `LastError` | `NVARCHAR(MAX) NULL` | `TEXT NULL` | `TEXT NULL` |
+| `LockedUntil` | `BIGINT NULL` | `BIGINT NULL` | `INTEGER NULL` |
+
+plus an index `IX_<TableName>_Status_ExecuteAt` on `(Status, ExecuteAt)`. `ISqlDialect.GetCreateTableSql(schema, table)` returns the exact DDL. SQL Server identifiers are quoted with `[...]`, PostgreSQL and SQLite identifiers with `"..."` (so PostgreSQL names are case-sensitive).
+
+Table and schema names must be plain identifiers (letters, digits and underscores, starting with a letter or underscore); anything else throws `ArgumentException`. All values are sent as parameters.
+
+**Protect the table like the rest of your application data.** The processor runs whatever the table says: anyone who can insert or change rows can make it send any `ICommand` type in your application, with any payload, outside the checks your callers normally apply.
 
 Finished rows are kept, with their status, for auditing; delete old `Completed`, `Failed` and `Cancelled` rows yourself when you no longer need them.
 
