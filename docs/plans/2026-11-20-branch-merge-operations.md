@@ -1,5 +1,5 @@
 # Plan: Branch merge and dynamic branching for Cortex.Streams (issue #155)
-Status: in-progress
+Status: done
 Date: 2026-11-20 · Agent: lead-developer · Size: large · Base: v3.2/release@47f87da · Branch: v3/feature/155
 Approved: 2026-11-20 via chat (plan card GO)
 Consent: Review panel (2026-11-20)
@@ -47,7 +47,7 @@ Rejected: changing build-time duplicate-name behaviour (silent replace) — exis
 | Wave | Phase | Agents | Access | Briefs | Gate | Status |
 |---|---|---|---|---|---|---|
 | 1 | Review | reviewer stand-in (correctness), reviewer stand-in (spec), qa-engineer (gaps) | read-only, code tools, 25 | READ_FIRST sophon-scratch-review.diff | FINDINGS ≥80, diff only; I refute each Critical/Important from the code | done |
-| 2 | Critic | reviewer stand-in (completeness) | read-only, code tools, 15 | request, Goal, Verification, commits | each item checked by me | pending |
+| 2 | Critic | reviewer stand-in (completeness) | read-only, code tools, 15 | request, Goal, Verification, commits | each item checked by me | done |
 ## Tasks
 ### Task 1: Thread-safe fork with runtime AddBranch and RemoveBranch
 - [x] Done
@@ -108,3 +108,9 @@ Commit: docs(streams): document branch merge and dynamic branching
 - 2026-11-20 Review wave 1: correctness stand-in 0 findings ≥80 (APPROVE); spec stand-in 1 Important (F1: `RemoveBranch` leaves window/join timers of the removed branch running); qa-engineer 6 Important test gaps (no forced overlap in concurrency tests, in-flight snapshot, FanOut runtime add, runtime name vs merge branch, failed Merge leaves pipeline unchanged, branch point after an operator without `IHasNextOperators`).
 - 2026-11-20 Refute (inline, from the code): F1 CONFIRMED — TumblingWindowOperator.cs:57 starts a 100 ms timer that only Dispose stops (:231), and `Stream.RemoveBranch` never disposed; red test `RemoveBranch_DisposesWindowOperatorsOfTheRemovedBranch` → "Failed: 1, Passed: 34". Test gaps accepted as written.
 - 2026-11-20 Ruling: removal disposes only operators exclusive to the removed branch (walk stops at the merge); open windows are dropped, not flushed — flushing would emit from a branch the caller just removed — cost if wrong: users expecting a final flush lose the last partial window.
+- 2026-11-20 Fix: complete — red test green; filtered tests "Passed! - Failed: 0, Passed: 112" (see commit fix(streams): dispose operators of removed branches).
+- 2026-11-20 Re-review: done inline on the fix commit (one round, F1 ADDRESSED: Stream.cs RemoveBranch disposes exclusive operators, stops at IMergeOperator; covered by RemoveBranch_DisposesWindowOperatorsOfTheRemovedBranch and RemoveMergeBranch_KeepsOperatorsAfterTheMergeRunning).
+- 2026-11-20 Cap: re-review ran inline, not through a code-reviewer agent — the agent is not on the allowed delegation list and the estimate had no slot for it.
+- 2026-11-20 Critic: completeness stand-in → COMPLETE, 0 findings ≥80; POSSIBLE: the concurrent phase of the end-to-end test asserts a count, not exact contents.
+- 2026-11-20 Verification: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → "Failed: 4, Passed: 915, Skipped: 6"; the 4 failures are exactly the issue-#238 tests.
+- 2026-11-20 Review: 7 findings (1 spec, 6 test gaps), 7 confirmed, 7 fixed, 0 deferred; minor test ideas from qa-engineer (items 7-12) not pursued.
