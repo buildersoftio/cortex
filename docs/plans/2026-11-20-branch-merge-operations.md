@@ -1,5 +1,5 @@
 # Plan: Branch merge and dynamic branching for Cortex.Streams (issue #155)
-Status: done
+Status: in-progress
 Date: 2026-11-20 · Agent: lead-developer · Size: large · Base: v3.2/release@47f87da · Branch: v3/feature/155
 Approved: 2026-11-20 via chat (plan card GO)
 Consent: Review panel (2026-11-20)
@@ -95,6 +95,53 @@ Depends on: Task 4
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: docs(streams): add real-life branch and merge examples
+### Task 6: Make the FanOut wiki examples correct and runnable
+- [x] Done
+Files: `docs/wiki/FanOut-Multiple-Sinks.md` (modify)
+Depends on: Task 5
+- [x] Fix every code block against the current API: `IStream<X, X>` → `IStream<X>` (lines 211, 268, 327, 384); `SetupPipeline` declared `void` but returns the stream (:159-199); `WithErrorHandling(options => …)` and `ErrorAction` do not exist; it takes a `StreamExecutionOptions` with `ErrorHandlingStrategy`/`OnError` (`StreamErrorHandler` → `ErrorHandlingDecision`) (:515-531); `log with { … }` needs a record.
+- [x] Make each real-world example self-contained: declare its records and service interfaces, use constructor-injected fields, as on the Branch-and-Merge page.
+- [x] Fix the text: the "Sinks are executed in parallel" note (:140) contradicts the code and "Performance Considerations" (:538); sinks run one after another in the order added. Replace the garbled characters (`?`, `�C`) with plain text, and fix the "Related Documentation" links (:561-564) that point to pages that do not exist.
+- [x] Compile and run every full example verbatim in a throwaway test file, with fakes and assertions for each claim the page makes; compare the page's code lines with it; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make FanOut examples compile against the current API
+### Task 7: Make the Stream-Stream Joins wiki examples correct and runnable
+- [ ] Done
+Files: `docs/wiki/Stream-Stream-Joins.md` (modify)
+Depends on: Task 6
+- [ ] Check each example against `StreamStreamJoinOperator` (StreamStreamJoinOperator.cs:92-100, `ProcessRight` :179, `GetLeftBufferCount` :425) and `StreamJoinConfiguration` (StreamJoinTypes.cs:119-179; there is no `RightJoin` factory). Declare the undeclared types and helpers (`Location`, `NotifyCustomer`, queues, `Result`, …) or replace them with injected interfaces; replace the non-existent `KafkaSourceOperator<T>("orders-topic")` / `KafkaConsumer<T>` usage with the real Cortex.Streams.Kafka API or a clearly marked placeholder interface.
+- [ ] Check the documented semantics against the operator (inner/left/outer emission, grace period, when unmatched rows are emitted, the "Output" block); fix the garbled characters and the "See Also" links.
+- [ ] Compile and run every full example verbatim in a throwaway test file; compare the page's code lines; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make stream-stream join examples compile and match behaviour
+### Task 8: Make the Stream-Table Joins wiki examples correct and runnable
+- [ ] Done
+Files: `docs/wiki/Stream-Table-Joins.md` (modify)
+Depends on: Task 7
+- [ ] Check `Join`/`LeftJoin` usage (StreamBuilder.cs Join/LeftJoin) and the "Output" blocks; fix `o.ProductId` on an `Order` that has none (:271), the anonymous `new { o, c }` with an undeclared `Process`, the `RocksDbStateStore` example (needs Cortex.States.RocksDb; ctor `RocksDbStateStore(name, dbPath, options)`), the undeclared helpers, and the "See Also" links.
+- [ ] Compile and run every full example verbatim in a throwaway test file; compare the page's code lines; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make stream-table join examples compile and match behaviour
+### Task 9: Make the stream performance wiki examples correct and runnable
+- [ ] Done
+Files: `docs/wiki/stream-performance.md` (modify)
+Depends on: Task 8
+- [ ] Fix `IStream<Order, ProcessedOrder>` (:546) and the "IStream&lt;TIn, TCurrent&gt; Methods" heading (:507); check every option, default, preset and exception against StreamPerformanceOptions.cs:9-157 and BufferFullException.cs; check the backpressure "Behavior" claims (return values, timeouts) against the buffered processor; declare the undeclared types and the logger.
+- [ ] Compile and run the complete example and the presets verbatim in a throwaway test file; compare the page's code lines; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make stream performance examples compile against the current API
+### Task 10: Recheck the Branch-and-Merge wiki examples
+- [ ] Done
+Files: `docs/wiki/Branch-and-Merge.md` (modify)
+Depends on: Task 9
+- [ ] Make the sensor example's pager text culture-independent (`{r.Temperature:F1}` prints `95,0` under a German culture); link the other wiki pages from "Choosing Between AddBranch, FanOut and Merge"; rerun all five examples verbatim and compare the code lines again.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make branch and merge examples culture-independent
 ## Risks
 - Adding members to public `IStream<TIn>` and `IStreamBuilder<TIn,TCurrent>` breaks third-party implementations of those interfaces; called out in the PR.
 - Concurrency tests can be timing-dependent; they assert absence of exceptions and final counts with joins, never sleeps.
@@ -126,3 +173,8 @@ Commit: docs(streams): add real-life branch and merge examples
 - 2026-11-20 Ruling: Task 5 was added after the PR at the user's request ("in the Wiki, please add real-life examples on using Branches and merges") and run without a separate plan approval — docs only, one file, the user named the change — cost if wrong: one docs commit to revise.
 - 2026-11-20 Task 5: examples checked — a throwaway test file with the 5 examples copied verbatim → "Total tests: 5, Passed: 5"; a line-by-line comparison of the wiki code blocks against it → "Checked 171 code lines, missing 1" (only a trailing comment differs); the file was deleted, not committed.
 - 2026-11-20 Task 5: complete (see commit docs(streams): add real-life branch and merge examples).
+- 2026-11-20 Ruling: Tasks 6-10 added at the user's request ("lets update the examples again, it is important"; answers: "All wiki pages", "Add to PR #239") — the Review panel consent covers one final docs review (a reviewer stand-in, accuracy lens) — cost if wrong: one extra delegate call.
+- 2026-11-20 Approved: Tasks 6-10 via info.request ("Approve and start").
+- 2026-11-20 Task 6: examples checked — throwaway tests with the page's examples verbatim (basic usage, 5 real-world examples, error handling incl. Skip/Retry/Stop/Rethrow claims, duplicate-name and no-sink errors, per-sink telemetry name) → "Total tests: 8, Passed: 8"; code-line comparison → "Checked 384 csharp lines, missing 32", all of them best-practice fragments (`.To(...)` snippets) or the placeholder method bodies; file deleted.
+- 2026-11-20 Ruling: the FanOut real-world examples use their own record names (`ShopOrder`, `ShopOrderMetrics`) so they do not clash with the basic-usage `Order` model on the same page; async calls (`SaveAsync(...).GetAwaiter().GetResult()`) became synchronous service methods, with a best practice explaining why sinks are synchronous — cost if wrong: readers who copy the old async calls see a different style.
+- 2026-11-20 Task 6: complete (see commit docs(wiki): make FanOut examples compile against the current API).
