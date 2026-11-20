@@ -84,43 +84,51 @@ namespace Cortex.Mediator.Scheduling.Stores
         }
 
         /// <inheritdoc />
-        public Task MarkCompletedAsync(string id, CancellationToken ct = default)
+        public Task<bool> MarkCompletedAsync(string id, int attempt, CancellationToken ct = default)
         {
             lock (_gate)
             {
-                if (id != null && _commands.TryGetValue(id, out var command))
-                {
-                    command.Status = ScheduledCommandStatus.Completed;
-                    command.LockedUntil = null;
-                }
-            }
+                if (!TryGetOwned(id, attempt, out var command))
+                    return Task.FromResult(false);
 
-            return Task.CompletedTask;
+                command.Status = ScheduledCommandStatus.Completed;
+                command.LockedUntil = null;
+                return Task.FromResult(true);
+            }
         }
 
         /// <inheritdoc />
-        public Task MarkFailedAsync(string id, string error, DateTimeOffset? retryAt, CancellationToken ct = default)
+        public Task<bool> MarkFailedAsync(string id, int attempt, string error, DateTimeOffset? retryAt, CancellationToken ct = default)
         {
             lock (_gate)
             {
-                if (id != null && _commands.TryGetValue(id, out var command))
+                if (!TryGetOwned(id, attempt, out var command))
+                    return Task.FromResult(false);
+
+                command.LastError = error;
+                command.LockedUntil = null;
+
+                if (retryAt.HasValue)
                 {
-                    command.LastError = error;
-                    command.LockedUntil = null;
-
-                    if (retryAt.HasValue)
-                    {
-                        command.Status = ScheduledCommandStatus.Pending;
-                        command.ExecuteAt = retryAt.Value;
-                    }
-                    else
-                    {
-                        command.Status = ScheduledCommandStatus.Failed;
-                    }
+                    command.Status = ScheduledCommandStatus.Pending;
+                    command.ExecuteAt = retryAt.Value;
                 }
-            }
+                else
+                {
+                    command.Status = ScheduledCommandStatus.Failed;
+                }
 
-            return Task.CompletedTask;
+                return Task.FromResult(true);
+            }
+        }
+
+        private bool TryGetOwned(string id, int attempt, out ScheduledCommand command)
+        {
+            command = null;
+            return id != null
+                && _commands.TryGetValue(id, out command)
+                && command.Status == ScheduledCommandStatus.Processing
+                && command.Attempts == attempt;
         }
 
         private static bool IsClaimable(ScheduledCommand command, DateTimeOffset now)

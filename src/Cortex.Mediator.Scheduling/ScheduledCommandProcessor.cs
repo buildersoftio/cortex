@@ -111,7 +111,7 @@ namespace Cortex.Mediator.Scheduling
                 var error = $"Scheduled command was claimed {scheduled.Attempts} times, more than the {_options.MaxAttempts} allowed attempts; " +
                             "a processor probably stopped while running it.";
                 _logger.LogError("Scheduled command {ScheduleId} ({CommandType}) failed: {Error}", scheduled.Id, scheduled.CommandType, error);
-                await _store.MarkFailedAsync(scheduled.Id, error, null, CancellationToken.None).ConfigureAwait(false);
+                await RecordAsync(scheduled, _store.MarkFailedAsync(scheduled.Id, scheduled.Attempts, error, null, CancellationToken.None)).ConfigureAwait(false);
                 return;
             }
 
@@ -123,7 +123,7 @@ namespace Cortex.Mediator.Scheduling
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Scheduled command {ScheduleId} ({CommandType}) could not be read and will not be retried.", scheduled.Id, scheduled.CommandType);
-                await _store.MarkFailedAsync(scheduled.Id, ex.Message, null, CancellationToken.None).ConfigureAwait(false);
+                await RecordAsync(scheduled, _store.MarkFailedAsync(scheduled.Id, scheduled.Attempts, ex.Message, null, CancellationToken.None)).ConfigureAwait(false);
                 return;
             }
 
@@ -152,11 +152,20 @@ namespace Cortex.Mediator.Scheduling
                     _logger.LogError(ex, "Scheduled command {ScheduleId} ({CommandType}) failed on its last attempt ({Attempt}).",
                         scheduled.Id, scheduled.CommandType, scheduled.Attempts);
 
-                await _store.MarkFailedAsync(scheduled.Id, ex.Message, retryAt, CancellationToken.None).ConfigureAwait(false);
+                await RecordAsync(scheduled, _store.MarkFailedAsync(scheduled.Id, scheduled.Attempts, ex.Message, retryAt, CancellationToken.None)).ConfigureAwait(false);
                 return;
             }
 
-            await _store.MarkCompletedAsync(scheduled.Id, CancellationToken.None).ConfigureAwait(false);
+            await RecordAsync(scheduled, _store.MarkCompletedAsync(scheduled.Id, scheduled.Attempts, CancellationToken.None)).ConfigureAwait(false);
+        }
+
+        private async Task RecordAsync(ScheduledCommand scheduled, Task<bool> write)
+        {
+            if (!await write.ConfigureAwait(false))
+                _logger.LogWarning(
+                    "Scheduled command {ScheduleId} ({CommandType}) was taken over by another processor after its lock expired; " +
+                    "the result of attempt {Attempt} was not recorded. Increase LockDuration if handlers run longer than it.",
+                    scheduled.Id, scheduled.CommandType, scheduled.Attempts);
         }
     }
 }

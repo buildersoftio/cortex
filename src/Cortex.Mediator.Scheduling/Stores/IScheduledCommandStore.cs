@@ -32,13 +32,21 @@ namespace Cortex.Mediator.Scheduling.Stores
         /// </summary>
         Task<IReadOnlyList<ScheduledCommand>> ClaimDueAsync(DateTimeOffset now, int maxCount, TimeSpan lockDuration, CancellationToken ct = default);
 
-        /// <summary>Marks a claimed command as completed.</summary>
-        Task MarkCompletedAsync(string id, CancellationToken ct = default);
+        /// <summary>
+        /// Marks a claimed command as completed.
+        /// Applies only while the command is still processing under the given claim, that is with
+        /// <see cref="ScheduledCommand.Attempts"/> equal to <paramref name="attempt"/>; a processor whose lock
+        /// expired and was taken over cannot overwrite the new owner's state.
+        /// Returns <c>true</c> if the state was written.
+        /// </summary>
+        Task<bool> MarkCompletedAsync(string id, int attempt, CancellationToken ct = default);
 
         /// <summary>
         /// Records a failed attempt. When <paramref name="retryAt"/> has a value the command becomes pending again,
         /// due at that time; otherwise it is marked failed for good.
+        /// Applies only under the same ownership rule as <see cref="MarkCompletedAsync"/>.
+        /// Returns <c>true</c> if the state was written.
         /// </summary>
-        Task MarkFailedAsync(string id, string error, DateTimeOffset? retryAt, CancellationToken ct = default);
+        Task<bool> MarkFailedAsync(string id, int attempt, string error, DateTimeOffset? retryAt, CancellationToken ct = default);
     }
 }

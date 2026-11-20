@@ -98,7 +98,7 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             var scheduler = CreateScheduler();
             var id = await scheduler.ScheduleAsync(new RetryPaymentCommand(), TimeSpan.Zero);
             await _store.ClaimDueAsync(T0, 10, TimeSpan.FromMinutes(1));
-            await _store.MarkCompletedAsync(id);
+            await _store.MarkCompletedAsync(id, 1);
 
             await scheduler.CancelAsync(id);
             await scheduler.CancelAsync("does-not-exist");

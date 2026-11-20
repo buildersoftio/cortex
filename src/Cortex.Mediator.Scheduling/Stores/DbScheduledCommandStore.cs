@@ -161,20 +161,26 @@ namespace Cortex.Mediator.Scheduling.Stores
         }
 
         /// <inheritdoc />
-        public async Task MarkCompletedAsync(string id, CancellationToken ct = default)
+        public async Task<bool> MarkCompletedAsync(string id, int attempt, CancellationToken ct = default)
         {
+            if (id == null)
+                return false;
+
             await EnsureInitializedAsync(ct).ConfigureAwait(false);
             using var connection = await OpenAsync(ct).ConfigureAwait(false);
             using var db = connection.CreateCommand();
-            db.CommandText = $"UPDATE {_table} SET {Q("Status")} = @completed, {Q("LockedUntil")} = NULL WHERE {Q("Id")} = @id";
+            db.CommandText = $"UPDATE {_table} SET {Q("Status")} = @completed, {Q("LockedUntil")} = NULL WHERE {OwnedRow}";
             AddParameter(db, "@completed", StatusCompleted, DbType.Int32);
-            AddParameter(db, "@id", id, DbType.String);
-            await db.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            AddOwnershipParameters(db, id, attempt);
+            return await db.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1;
         }
 
         /// <inheritdoc />
-        public async Task MarkFailedAsync(string id, string error, DateTimeOffset? retryAt, CancellationToken ct = default)
+        public async Task<bool> MarkFailedAsync(string id, int attempt, string error, DateTimeOffset? retryAt, CancellationToken ct = default)
         {
+            if (id == null)
+                return false;
+
             await EnsureInitializedAsync(ct).ConfigureAwait(false);
             using var connection = await OpenAsync(ct).ConfigureAwait(false);
             using var db = connection.CreateCommand();
@@ -183,20 +189,29 @@ namespace Cortex.Mediator.Scheduling.Stores
             {
                 db.CommandText =
                     $"UPDATE {_table} SET {Q("Status")} = @pending, {Q("ExecuteAt")} = @retryAt, {Q("LastError")} = @error, {Q("LockedUntil")} = NULL " +
-                    $"WHERE {Q("Id")} = @id";
+                    $"WHERE {OwnedRow}";
                 AddParameter(db, "@pending", StatusPending, DbType.Int32);
                 AddParameter(db, "@retryAt", ToTicks(retryAt.Value), DbType.Int64);
             }
             else
             {
                 db.CommandText =
-                    $"UPDATE {_table} SET {Q("Status")} = @failed, {Q("LastError")} = @error, {Q("LockedUntil")} = NULL WHERE {Q("Id")} = @id";
+                    $"UPDATE {_table} SET {Q("Status")} = @failed, {Q("LastError")} = @error, {Q("LockedUntil")} = NULL WHERE {OwnedRow}";
                 AddParameter(db, "@failed", StatusFailed, DbType.Int32);
             }
 
             AddParameter(db, "@error", error, DbType.String);
-            AddParameter(db, "@id", id, DbType.String);
-            await db.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            AddOwnershipParameters(db, id, attempt);
+            return await db.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1;
+        }
+
+        private string OwnedRow => $"{Q("Id")} = @id AND {Q("Status")} = @owned AND {Q("Attempts")} = @attempt";
+
+        private static void AddOwnershipParameters(DbCommand command, string id, int attempt)
+        {
+            AddParameter(command, "@id", id, DbType.String);
+            AddParameter(command, "@owned", StatusProcessing, DbType.Int32);
+            AddParameter(command, "@attempt", attempt, DbType.Int32);
         }
 
         private async Task<ScheduledCommand> ReadByIdAsync(DbConnection connection, string id, CancellationToken ct)

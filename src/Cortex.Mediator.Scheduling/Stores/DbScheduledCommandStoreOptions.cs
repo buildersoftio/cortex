@@ -8,7 +8,7 @@ namespace Cortex.Mediator.Scheduling.Stores
     /// </summary>
     public sealed class DbScheduledCommandStoreOptions
     {
-        private static readonly Regex IdentifierPattern = new("^[A-Za-z_][A-Za-z0-9_]{0,99}$", RegexOptions.CultureInvariant);
+        private static readonly Regex IdentifierPattern = new(@"^[A-Za-z_][A-Za-z0-9_]{0,99}\z", RegexOptions.CultureInvariant);
 
         /// <summary>The table that holds scheduled commands. Default: <c>ScheduledCommands</c>.</summary>
         public string TableName { get; set; } = "ScheduledCommands";

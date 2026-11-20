@@ -187,9 +187,9 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             await store.AddAsync(Pending("dead", T0));
             await store.ClaimDueAsync(T0, 10, Lock);
 
-            await store.MarkCompletedAsync("done");
-            await store.MarkFailedAsync("retry", "timeout", T0.AddMinutes(1));
-            await store.MarkFailedAsync("dead", "bad card", null);
+            Assert.True(await store.MarkCompletedAsync("done", 1));
+            Assert.True(await store.MarkFailedAsync("retry", 1, "timeout", T0.AddMinutes(1)));
+            Assert.True(await store.MarkFailedAsync("dead", 1, "bad card", null));
 
             var reader = NewStore();
             var done = await reader.GetAsync("done");
@@ -210,6 +210,7 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
 
         [Theory]
         [InlineData("Scheduled Commands")]
+        [InlineData("Table\n")]
         [InlineData("x; DROP TABLE y")]
         [InlineData("\"quoted\"")]
         [InlineData("")]
@@ -223,6 +224,40 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
         public void InvalidSchemaName_Throws()
         {
             Assert.Throws<ArgumentException>(() => NewStore(o => o.Schema = "dbo].[x"));
+        }
+
+        [Fact]
+        public async Task Mark_FromAStaleClaim_IsIgnored()
+        {
+            var store = NewStore();
+            await store.AddAsync(Pending("a", T0));
+            await store.ClaimDueAsync(T0, 10, Lock);
+            await store.ClaimDueAsync(T0 + Lock, 10, Lock);
+
+            Assert.True(await store.MarkCompletedAsync("a", 2));
+            Assert.False(await store.MarkFailedAsync("a", 1, "late", T0.AddHours(1)));
+            Assert.False(await store.MarkCompletedAsync("a", 1));
+            Assert.False(await store.MarkCompletedAsync("missing", 1));
+
+            var stored = await NewStore().GetAsync("a");
+            Assert.Equal(ScheduledCommandStatus.Completed, stored.Status);
+            Assert.Null(stored.LastError);
+        }
+
+        [Fact]
+        public async Task Schema_And_PreCreatedTable_Work()
+        {
+            var creator = NewStore(o => o.Schema = "main");
+            await creator.EnsureTableAsync();
+
+            var store = NewStore(o =>
+            {
+                o.Schema = "main";
+                o.AutoCreateTable = false;
+            });
+            await store.AddAsync(Pending("a", T0));
+
+            Assert.Equal("a", (await store.GetAsync("a")).Id);
         }
 
         [Fact]

@@ -123,7 +123,7 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             await store.AddAsync(Pending("a", T0));
             await store.ClaimDueAsync(T0, 10, Lock);
 
-            await store.MarkCompletedAsync("a");
+            Assert.True(await store.MarkCompletedAsync("a", 1));
 
             var stored = await store.GetAsync("a");
             Assert.Equal(ScheduledCommandStatus.Completed, stored.Status);
@@ -138,7 +138,7 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             await store.AddAsync(Pending("a", T0));
             await store.ClaimDueAsync(T0, 10, Lock);
 
-            await store.MarkFailedAsync("a", "boom", T0.AddMinutes(1));
+            Assert.True(await store.MarkFailedAsync("a", 1, "boom", T0.AddMinutes(1)));
 
             var stored = await store.GetAsync("a");
             Assert.Equal(ScheduledCommandStatus.Pending, stored.Status);
@@ -155,7 +155,7 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             await store.AddAsync(Pending("a", T0));
             await store.ClaimDueAsync(T0, 10, Lock);
 
-            await store.MarkFailedAsync("a", "boom", null);
+            Assert.True(await store.MarkFailedAsync("a", 1, "boom", null));
 
             var stored = await store.GetAsync("a");
             Assert.Equal(ScheduledCommandStatus.Failed, stored.Status);
@@ -170,6 +170,24 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             await store.AddAsync(Pending("a", T0));
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => store.AddAsync(Pending("a", T0)));
+        }
+
+        [Fact]
+        public async Task Mark_FromAStaleClaim_IsIgnored()
+        {
+            var store = new InMemoryScheduledCommandStore();
+            await store.AddAsync(Pending("a", T0));
+            await store.ClaimDueAsync(T0, 10, Lock);
+            await store.ClaimDueAsync(T0 + Lock, 10, Lock);
+
+            Assert.True(await store.MarkCompletedAsync("a", 2));
+            Assert.False(await store.MarkFailedAsync("a", 1, "late", T0.AddHours(1)));
+            Assert.False(await store.MarkCompletedAsync("a", 1));
+            Assert.False(await store.MarkCompletedAsync("missing", 1));
+
+            var stored = await store.GetAsync("a");
+            Assert.Equal(ScheduledCommandStatus.Completed, stored.Status);
+            Assert.Null(stored.LastError);
         }
 
         [Fact]
