@@ -79,10 +79,10 @@ Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: feat(streams): add Merge operator to combine branch outputs
 ### Task 4: Document branching, merging and dynamic branches
-- [ ] Done
+- [x] Done
 Files: `docs/wiki/Branch-and-Merge.md` (create)
 Depends on: Task 3
-- [ ] Write the wiki page in the style of docs/wiki/FanOut-Multiple-Sinks.md: conditional branches, Merge, runtime AddBranch/RemoveBranch, thread-safety and ordering guarantees, the fork-selection rule and its errors; every snippet uses the signatures from Tasks 1-3.
+- [x] Write the wiki page in the style of docs/wiki/FanOut-Multiple-Sinks.md: conditional branches, Merge, runtime AddBranch/RemoveBranch, thread-safety and ordering guarantees, the fork-selection rule and its errors; every snippet uses the signatures from Tasks 1-3.
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: docs(streams): document branch merge and dynamic branching
@@ -104,3 +104,4 @@ Commit: docs(streams): document branch merge and dynamic branching
 - 2026-11-20 Task 3: red — `dotnet build src/Cortex.Tests/Cortex.Tests.csproj -c Release` → "error CS1061: 'IStreamBuilder<int, int>' does not contain a definition for 'Merge'" (BranchMergeTests.cs:105 and others).
 - 2026-11-20 Ruling: the "not targetable by runtime add" flag lives on `ForkOperator` (`AcceptsRuntimeBranches`), so ForkOperator.cs joins Task 3's files; the end-to-end Verification scenario is the test `BranchMergeTests.EndToEnd_MergeWithRuntimeBranchChanges` — cost if wrong: none.
 - 2026-11-20 Task 3: complete — build and filtered tests green (see commit feat(streams): add Merge operator to combine branch outputs).
+- 2026-11-20 Task 4: complete — docs/wiki/Branch-and-Merge.md; build and filtered tests green (see commit docs(streams): document branch merge and dynamic branching).
