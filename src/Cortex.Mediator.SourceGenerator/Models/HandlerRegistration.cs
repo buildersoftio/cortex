@@ -1,4 +1,5 @@
 using System;
+using Microsoft.CodeAnalysis;
 
 namespace Cortex.Mediator.SourceGenerator.Models
 {
@@ -9,19 +10,27 @@ namespace Cortex.Mediator.SourceGenerator.Models
         public string MessageFullyQualifiedName { get; }
         public string ResultFullyQualifiedName { get; }
         public string ServiceInterfaceFullyQualifiedName { get; }
+        public bool IsAccessible { get; }
+
+        /// <summary>Where the handler is declared; used for diagnostics only, so not part of equality.</summary>
+        public Location Location { get; }
 
         public HandlerRegistration(
             InterfaceKind kind,
             string handlerFullyQualifiedName,
             string messageFullyQualifiedName,
             string resultFullyQualifiedName,
-            string serviceInterfaceFullyQualifiedName)
+            string serviceInterfaceFullyQualifiedName,
+            bool isAccessible,
+            Location location)
         {
             Kind = kind;
             HandlerFullyQualifiedName = handlerFullyQualifiedName;
             MessageFullyQualifiedName = messageFullyQualifiedName;
             ResultFullyQualifiedName = resultFullyQualifiedName ?? "";
             ServiceInterfaceFullyQualifiedName = serviceInterfaceFullyQualifiedName;
+            IsAccessible = isAccessible;
+            Location = location;
         }
 
         public bool Equals(HandlerRegistration other)
@@ -32,7 +41,8 @@ namespace Cortex.Mediator.SourceGenerator.Models
                 && HandlerFullyQualifiedName == other.HandlerFullyQualifiedName
                 && MessageFullyQualifiedName == other.MessageFullyQualifiedName
                 && ResultFullyQualifiedName == other.ResultFullyQualifiedName
-                && ServiceInterfaceFullyQualifiedName == other.ServiceInterfaceFullyQualifiedName;
+                && ServiceInterfaceFullyQualifiedName == other.ServiceInterfaceFullyQualifiedName
+                && IsAccessible == other.IsAccessible;
         }
 
         public override bool Equals(object obj) => Equals(obj as HandlerRegistration);
@@ -47,6 +57,7 @@ namespace Cortex.Mediator.SourceGenerator.Models
                 hash = hash * 31 + MessageFullyQualifiedName.GetHashCode();
                 hash = hash * 31 + ResultFullyQualifiedName.GetHashCode();
                 hash = hash * 31 + ServiceInterfaceFullyQualifiedName.GetHashCode();
+                hash = hash * 31 + IsAccessible.GetHashCode();
                 return hash;
             }
         }

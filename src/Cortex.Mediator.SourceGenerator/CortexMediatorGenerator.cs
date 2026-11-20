@@ -44,10 +44,10 @@ namespace Cortex.Mediator.SourceGeneration
                 .Collect()
                 .Select(static (items, _) => items.Length > 0);
 
-            // Step 3: Discover handlers from class declarations
+            // Step 3: Discover handlers from class, record and struct declarations
             var handlerRegistrations = context.SyntaxProvider
                 .CreateSyntaxProvider(
-                    predicate: static (node, _) => node is ClassDeclarationSyntax cds && cds.BaseList != null,
+                    predicate: static (node, _) => IsCandidateType(node),
                     transform: static (ctx, ct) => GetHandlerRegistrations(ctx, ct))
                 .Where(static r => !r.IsEmpty)
                 .SelectMany(static (r, _) => r);
@@ -57,7 +57,7 @@ namespace Cortex.Mediator.SourceGeneration
             // Step 4: Discover message types for diagnostics
             var messageRegistrations = context.SyntaxProvider
                 .CreateSyntaxProvider(
-                    predicate: static (node, _) => node is ClassDeclarationSyntax cds && cds.BaseList != null,
+                    predicate: static (node, _) => IsCandidateType(node),
                     transform: static (ctx, ct) => GetMessageRegistrations(ctx, ct))
                 .Where(static r => !r.IsEmpty)
                 .SelectMany(static (r, _) => r);
@@ -74,25 +74,45 @@ namespace Cortex.Mediator.SourceGeneration
                 if (!isEnabled)
                     return;
 
+                // A partial type with base lists on several declarations is discovered once per declaration.
+                var distinctHandlers = handlers.Distinct().ToImmutableArray();
+                var distinctMessages = messages.Distinct().ToImmutableArray();
+
                 // Report diagnostics
-                ReportDiagnostics(spc, handlers, messages);
+                ReportDiagnostics(spc, distinctHandlers, distinctMessages);
+
+                // Handlers that generated code cannot name were reported above (CXMED008) and are left out.
+                var emittedHandlers = distinctHandlers.Where(h => h.IsAccessible).ToImmutableArray();
+
+                // Route every notification type the generated code can name, with or without a generated handler.
+                var notificationTypes = emittedHandlers
+                    .Where(h => h.Kind == InterfaceKind.Notification)
+                    .Select(h => h.MessageFullyQualifiedName)
+                    .Concat(distinctMessages
+                        .Where(m => m.Kind == InterfaceKind.Notification && m.IsAccessible)
+                        .Select(m => m.MessageFullyQualifiedName))
+                    .Distinct()
+                    .ToImmutableArray();
 
                 // Emit GeneratedMediator
-                var mediatorSource = GeneratedMediatorEmitter.Emit(handlers);
+                var mediatorSource = GeneratedMediatorEmitter.Emit(emittedHandlers, notificationTypes);
                 spc.AddSource("GeneratedMediator.g.cs", mediatorSource);
 
                 // Emit GeneratedServiceCollectionExtensions
-                var diSource = GeneratedDIEmitter.Emit(handlers);
+                var diSource = GeneratedDIEmitter.Emit(emittedHandlers);
                 spc.AddSource("GeneratedServiceCollectionExtensions.g.cs", diSource);
             });
         }
+
+        private static bool IsCandidateType(SyntaxNode node) =>
+            node is TypeDeclarationSyntax { BaseList: not null } and not InterfaceDeclarationSyntax;
 
         private static ImmutableArray<HandlerRegistration> GetHandlerRegistrations(
             GeneratorSyntaxContext context,
             CancellationToken cancellationToken)
         {
-            var classDeclaration = (ClassDeclarationSyntax)context.Node;
-            var symbol = context.SemanticModel.GetDeclaredSymbol(classDeclaration, cancellationToken);
+            var typeDeclaration = (TypeDeclarationSyntax)context.Node;
+            var symbol = context.SemanticModel.GetDeclaredSymbol(typeDeclaration, cancellationToken);
 
             if (symbol is not INamedTypeSymbol namedType)
                 return ImmutableArray<HandlerRegistration>.Empty;
@@ -104,8 +124,8 @@ namespace Cortex.Mediator.SourceGeneration
             GeneratorSyntaxContext context,
             CancellationToken cancellationToken)
         {
-            var classDeclaration = (ClassDeclarationSyntax)context.Node;
-            var symbol = context.SemanticModel.GetDeclaredSymbol(classDeclaration, cancellationToken);
+            var typeDeclaration = (TypeDeclarationSyntax)context.Node;
+            var symbol = context.SemanticModel.GetDeclaredSymbol(typeDeclaration, cancellationToken);
 
             if (symbol is not INamedTypeSymbol namedType)
                 return ImmutableArray<MessageRegistration>.Empty;
@@ -195,50 +215,41 @@ namespace Cortex.Mediator.SourceGeneration
                 }
             }
 
-            // Check for duplicate command handlers
-            var commandHandlerGroups = handlers
-                .Where(h => h.Kind == InterfaceKind.ReturningCommand)
-                .GroupBy(h => h.MessageFullyQualifiedName)
-                .Where(g => g.Count() > 1);
-
-            foreach (var group in commandHandlerGroups)
+            // Check for handlers the generated code cannot reference
+            foreach (var handler in handlers.Where(h => !h.IsAccessible).GroupBy(h => h.HandlerFullyQualifiedName))
             {
-                var handlerNames = string.Join(", ", group.Select(h => h.HandlerFullyQualifiedName));
                 spc.ReportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.MultipleHandlersForCommand,
-                    Location.None,
-                    group.Key,
-                    handlerNames));
+                    DiagnosticDescriptors.HandlerNotAccessible,
+                    handler.First().Location,
+                    handler.Key));
             }
 
-            // Check for duplicate void command handlers
-            var voidCommandHandlerGroups = handlers
-                .Where(h => h.Kind == InterfaceKind.VoidCommand)
+            // Check for duplicate handlers; notifications may have any number of handlers
+            ReportDuplicateHandlers(spc, handlers, InterfaceKind.ReturningCommand, DiagnosticDescriptors.MultipleHandlersForCommand);
+            ReportDuplicateHandlers(spc, handlers, InterfaceKind.VoidCommand, DiagnosticDescriptors.MultipleHandlersForCommand);
+            ReportDuplicateHandlers(spc, handlers, InterfaceKind.Query, DiagnosticDescriptors.MultipleHandlersForQuery);
+            ReportDuplicateHandlers(spc, handlers, InterfaceKind.StreamQuery, DiagnosticDescriptors.MultipleHandlersForStreamQuery);
+        }
+
+        private static void ReportDuplicateHandlers(
+            SourceProductionContext spc,
+            ImmutableArray<HandlerRegistration> handlers,
+            InterfaceKind kind,
+            DiagnosticDescriptor descriptor)
+        {
+            var groups = handlers
+                .Where(h => h.Kind == kind)
                 .GroupBy(h => h.MessageFullyQualifiedName)
                 .Where(g => g.Count() > 1);
 
-            foreach (var group in voidCommandHandlerGroups)
+            foreach (var group in groups)
             {
                 var handlerNames = string.Join(", ", group.Select(h => h.HandlerFullyQualifiedName));
-                spc.ReportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.MultipleHandlersForCommand,
-                    Location.None,
-                    group.Key,
-                    handlerNames));
-            }
 
-            // Check for duplicate query handlers
-            var queryHandlerGroups = handlers
-                .Where(h => h.Kind == InterfaceKind.Query)
-                .GroupBy(h => h.MessageFullyQualifiedName)
-                .Where(g => g.Count() > 1);
-
-            foreach (var group in queryHandlerGroups)
-            {
-                var handlerNames = string.Join(", ", group.Select(h => h.HandlerFullyQualifiedName));
+                // Point at the second handler: a declaration the user can remove or merge.
                 spc.ReportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.MultipleHandlersForQuery,
-                    Location.None,
+                    descriptor,
+                    group.ElementAt(1).Location,
                     group.Key,
                     handlerNames));
             }

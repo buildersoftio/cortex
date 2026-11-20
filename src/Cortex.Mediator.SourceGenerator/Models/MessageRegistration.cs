@@ -7,17 +7,20 @@ namespace Cortex.Mediator.SourceGenerator.Models
         public InterfaceKind Kind { get; }
         public string MessageFullyQualifiedName { get; }
         public string ResultFullyQualifiedName { get; }
+        public bool IsAccessible { get; }
         public Microsoft.CodeAnalysis.Location Location { get; }
 
         public MessageRegistration(
             InterfaceKind kind,
             string messageFullyQualifiedName,
             string resultFullyQualifiedName,
+            bool isAccessible,
             Microsoft.CodeAnalysis.Location location)
         {
             Kind = kind;
             MessageFullyQualifiedName = messageFullyQualifiedName;
             ResultFullyQualifiedName = resultFullyQualifiedName ?? "";
+            IsAccessible = isAccessible;
             Location = location;
         }
 
@@ -27,7 +30,8 @@ namespace Cortex.Mediator.SourceGenerator.Models
             if (ReferenceEquals(this, other)) return true;
             return Kind == other.Kind
                 && MessageFullyQualifiedName == other.MessageFullyQualifiedName
-                && ResultFullyQualifiedName == other.ResultFullyQualifiedName;
+                && ResultFullyQualifiedName == other.ResultFullyQualifiedName
+                && IsAccessible == other.IsAccessible;
         }
 
         public override bool Equals(object obj) => Equals(obj as MessageRegistration);
@@ -40,6 +44,7 @@ namespace Cortex.Mediator.SourceGenerator.Models
                 hash = hash * 31 + Kind.GetHashCode();
                 hash = hash * 31 + MessageFullyQualifiedName.GetHashCode();
                 hash = hash * 31 + ResultFullyQualifiedName.GetHashCode();
+                hash = hash * 31 + IsAccessible.GetHashCode();
                 return hash;
             }
         }

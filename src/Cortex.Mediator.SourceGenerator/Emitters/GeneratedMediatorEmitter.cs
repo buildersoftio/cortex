@@ -6,27 +6,19 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
 {
     internal static class GeneratedMediatorEmitter
     {
-        public static string Emit(ImmutableArray<HandlerRegistration> handlers)
+        /// <param name="handlers">Handlers the generated code can reference.</param>
+        /// <param name="notificationTypes">
+        /// Every notification type to route through <c>PublishAsync(INotification)</c>, including discovered
+        /// notifications without generated handlers: zero handlers is valid, and manually registered ones still run.
+        /// </param>
+        public static string Emit(ImmutableArray<HandlerRegistration> handlers, ImmutableArray<string> notificationTypes)
         {
-            var returningCommands = handlers
-                .Where(h => h.Kind == InterfaceKind.ReturningCommand)
-                .ToArray();
-
-            var voidCommands = handlers
-                .Where(h => h.Kind == InterfaceKind.VoidCommand)
-                .ToArray();
-
-            var queries = handlers
-                .Where(h => h.Kind == InterfaceKind.Query)
-                .ToArray();
-
-            var streamQueries = handlers
-                .Where(h => h.Kind == InterfaceKind.StreamQuery)
-                .ToArray();
-
-            var notifications = handlers
-                .Where(h => h.Kind == InterfaceKind.Notification)
-                .ToArray();
+            // Duplicate handlers are reported as errors (CXMED005-CXMED007); one case per message keeps
+            // the generated switch compilable so that error is the only one the user sees.
+            var returningCommands = FirstPerMessage(handlers, InterfaceKind.ReturningCommand);
+            var voidCommands = FirstPerMessage(handlers, InterfaceKind.VoidCommand);
+            var queries = FirstPerMessage(handlers, InterfaceKind.Query);
+            var streamQueries = FirstPerMessage(handlers, InterfaceKind.StreamQuery);
 
             var sb = new SourceTextBuilder();
 
@@ -92,7 +84,7 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
 
             // PublishAsync(INotification) - switch dispatch
             sb.AppendLine();
-            EmitSwitchPublish(sb, notifications);
+            EmitSwitchPublish(sb, notificationTypes);
 
             // CreateStream<TQuery, TResult> - strongly typed
             sb.AppendLine();
@@ -111,6 +103,22 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
 
             return sb.ToString();
         }
+
+        private static HandlerRegistration[] FirstPerMessage(ImmutableArray<HandlerRegistration> handlers, InterfaceKind kind)
+        {
+            return handlers
+                .Where(h => h.Kind == kind)
+                .GroupBy(h => h.MessageFullyQualifiedName)
+                .Select(g => g.First())
+                .ToArray();
+        }
+
+        /// <summary>
+        /// Matches the exact runtime type, like the reflection-based Mediator: a subclass without its own handler
+        /// is rejected rather than sent to its base type's handler, and the order of cases cannot matter.
+        /// </summary>
+        private static string CaseLabel(string messageFullyQualifiedName) =>
+            $"case {messageFullyQualifiedName} typed when typed.GetType() == typeof({messageFullyQualifiedName}):";
 
         private static void EmitStronglyTypedSendCommandReturning(SourceTextBuilder sb)
         {
@@ -141,7 +149,7 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
                 sb.OpenBrace();
                 foreach (var reg in registrations)
                 {
-                    sb.AppendLine($"case {reg.MessageFullyQualifiedName} typed:");
+                    sb.AppendLine(CaseLabel(reg.MessageFullyQualifiedName));
                     sb.Indent();
                     sb.AppendLine($"return (Task<TResult>)(object)SendCommandAsync<{reg.MessageFullyQualifiedName}, {reg.ResultFullyQualifiedName}>(typed, cancellationToken);");
                     sb.Unindent();
@@ -189,7 +197,7 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
                 sb.OpenBrace();
                 foreach (var reg in registrations)
                 {
-                    sb.AppendLine($"case {reg.MessageFullyQualifiedName} typed:");
+                    sb.AppendLine(CaseLabel(reg.MessageFullyQualifiedName));
                     sb.Indent();
                     sb.AppendLine($"return SendCommandAsync<{reg.MessageFullyQualifiedName}>(typed, cancellationToken);");
                     sb.Unindent();
@@ -237,7 +245,7 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
                 sb.OpenBrace();
                 foreach (var reg in registrations)
                 {
-                    sb.AppendLine($"case {reg.MessageFullyQualifiedName} typed:");
+                    sb.AppendLine(CaseLabel(reg.MessageFullyQualifiedName));
                     sb.Indent();
                     sb.AppendLine($"return (Task<TResult>)(object)SendQueryAsync<{reg.MessageFullyQualifiedName}, {reg.ResultFullyQualifiedName}>(typed, cancellationToken);");
                     sb.Unindent();
@@ -299,25 +307,20 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
             sb.CloseBrace();
         }
 
-        private static void EmitSwitchPublish(SourceTextBuilder sb, HandlerRegistration[] registrations)
+        private static void EmitSwitchPublish(SourceTextBuilder sb, ImmutableArray<string> notificationTypes)
         {
             sb.AppendLine("public Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)");
             sb.OpenBrace();
             sb.AppendLine("if (notification == null) throw new ArgumentNullException(nameof(notification));");
             sb.AppendLine();
 
-            if (registrations.Length > 0)
+            if (notificationTypes.Length > 0)
             {
                 sb.AppendLine("switch (notification)");
                 sb.OpenBrace();
-                // Deduplicate notification types (multiple handlers for same notification)
-                var distinctNotifications = registrations
-                    .Select(r => r.MessageFullyQualifiedName)
-                    .Distinct()
-                    .ToArray();
-                foreach (var msgFqn in distinctNotifications)
+                foreach (var msgFqn in notificationTypes)
                 {
-                    sb.AppendLine($"case {msgFqn} typed:");
+                    sb.AppendLine(CaseLabel(msgFqn));
                     sb.Indent();
                     sb.AppendLine($"return PublishAsync<{msgFqn}>(typed, cancellationToken);");
                     sb.Unindent();
@@ -373,7 +376,7 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
                 sb.OpenBrace();
                 foreach (var reg in registrations)
                 {
-                    sb.AppendLine($"case {reg.MessageFullyQualifiedName} typed:");
+                    sb.AppendLine(CaseLabel(reg.MessageFullyQualifiedName));
                     sb.Indent();
                     sb.AppendLine($"return (IAsyncEnumerable<TResult>)CreateStream<{reg.MessageFullyQualifiedName}, {reg.ResultFullyQualifiedName}>(typed, cancellationToken);");
                     sb.Unindent();

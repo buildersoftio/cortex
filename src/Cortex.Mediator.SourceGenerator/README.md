@@ -18,8 +18,8 @@ Built as part of the [Cortex Data Framework](https://github.com/buildersoftio/co
 | Non-generic dispatch | Runtime reflection (`MakeGenericMethod`) | Compile-time `switch` |
 | Cold start | Dictionary allocation + reflection lookup | Zero overhead |
 | DI registrations | Assembly scanning at startup | Explicit `ServiceDescriptor` calls |
-| NativeAOT / Trimming | Incompatible (reflection) | Compatible |
-| Pipeline behaviors | Fully supported | Fully supported (identical logic) |
+| NativeAOT / Trimming | Incompatible (reflection) | Dispatch and handler registrations work; pipeline behaviors do not (see [Scope & Limitations](#scope--limitations)) |
+| Pipeline behaviors | Fully supported | Fully supported on the JIT runtime (identical logic) |
 
 ## Getting Started
 
@@ -77,9 +77,9 @@ public Task<TResult> SendCommandAsync<TResult>(ICommand<TResult> command, Cancel
 {
     switch (command)
     {
-        case CreateUserCommand typed:
+        case CreateUserCommand typed when typed.GetType() == typeof(CreateUserCommand):
             return (Task<TResult>)(object)SendCommandAsync<CreateUserCommand, Guid>(typed, ct);
-        case UpdateUserCommand typed:
+        case UpdateUserCommand typed when typed.GetType() == typeof(UpdateUserCommand):
             return (Task<TResult>)(object)SendCommandAsync<UpdateUserCommand, bool>(typed, ct);
         default:
             throw new InvalidOperationException(...);
@@ -105,7 +105,7 @@ public static IServiceCollection AddCortexGeneratedMediator(
     services.Add(new ServiceDescriptor(
         typeof(ICommandHandler<CreateUserCommand, Guid>),
         typeof(CreateUserCommandHandler),
-        ServiceLifetime.Scoped));
+        options.HandlerLifetime));
     // ...
 
     // Pipeline behaviors are still runtime-configured
@@ -126,6 +126,8 @@ The generator reports diagnostics during compilation:
 | `CXMED004` | Info | Notification has no handler (zero handlers is valid) |
 | `CXMED005` | Error | Multiple handlers for same command |
 | `CXMED006` | Error | Multiple handlers for same query |
+| `CXMED007` | Error | Multiple handlers for same stream query |
+| `CXMED008` | Warning | Handler is private or protected, so generated code cannot register it |
 
 ## Supported Handler Types
 
@@ -144,6 +146,7 @@ The generator discovers all handler and processor implementations:
 
 - **Single compilation**: The generator scans handlers in the compilation where `[assembly: CortexMediatorGeneration]` is applied. Cross-assembly handlers are not discovered.
 - **Pipeline behaviors**: Configured at runtime via `MediatorOptions`, not generated (they use open generics).
+- **Trimming and NativeAOT**: Generated dispatch, handler and processor registrations, and the notification publish strategy work in trimmed and NativeAOT apps. Pipeline behaviors added through `MediatorOptions` do not: they are registered by `Type` through reflection, so the trimmer can remove their constructors, and under NativeAOT the DI container cannot close an open generic behavior over a value type (for example `ICommandPipelineBehavior<TCommand, int>`). Leave behaviors out of trimmed or NativeAOT builds for now.
 - **Fallback**: The existing reflection-based `Mediator` remains the default. The generator is opt-in.
 
 ## Contributing
