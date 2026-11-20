@@ -117,5 +117,18 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
         {
             Assert.Throws<ArgumentNullException>(() => ((IServiceCollection)null!).AddCortexMediatorScheduling());
         }
+
+        [Fact]
+        public void AddDbScheduledCommandStore_BeforeAddCortexMediatorScheduling_StillReplacesTheInMemoryStore()
+        {
+            var services = NewServices();
+
+            services.AddDbScheduledCommandStore(_ => throw new InvalidOperationException("not opened"), new SqliteDialect());
+            services.AddCortexMediatorScheduling();
+            using var provider = services.BuildServiceProvider();
+
+            Assert.IsType<DbScheduledCommandStore>(provider.GetRequiredService<IScheduledCommandStore>());
+            Assert.Single(services, d => d.ServiceType == typeof(IScheduledCommandStore));
+        }
     }
 }

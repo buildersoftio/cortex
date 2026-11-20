@@ -1,5 +1,5 @@
 # Plan: Cortex.Mediator.Scheduling — deferred and scheduled commands (#228)
-Status: in-progress
+Status: done
 Date: 2026-11-20 · Agent: lead-developer · Size: large · Base: v3.2/release@47f87dae · Branch: v3/feature/228
 Approved: 2026-11-20 via info.request
 Consent: Review panel (2026-11-20)
@@ -39,10 +39,10 @@ Rejected: Hangfire / Quartz adapter packages now — new third-party dependencie
 - Companions: researcher=researcher-2 · software-architect=software-architect-2 · developer=developer-2 · code-reviewer=code-reviewer · security-reviewer=security-reviewer · qa-engineer=qa-engineer-2 · debugger=debugger · ui-ux-designer=—
 | Wave | Phase | Agents | Access | Briefs | Gate | Status |
 |---|---|---|---|---|---|---|
-| 1 | Review | 3 code-reviewer (correctness, spec, tests and silent failures) + 1 security-reviewer | read-only | sophon-scratch-review.diff | FINDINGS at threshold 80 | pending |
-| 2 | Refute | 3 code-reviewer (reachability, impact, defenses) or 3 security-reviewer verify | read-only | Critical/Important findings | ≥2 of 3 CONFIRMED | pending |
-| 3 | Re-review | 1 code-reviewer | read-only | fix-commit diff | ALL_ADDRESSED | pending |
-| 4 | Critic | 1 code-reviewer completeness | read-only | request, Goal, Verification, commits | COMPLETE | pending |
+| 1 | Review | 3 code-reviewer (correctness, spec, tests and silent failures) + 1 security-reviewer | read-only | sophon-scratch-review.diff | FINDINGS at threshold 80 | done |
+| 2 | Refute | 3 code-reviewer (reachability, impact, defenses) or 3 security-reviewer verify | read-only | Critical/Important findings | ≥2 of 3 CONFIRMED | done |
+| 3 | Re-review | 1 code-reviewer | read-only | fix-commit diff | ALL_ADDRESSED | done |
+| 4 | Critic | 1 code-reviewer completeness | read-only | request, Goal, Verification, commits | COMPLETE | done (GAPS: post-fix verification, re-review record, before-order test — all closed in the final commit) |
 ## Tasks
 ### Task 1: Scaffold the package with contracts and the JSON serializer
 - [x] Done
@@ -112,3 +112,6 @@ Commit: docs(scheduling): document Cortex.Mediator.Scheduling
 - 2026-11-20 Fix C: IScheduledCommandStore.MarkCompletedAsync/MarkFailedAsync take the claim's attempt number and return bool; both stores write only while Status = Processing and Attempts = attempt; the processor logs a warning when a result was not recorded. Also hardened the identifier regex (`\z` instead of `$`, which accepted a trailing newline; security POSSIBLE). Red: CS1503 on the new signatures (behavioural red not observable before the API change); green: "Passed! - Failed: 0, Passed: 72".
 - 2026-11-20 Fix E (tests only): HostedService_KeepsRunning_AfterAPollFails (store whose first claim throws) and HostedService_AfterAFullBatch_PollsAgainWithoutWaiting (BatchSize 1, PollingInterval 1 h) → "Passed! - Failed: 0, Passed: 74"; behaviour already correct, so no red run; not mutation-tested.
 - 2026-11-20 Docs: README per-dialect column types (spec Minor) and a table-access warning (S1, refuted as a code defect, documented as accepted risk).
+- 2026-11-20 Re-review (fix commits 7f637b9..e994234): A, B, C, E ADDRESSED; no new Critical/Important; VERDICT ALL_ADDRESSED.
+- 2026-11-20 Critic: GAPS — post-fix Release build and full suite not yet recorded; re-review not yet recorded; README "before or after" claim for AddDbScheduledCommandStore untested → added AddDbScheduledCommandStore_BeforeAddCortexMediatorScheduling_StillReplacesTheInMemoryStore; final build and suites run in the final commit command.
+- 2026-11-20 Review: 6 candidates + 2 Minor, 4 confirmed (A, B, C, E), 4 fixed, 2 refuted (D, S1 — S1 documented); Minor README DDL gap fixed; deferred: none.
