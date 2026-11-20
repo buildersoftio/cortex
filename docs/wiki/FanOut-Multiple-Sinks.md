@@ -58,6 +58,14 @@ Use FanOut when you need to:
 
 ## Basic Usage
 
+The examples on this page use these namespaces:
+
+```csharp
+using Cortex.Streams;
+using Cortex.Streams.ErrorHandling;   // StreamExecutionOptions, ErrorHandlingDecision
+using System.Text.Json;               // JsonSerializer, in the real-world examples
+```
+
 The snippets in this section use this model and these placeholder methods:
 
 ```csharp

@@ -32,12 +32,32 @@ Cortex.Streams can split a stream into named branches, let a branch accept only 
 | Runtime add | `stream.AddBranch<T>(name, [condition,] config)` | A branch is attached to a running stream. |
 | Runtime remove | `stream.RemoveBranch(name)` | A branch is detached from a running stream. |
 
+The short snippets in the next three sections use these declarations; the [real-world examples](#real-world-examples) further down declare their own.
+
+```csharp
+public record Customer(string Id, bool IsVip);
+public record CustomerOrder(string Id, decimal Amount, Customer Customer);
+public record Alert(string OrderId);
+public record Reading(string SensorId, double Value);
+
+public interface IAlertService { void Send(Alert alert); }
+public interface IAuditLog { void Write(CustomerOrder order); }
+public interface IOrderRepository { void Save(CustomerOrder order); }
+public interface ICrm { void Notify(CustomerOrder order); }
+
+// Variables used by the snippets
+IAlertService alertService;
+IAuditLog auditLog;
+IOrderRepository repository;
+ICrm crm;
+```
+
 ## Conditional Branches
 
 Pass a predicate before the branch configuration. Items that do not match skip the branch; the main pipeline is unaffected.
 
 ```csharp
-var stream = StreamBuilder<Order>.CreateNewStream("Orders")
+var stream = StreamBuilder<CustomerOrder>.CreateNewStream("Orders")
     .Stream()
     .AddBranch("large-orders", order => order.Amount > 10_000, branch => branch
         .Map(order => new Alert(order.Id))
@@ -55,7 +75,7 @@ The condition runs as a filter at the head of the branch, so it follows the stre
 `Merge<TNext>` sends each item through several branches and joins their outputs into one stream of `TNext`. Every branch must end with the same type. Operators chained after `Merge` receive every branch output.
 
 ```csharp
-var stream = StreamBuilder<SensorReading>.CreateNewStream("Sensors")
+var stream = StreamBuilder<Reading>.CreateNewStream("Sensors")
     .Stream()
     .Merge<string>(merge => merge
         .Branch("all", b => b.Map(r => $"{r.SensorId}: {r.Value}"))
@@ -76,7 +96,7 @@ var stream = StreamBuilder<SensorReading>.CreateNewStream("Sensors")
 A running stream can gain and lose branches without being rebuilt.
 
 ```csharp
-var stream = StreamBuilder<Order>.CreateNewStream("Orders")
+var stream = StreamBuilder<CustomerOrder>.CreateNewStream("Orders")
     .Stream()
     .AddBranch("audit", b => b.Sink(order => auditLog.Write(order)))
     .Sink(order => repository.Save(order))
@@ -85,7 +105,7 @@ var stream = StreamBuilder<Order>.CreateNewStream("Orders")
 stream.Start();
 
 // Later: start sending VIP orders to a CRM, then stop
-stream.AddBranch<Order>("vip", order => order.Customer.IsVip, b => b
+stream.AddBranch<CustomerOrder>("vip", order => order.Customer.IsVip, b => b
     .Sink(order => crm.Notify(order)));
 
 stream.RemoveBranch("vip"); // true: the branch existed and was removed
@@ -112,6 +132,14 @@ Runtime branch names must be unique across the whole stream; adding a name that 
 ## Real-World Examples
 
 Each example declares the records and service interfaces it uses, so you can paste it into a project that references `Cortex.Streams` and plug in your own implementations.
+
+The examples use these namespaces:
+
+```csharp
+using Cortex.States;                  // InMemoryStateStore
+using Cortex.Streams;
+using Cortex.Streams.ErrorHandling;   // StreamExecutionOptions, ErrorHandlingStrategy
+```
 
 ### E-Commerce Order Fulfilment
 
@@ -290,7 +318,7 @@ public class SensorTelemetry
         _stream = StreamBuilder<SensorReading>.CreateNewStream("SensorTelemetry")
             .Stream()
             .AddBranch("overheat", r => r.Temperature > 90, b => b
-                .Sink(r => pager.Page($"{r.SensorId} at {r.Site} reports {r.Temperature:F1} C")))
+                .Sink(r => pager.Page(FormattableString.Invariant($"{r.SensorId} at {r.Site} reports {r.Temperature:F1} C"))))
             .AddBranch("averages", b => b
                 .TumblingWindow(r => r.SensorId, r => r.Timestamp, averageWindow)
                 .Map(w => new SensorAverage(w.Key, w.WindowStart, w.Items.Average(r => r.Temperature)))
@@ -374,6 +402,8 @@ public class OrderWebhooks
 | The same item delivered to several sinks, with little processing per sink | `FanOut` (see [FanOut - Multiple Sinks](FanOut-Multiple-Sinks.md)) |
 | Several routes or rules whose results continue as one stream | `Merge` |
 | Consumers that come and go while the stream runs | `stream.AddBranch<T>` and `stream.RemoveBranch`, attached to a branch point declared with `AddBranch` or `FanOut` |
+| Enrichment with reference data | a [Stream-Table Join](Stream-Table-Joins.md) before the branches |
+| Correlation of two streams in a time window | a [Stream-Stream Join](Stream-Stream-Joins.md) |
 
 ## Pitfalls
 
@@ -437,3 +467,10 @@ IReadOnlyDictionary<string, IBranchInfo> GetBranches();
 ### Telemetry
 
 `MergeOperator<T>` reports `merge_operator_processed_{T}` (counter) and `merge_operator_processing_time_{T}` (histogram), and traces `MergeOperator.Process` spans, like the other operators.
+
+## Related Documentation
+
+- [FanOut - Multiple Sinks](FanOut-Multiple-Sinks.md)
+- [Stream-Table Joins](Stream-Table-Joins.md)
+- [Stream-Stream Windowed Joins](Stream-Stream-Joins.md)
+- [Stream Performance and Async Processing](stream-performance.md)
