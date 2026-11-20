@@ -30,6 +30,7 @@
     <ProjectReference Include="..\Cortex.Mediator.Behaviors.FluentValidation\Cortex.Mediator.Behaviors.FluentValidation.csproj" />
     <ProjectReference Include="..\Cortex.Mediator.SourceGenerator\Cortex.Mediator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\Cortex.Mediator.Behaviors.Transactional\Cortex.Mediator.Behaviors.Transactional.csproj" />
+    <ProjectReference Include="..\Cortex.Mediator.Scheduling\Cortex.Mediator.Scheduling.csproj" />
     <ProjectReference Include="..\Cortex.Mediator\Cortex.Mediator.csproj" />
     <ProjectReference Include="..\Cortex.Serialization.Yaml\Cortex.Serialization.Yaml.csproj" />
     <ProjectReference Include="..\Cortex.Streams.Kafka\Cortex.Streams.Kafka.csproj" />
