@@ -37,6 +37,28 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             public Func<Task>? AfterSecondSlowCommand { get; set; }
         }
 
+        /// <summary>An in-memory store whose first claim fails, like a database that is briefly unreachable.</summary>
+        public sealed class FlakyStore : IScheduledCommandStore
+        {
+            private readonly InMemoryScheduledCommandStore _inner = new();
+            private int _claims;
+
+            public Task AddAsync(ScheduledCommand command, CancellationToken ct = default) => _inner.AddAsync(command, ct);
+            public Task<ScheduledCommand> GetAsync(string id, CancellationToken ct = default) => _inner.GetAsync(id, ct);
+            public Task<bool> CancelAsync(string id, CancellationToken ct = default) => _inner.CancelAsync(id, ct);
+            public Task<bool> MarkCompletedAsync(string id, int attempt, CancellationToken ct = default) => _inner.MarkCompletedAsync(id, attempt, ct);
+            public Task<bool> MarkFailedAsync(string id, int attempt, string error, DateTimeOffset? retryAt, CancellationToken ct = default)
+                => _inner.MarkFailedAsync(id, attempt, error, retryAt, ct);
+
+            public Task<IReadOnlyList<ScheduledCommand>> ClaimDueAsync(DateTimeOffset now, int maxCount, TimeSpan lockDuration, CancellationToken ct = default)
+            {
+                if (Interlocked.Increment(ref _claims) == 1)
+                    throw new InvalidOperationException("database unavailable");
+
+                return _inner.ClaimDueAsync(now, maxCount, lockDuration, ct);
+            }
+        }
+
         public class SendReminderHandler : ICommandHandler<SendReminderCommand>
         {
             private readonly Recorder _recorder;
@@ -88,7 +110,7 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
         private readonly FakeTimeProvider _clock = new(T0);
         private readonly Recorder _recorder = new();
 
-        private ServiceProvider BuildProvider(Action<SchedulingOptions>? configure = null)
+        private ServiceProvider BuildProvider(Action<SchedulingOptions>? configure = null, IScheduledCommandStore? store = null)
         {
             var services = new ServiceCollection();
             services.AddCortexMediator(Array.Empty<Type>());
@@ -98,6 +120,8 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             services.AddScoped<ICommandHandler<CancellingCommand>, CancellingHandler>();
             services.AddScoped<ICommandHandler<SlowCommand>, SlowHandler>();
             services.AddSingleton<TimeProvider>(_clock);
+            if (store != null)
+                services.AddSingleton(store);
             services.AddCortexMediatorScheduling(configure);
             return services.BuildServiceProvider();
         }
@@ -343,6 +367,61 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             }
 
             Assert.Equal(new[] { "hosted" }, _recorder.Handled);
+        }
+
+        [Fact]
+        public async Task HostedService_KeepsRunning_AfterAPollFails()
+        {
+            using var provider = BuildProvider(o => o.PollingInterval = TimeSpan.FromMilliseconds(20), new FlakyStore());
+            var scheduler = provider.GetRequiredService<ICommandScheduler>();
+            var processor = provider.GetRequiredService<ScheduledCommandProcessor>();
+            await scheduler.ScheduleAsync(new SendReminderCommand { Email = "after-outage" }, TimeSpan.Zero);
+
+            await processor.StartAsync(CancellationToken.None);
+            try
+            {
+                await WaitUntilAsync(() => !_recorder.Handled.IsEmpty);
+            }
+            finally
+            {
+                await processor.StopAsync(CancellationToken.None);
+            }
+
+            Assert.Equal(new[] { "after-outage" }, _recorder.Handled);
+            Assert.False(processor.ExecuteTask!.IsFaulted);
+        }
+
+        [Fact]
+        public async Task HostedService_AfterAFullBatch_PollsAgainWithoutWaiting()
+        {
+            using var provider = BuildProvider(o =>
+            {
+                o.BatchSize = 1;
+                o.PollingInterval = TimeSpan.FromHours(1);
+            });
+            var scheduler = provider.GetRequiredService<ICommandScheduler>();
+            var processor = provider.GetRequiredService<ScheduledCommandProcessor>();
+            await scheduler.ScheduleAsync(new SendReminderCommand { Email = "one" }, TimeSpan.Zero);
+            await scheduler.ScheduleAsync(new SendReminderCommand { Email = "two" }, TimeSpan.Zero);
+
+            await processor.StartAsync(CancellationToken.None);
+            try
+            {
+                await WaitUntilAsync(() => _recorder.Handled.Count == 2);
+            }
+            finally
+            {
+                await processor.StopAsync(CancellationToken.None);
+            }
+
+            Assert.Equal(new[] { "one", "two" }, _recorder.Handled.OrderBy(e => e));
+        }
+
+        private static async Task WaitUntilAsync(Func<bool> condition)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (!condition() && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
         }
     }
 }
