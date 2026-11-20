@@ -15,6 +15,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.3" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.3" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
@@ -30,6 +31,7 @@
     <ProjectReference Include="..\Cortex.Mediator.Behaviors.FluentValidation\Cortex.Mediator.Behaviors.FluentValidation.csproj" />
     <ProjectReference Include="..\Cortex.Mediator.SourceGenerator\Cortex.Mediator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\Cortex.Mediator.Behaviors.Transactional\Cortex.Mediator.Behaviors.Transactional.csproj" />
+    <ProjectReference Include="..\Cortex.Mediator.Scheduling\Cortex.Mediator.Scheduling.csproj" />
     <ProjectReference Include="..\Cortex.Mediator\Cortex.Mediator.csproj" />
     <ProjectReference Include="..\Cortex.Serialization.Yaml\Cortex.Serialization.Yaml.csproj" />
     <ProjectReference Include="..\Cortex.Streams.Kafka\Cortex.Streams.Kafka.csproj" />
