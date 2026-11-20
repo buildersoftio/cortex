@@ -86,17 +86,27 @@ Depends on: Task 2
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedName~Cortex.Tests.Mediator`
 Expected: red regressions captured before fixes; final exit 0, nonzero discovery, 0 failed.
 Commit: fix(mediator): preserve generated dispatch and DI parity
-### Task 4: Add and verify a native consumer smoke fixture
-- [ ] Done
-Files: `tools/Cortex.Mediator.SourceGenerator.Smoke/Cortex.Mediator.SourceGenerator.Smoke.csproj` (create), `tools/Cortex.Mediator.SourceGenerator.Smoke/Program.cs` (create), `docs/plans/2026-11-20-pr235-review-tests.md` (modify)
+### Task 4: Add a native consumer smoke fixture and keep the publish strategy under trimming
+- [x] Done
+Files: `tools/Cortex.Mediator.SourceGenerator.Smoke/Cortex.Mediator.SourceGenerator.Smoke.csproj` (create), `tools/Cortex.Mediator.SourceGenerator.Smoke/Program.cs` (create), `src/Cortex.Mediator/DependencyInjection/MediatorOptions.cs` (modify), `src/Cortex.Mediator/Polyfills/DynamicallyAccessedMembersAttribute.cs` (create), `docs/plans/2026-11-20-pr235-review-tests.md` (modify)
 Depends on: Task 3
-- [ ] Add an isolated net8 console consumer with existing mediator and generator analyzer project references, no new package versions, and assembly opt-in.
-- [ ] Make generated DI/dispatch, representative pipelines/cancellation and all five message kinds fail visibly on wrong results; print one named success line only after all smoke assertions pass.
-- [ ] Run managed, trimmed and win-x64 native publish/execution commands from Verification; record warnings and limits. Do not install prerequisites or redesign runtime APIs if blocked.
-- [ ] Run Release build and full Cortex.Tests, account for every issue requirement and review finding, perform sequential review lenses, and record any confirmed/deferred findings.
-Run: `dotnet run --project tools/Cortex.Mediator.SourceGenerator.Smoke/Cortex.Mediator.SourceGenerator.Smoke.csproj -c Release && dotnet build src/Cortex.Tests/Cortex.Tests.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release`
-Expected: exit 0; smoke success line; Release build succeeds; nonzero test discovery and 0 failed. Trim/native publish and execution must also succeed before claiming those scenarios verified; otherwise this task is blocked with evidence, not marked done.
-Commit: test(mediator): add generated consumer native smoke coverage
+- [x] Add an isolated net8 console consumer with existing mediator and generator analyzer project references, no new package versions, and assembly opt-in.
+- [x] Make generated DI/dispatch, representative pipelines/cancellation and all five message kinds fail visibly on wrong results; print one named success line only after all smoke assertions pass.
+- [x] Run managed, trimmed and win-x64 native publish/execution commands from Verification; record warnings and limits. Do not install prerequisites or redesign runtime APIs if blocked.
+- [x] (User decision 2026-11-20) Annotate `MediatorOptions.NotificationPublishStrategyType` and `UseNotificationPublishStrategy<TStrategy>` with `[DynamicallyAccessedMembers(PublicConstructors)]`, with an internal polyfill for netstandard2.0/2.1, so the strategy constructor survives trimming; red = trimmed/native `--skip-pipelines` crash already recorded.
+- [x] Runtime-configured pipeline behaviors stay a documented limitation (Task 5).
+Run: `dotnet run --project tools/Cortex.Mediator.SourceGenerator.Smoke/Cortex.Mediator.SourceGenerator.Smoke.csproj -c Release`, then trimmed and native publish with `-r win-x64 -p:SmokeMode=trimmed|aot` and run each exe with `--skip-pipelines`, then `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedName~Cortex.Tests.Mediator`
+Expected: managed "SMOKE OK: 10 checks"; trimmed and native "SMOKE OK: 9 checks … (pipeline behaviors skipped)" with no IL2072 at the generated strategy registration; mediator tests 0 failed.
+Commit: fix(mediator): keep the publish strategy constructor under trimming
+### Task 5: Document the generator's trimming and NativeAOT limits
+- [ ] Done
+Files: `src/Cortex.Mediator.SourceGenerator/README.md` (modify), `docs/plans/2026-11-20-pr235-review-tests.md` (modify)
+Depends on: Task 4
+- [ ] Replace the "NativeAOT / Trimming: Compatible" claim with what the smoke runs showed, and add a Scope & Limitations bullet for runtime-configured pipeline behaviors.
+- [ ] Run the Release build and the full Cortex.Tests suite; review the branch lens by lens and record findings.
+Run: `dotnet build src/Cortex.Tests/Cortex.Tests.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter FullyQualifiedName~Cortex.Tests.Mediator`
+Expected: build 0 errors; mediator tests 0 failed. The full suite's 3 consistent Cortex.Streams failures and 1 flaky one are reported separately.
+Commit: docs(mediator): state the generator's trimming and NativeAOT limits
 ## Risks
 - Baseline test/restore failures may prevent progress; never weaken assertions or checks.
 - Native compiler/linker prerequisites or runtime pack downloads may be unavailable. Stop and report what unblocks validation; installation is not authorized.
@@ -126,3 +136,12 @@ Commit: test(mediator): add generated consumer native smoke coverage
 - 2026-11-20 Ruling: open generic message types are skipped by MessageDiscovery, like generic handlers — they cannot be switch cases and only produced false missing-handler diagnostics; MessageDiscovery/MessageRegistration and the README examples changed in Task 3; cost if wrong: no diagnostic for an unhandled open generic message.
 - 2026-11-20 Ruling: 15 text assertions in GeneratorDriverTests/GeneratedMediatorIntegrationTests updated to the new generated text (full case label; handler line with options.HandlerLifetime) — same strictness, and the scoped default is proven at runtime by GeneratedRegistrations_AreScoped_AndResolvePerScope.
 - 2026-11-20 Task 3: complete — `dotnet test … --filter FullyQualifiedName~Cortex.Tests.Mediator` → "Passed! - Failed: 0, Passed: 270".
+- 2026-11-20 Ruling: smoke publish modes are switched by `-p:SmokeMode=trimmed|aot` inside the smoke csproj — `-p:PublishTrimmed=true` on the CLI is a global property and fails the netstandard projects with NETSDK1124; ErrorOnDuplicatePublishOutputFiles=false in the smoke csproj only (both project READMEs are copied; NETSDK1152). Verification commands change accordingly.
+- 2026-11-20 Task 4: managed — `dotnet run --project tools/Cortex.Mediator.SourceGenerator.Smoke/… -c Release` → "SMOKE OK: 10 checks passed through GeneratedMediator".
+- 2026-11-20 Task 4: trimmed — publish → 12 trim warnings (IL2070/IL2077/IL2080 in MediatorOptions.cs and ServiceCollectionExtensions.RegisterPipelineBehaviors; IL2072 in generated GeneratedServiceCollectionExtensions.g.cs(30) at the publish-strategy registration). Full run → "A suitable constructor for type 'TracingBehavior`2[Add,System.Int32]' could not be located"; `--skip-pipelines` → same error for 'Cortex.Mediator.Notifications.SequentialNotificationStrategy'.
+- 2026-11-20 Task 4: native — first link failed ('vswhere.exe' is not recognized; link.exe exit 123); with the VS Installer folder on PATH for that command, publish exit 0. Full run → "Unable to create a generic service for type 'ICommandPipelineBehavior`2[Add,System.Int32]' because 'System.Int32' is a ValueType"; `--skip-pipelines` → commands, void command, query and stream checks pass, then the SequentialNotificationStrategy constructor error in GeneratedMediator.PublishAsync.
+- 2026-11-20 Task 4: BLOCKED — the PR's "NativeAOT / Trimming: Compatible" claim fails at runtime on two paths, both rooted in the runtime library (unannotated `Type` flows in MediatorOptions/RegisterPipelineBehaviors; MS DI cannot close open generic behaviors over value types under AOT) — a fix there, or narrowing the README claim, needs the user's decision.
+- 2026-11-20 Full suite (Release): build "0 Error(s)"; `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → "Failed: 4, Passed: 880, Skipped: 6"; all 4 in Cortex.Streams (SourceOperatorErrorHandlingTests ×2, SessionWindowOperatorTests ×2), rerun → 3 still fail, 1 flaky; `git diff --stat 2a716be..HEAD -- src/Cortex.Streams src/Cortex.Tests/Streams` is empty — inferred pre-existing.
+- 2026-11-20 Ruling (user, via info.request "Also fix the strategy issue"): annotate the publish-strategy type in Cortex.Mediator; pipeline behaviors become a documented limitation; Task 4 amended and Task 5 added.
+- 2026-11-20 Ruling: the smoke program takes an opt-in `--skip-pipelines` flag to isolate generated dispatch from runtime-configured behaviors; the default run always includes them (and still fails trimmed/native, as documented).
+- 2026-11-20 Task 4: complete — `dotnet build src\Cortex.Mediator\Cortex.Mediator.csproj -c Release` (6 TFMs) → "0 Error(s)"; managed → "SMOKE OK: 10 checks"; trimmed and native publish exit 0, IL2072 count 0 (was 1), 11 IL warnings left in pipeline-behavior registration; trimmed and native `--skip-pipelines` → "SMOKE OK: 9 checks passed through GeneratedMediator (pipeline behaviors skipped)"; full trimmed/native runs still fail on TracingBehavior<Add,int>.
