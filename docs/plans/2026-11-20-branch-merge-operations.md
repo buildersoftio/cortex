@@ -1,5 +1,5 @@
 # Plan: Branch merge and dynamic branching for Cortex.Streams (issue #155)
-Status: in-progress
+Status: done
 Date: 2026-11-20 · Agent: lead-developer · Size: large · Base: v3.2/release@47f87da · Branch: v3/feature/155
 Approved: 2026-11-20 via chat (plan card GO)
 Consent: Review panel (2026-11-20)
@@ -191,3 +191,6 @@ Commit: docs(wiki): make branch and merge examples culture-independent
 - 2026-11-20 Ruling: Task 10 also gives the page's three intro snippets their own declarations (`CustomerOrder`, `Reading`, service interfaces) because they used undeclared `Alert`, `alertService`, `crm`, …, and adds a namespaces block to the FanOut page for consistency; FanOut-Multiple-Sinks.md joins Task 10's files — cost if wrong: one extra file in a docs commit.
 - 2026-11-20 Task 10: examples checked — throwaway tests with the intro snippets (including the merge snippet's exact console output) and all five real-world examples verbatim, the sensor example under the de-DE culture now paging "s1 at vienna reports 95.0 C" → "Total tests: 6, Passed: 6"; code-line comparison → "Checked 223 csharp lines, missing 10": the API-reference signatures and one `RemoveBranch` call written as `var removed = …` in the scratch; file deleted.
 - 2026-11-20 Task 10: complete (see commit docs(wiki): make branch and merge examples culture-independent).
+- 2026-11-20 Review (Tasks 6-10): reviewer stand-in, documentation-accuracy lens, all five pages against the code → APPROVE, 0 findings ≥80; 2 of its 3 POSSIBLE items applied as wording fixes (a join-function exception on the cleanup timer terminates the process; `TotalDropped` only counts stop-time rejections under DropNewest/DropOldest); the third (Stop then Start on a buffered stream never recreates the buffer) is not claimed by any page and is reported as a follow-up.
+- 2026-11-20 Cap: the review did not cover the Branch-and-Merge page's prose against the code (outside its brief's file list); that page's examples were run in Task 10.
+- 2026-11-20 Review: 0 findings ≥80, 0 confirmed, 0 fixed, 0 deferred; 2 low-confidence wording fixes applied.

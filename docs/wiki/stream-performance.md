@@ -306,7 +306,7 @@ if (stats != null)
 | `Capacity` | `int` | Maximum buffer capacity |
 | `TotalEnqueued` | `long` | Items buffered since the stream started |
 | `TotalProcessed` | `long` | Items that went through the pipeline without an exception |
-| `TotalDropped` | `long` | Items rejected because the stream was stopping (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
+| `TotalDropped` | `long` | Items rejected under `DropNewest`/`DropOldest` because the stream was stopping (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
 | `UtilizationPercent` | `double` | Current buffer utilization (0-100) |
 
 ### Health Monitoring Example

@@ -601,7 +601,7 @@ app.MapPost("/webhook", (WebhookEvent webhookEvent) =>
        left?.Value,
        right?.Value)
    ```
-   An exception in the join function for an unmatched event happens on the cleanup timer thread, where no caller can catch it.
+   An exception in the join function for an unmatched event happens on the cleanup timer thread, where no caller can catch it; an unhandled exception on a timer thread terminates the process.
 
 7. **Keep sinks thread-safe.** Results arrive from the thread that calls `Emit`, the threads that call `ProcessRight` and the cleanup timer.
 
