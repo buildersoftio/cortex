@@ -1,5 +1,5 @@
 # Plan: Review PR 235 and add executable generator tests
-Status: in-progress
+Status: done
 Date: 2026-11-20 · Agent: lead-developer · Size: large · Base: v3/feature/214@2a716be2 · Branch: sophon/pr235-review-tests
 Approved: 2026-11-20 via info.request
 Consent: Specialist team (2026-11-20)
@@ -99,11 +99,11 @@ Run: `dotnet run --project tools/Cortex.Mediator.SourceGenerator.Smoke/Cortex.Me
 Expected: managed "SMOKE OK: 10 checks"; trimmed and native "SMOKE OK: 9 checks … (pipeline behaviors skipped)" with no IL2072 at the generated strategy registration; mediator tests 0 failed.
 Commit: fix(mediator): keep the publish strategy constructor under trimming
 ### Task 5: Document the generator's trimming and NativeAOT limits
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.SourceGenerator/README.md` (modify), `docs/plans/2026-11-20-pr235-review-tests.md` (modify)
 Depends on: Task 4
-- [ ] Replace the "NativeAOT / Trimming: Compatible" claim with what the smoke runs showed, and add a Scope & Limitations bullet for runtime-configured pipeline behaviors.
-- [ ] Run the Release build and the full Cortex.Tests suite; review the branch lens by lens and record findings.
+- [x] Replace the "NativeAOT / Trimming: Compatible" claim with what the smoke runs showed, and add a Scope & Limitations bullet for runtime-configured pipeline behaviors.
+- [x] Run the Release build and the full Cortex.Tests suite; review the branch lens by lens and record findings.
 Run: `dotnet build src/Cortex.Tests/Cortex.Tests.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter FullyQualifiedName~Cortex.Tests.Mediator`
 Expected: build 0 errors; mediator tests 0 failed. The full suite's 3 consistent Cortex.Streams failures and 1 flaky one are reported separately.
 Commit: docs(mediator): state the generator's trimming and NativeAOT limits
@@ -145,3 +145,5 @@ Commit: docs(mediator): state the generator's trimming and NativeAOT limits
 - 2026-11-20 Ruling (user, via info.request "Also fix the strategy issue"): annotate the publish-strategy type in Cortex.Mediator; pipeline behaviors become a documented limitation; Task 4 amended and Task 5 added.
 - 2026-11-20 Ruling: the smoke program takes an opt-in `--skip-pipelines` flag to isolate generated dispatch from runtime-configured behaviors; the default run always includes them (and still fails trimmed/native, as documented).
 - 2026-11-20 Task 4: complete — `dotnet build src\Cortex.Mediator\Cortex.Mediator.csproj -c Release` (6 TFMs) → "0 Error(s)"; managed → "SMOKE OK: 10 checks"; trimmed and native publish exit 0, IL2072 count 0 (was 1), 11 IL warnings left in pipeline-behavior registration; trimmed and native `--skip-pipelines` → "SMOKE OK: 9 checks passed through GeneratedMediator (pipeline behaviors skipped)"; full trimmed/native runs still fail on TracingBehavior<Add,int>.
+- 2026-11-20 Review: solo, lens by lens over `git diff 2a716be..HEAD` production code — 0 Critical/Important; 2 Minor deferred (struct handlers are registered but DI cannot construct a struct without a public constructor, same as the reflection Mediator; `Location` excluded from model equality can leave stale diagnostic locations on incremental runs, pre-existing pattern). Earlier "PR still depends on Scrutor" claim (from research, unverified) is false: no csproj references Scrutor; the PR's csproj change adds System.Text.Json, used by DefaultCacheKeyGenerator.
+- 2026-11-20 Task 5: complete — Release build + `dotnet test … -c Release --filter FullyQualifiedName~Cortex.Tests.Mediator` (this commit's gate).
