@@ -22,7 +22,6 @@ namespace Cortex.Streams
     {
         private readonly string _name;
         private readonly IOperator _operatorChain;
-        private readonly List<BranchOperator<TCurrent>> _branchOperators;
         private bool _isStarted;
         private bool _isDisposed;
 
@@ -34,7 +33,13 @@ namespace Cortex.Streams
         private BufferedProcessor<TIn> _bufferedProcessor;
         private readonly object _processorLock = new object();
 
+        // Serialises runtime branch changes so a name check and its add happen together
+        private readonly object _branchMutationLock = new object();
 
+        /// <param name="branchOperators">
+        /// Branches declared by the builder. Not stored: branches are read from the operator graph,
+        /// which also holds branches declared before a type-changing operator and branches added at runtime.
+        /// </param>
         internal Stream(
             string name,
             IOperator operatorChain,
@@ -45,59 +50,60 @@ namespace Cortex.Streams
         {
             _name = name;
             _operatorChain = operatorChain;
-            _branchOperators = branchOperators;
             _telemetryProvider = telemetryProvider;
             _executionOptions = executionOptions;
             _performanceOptions = performanceOptions ?? StreamPerformanceOptions.Default;
 
             // Initialize telemetry in operators
-            InitializeTelemetry(_operatorChain);
-            InitializeErrorHandling(_operatorChain);
+            InitializeOperators(_operatorChain);
         }
 
-        private void InitializeTelemetry(IOperator op)
+        /// <summary>
+        /// Applies the stream's telemetry provider and error handling options to every operator reachable from <paramref name="root"/>.
+        /// </summary>
+        private void InitializeOperators(IOperator root)
         {
-            if (op == null)
+            var operators = CollectOperators(root);
+
+            foreach (var op in operators)
+            {
+                if (op is ITelemetryEnabled telemetryEnabled)
+                {
+                    telemetryEnabled.SetTelemetryProvider(_telemetryProvider);
+                }
+            }
+
+            foreach (var op in operators)
+            {
+                if (op is IErrorHandlingEnabled errorHandlingEnabled)
+                {
+                    errorHandlingEnabled.SetErrorHandling(_executionOptions);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns every operator reachable from <paramref name="root"/>, each once, in depth-first order.
+        /// </summary>
+        private static List<IOperator> CollectOperators(IOperator root)
+        {
+            var result = new List<IOperator>();
+            CollectOperators(root, result, new HashSet<IOperator>());
+            return result;
+        }
+
+        private static void CollectOperators(IOperator op, List<IOperator> result, HashSet<IOperator> visited)
+        {
+            if (op == null || !visited.Add(op))
                 return;
 
-            if (op is ITelemetryEnabled telemetryEnabled)
-            {
-                telemetryEnabled.SetTelemetryProvider(_telemetryProvider);
-            }
+            result.Add(op);
 
             if (op is IHasNextOperators hasNextOperators)
             {
                 foreach (var nextOp in hasNextOperators.GetNextOperators())
                 {
-                    InitializeTelemetry(nextOp);
-                }
-            }
-            else
-            {
-                var field = op.GetType().GetField("_nextOperator", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (field != null)
-                {
-                    var nextOp = field.GetValue(op) as IOperator;
-                    InitializeTelemetry(nextOp);
-                }
-            }
-        }
-
-        private void InitializeErrorHandling(IOperator op)
-        {
-            if (op == null)
-                return;
-
-            if (op is IErrorHandlingEnabled errorHandlingEnabled)
-            {
-                errorHandlingEnabled.SetErrorHandling(_executionOptions);
-            }
-
-            if (op is IHasNextOperators hasNextOperators)
-            {
-                foreach (var nextOp in hasNextOperators.GetNextOperators())
-                {
-                    InitializeErrorHandling(nextOp);
+                    CollectOperators(nextOp, result, visited);
                 }
             }
             else
@@ -106,8 +112,7 @@ namespace Cortex.Streams
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (field != null)
                 {
-                    var nextOp = field.GetValue(op) as IOperator;
-                    InitializeErrorHandling(nextOp);
+                    CollectOperators(field.GetValue(op) as IOperator, result, visited);
                 }
             }
         }
@@ -366,11 +371,76 @@ namespace Cortex.Streams
         public IReadOnlyDictionary<string, IBranchInfo> GetBranches()
         {
             var branchDict = new Dictionary<string, IBranchInfo>();
-            foreach (var branchOperator in _branchOperators)
+            foreach (var fork in CollectOperators(_operatorChain).OfType<IForkOperator>())
             {
-                branchDict[branchOperator.BranchName] = branchOperator;
+                foreach (var branch in fork.GetBranchInfos())
+                {
+                    branchDict[branch.BranchName] = branch;
+                }
             }
             return branchDict;
+        }
+
+        /// <inheritdoc />
+        public void AddBranch<TBranch>(string name, Action<IBranchStreamBuilder<TIn, TBranch>> config)
+        {
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentException("Branch name cannot be null or empty.", nameof(name));
+            if (config == null)
+                throw new ArgumentNullException(nameof(config));
+
+            var fork = FindRuntimeBranchPoint<TBranch>();
+
+            var branchBuilder = new BranchStreamBuilder<TIn, TBranch>(_name);
+            config(branchBuilder);
+
+            if (branchBuilder._firstOperator == null)
+                throw new InvalidOperationException($"Branch '{name}' must have at least one operator.");
+
+            var branchOperator = new BranchOperator<TBranch>(name, branchBuilder._firstOperator);
+
+            // Configure the whole branch before any item can reach it
+            InitializeOperators(branchOperator);
+
+            lock (_branchMutationLock)
+            {
+                if (GetBranches().ContainsKey(name) || !fork.TryAddBranch(name, branchOperator))
+                    throw new ArgumentException($"A branch named '{name}' already exists in stream '{_name}'.", nameof(name));
+            }
+        }
+
+        /// <inheritdoc />
+        public bool RemoveBranch(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return false;
+
+            lock (_branchMutationLock)
+            {
+                var removed = false;
+                foreach (var fork in CollectOperators(_operatorChain).OfType<IForkOperator>())
+                {
+                    removed |= fork.RemoveBranch(name);
+                }
+                return removed;
+            }
+        }
+
+        private ForkOperator<TBranch> FindRuntimeBranchPoint<TBranch>()
+        {
+            var forks = CollectOperators(_operatorChain).OfType<ForkOperator<TBranch>>().ToList();
+
+            if (forks.Count == 0)
+                throw new InvalidOperationException(
+                    $"Stream '{_name}' has no branch point for items of type '{typeof(TBranch).Name}'. " +
+                    "Declare a branch with AddBranch or FanOut at that point when building the stream.");
+
+            if (forks.Count > 1)
+                throw new InvalidOperationException(
+                    $"Stream '{_name}' has {forks.Count} branch points for items of type '{typeof(TBranch).Name}'; " +
+                    "a branch can be added at runtime only when exactly one exists.");
+
+            return forks[0];
         }
 
         public IEnumerable<IDataStore> GetStateStores()
