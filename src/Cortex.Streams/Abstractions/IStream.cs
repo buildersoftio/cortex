@@ -1,6 +1,7 @@
 ﻿using Cortex.States;
 using Cortex.Streams.Abstractions;
 using Cortex.Streams.Performance;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,6 +68,46 @@ namespace Cortex.Streams
         StreamStatuses GetStatus();
 
         IReadOnlyDictionary<string, IBranchInfo> GetBranches();
+
+        /// <summary>
+        /// Adds a branch to the running stream. The branch is attached to the stream's only branch point
+        /// (created by <c>AddBranch</c> or <c>FanOut</c> when the stream was built) whose items are of type
+        /// <typeparamref name="TBranch"/>, and receives the items that reach that point after this call returns.
+        /// </summary>
+        /// <typeparam name="TBranch">The type of the items at the branch point.</typeparam>
+        /// <param name="name">The unique name of the branch.</param>
+        /// <param name="config">An action that configures the branch's operators.</param>
+        /// <exception cref="System.ArgumentException">The name is null or empty, or a branch with this name already exists.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="config"/> is null.</exception>
+        /// <exception cref="System.InvalidOperationException">
+        /// The stream has no branch point, or more than one, for <typeparamref name="TBranch"/>; or the branch has no operators.
+        /// </exception>
+        void AddBranch<TBranch>(string name, Action<IBranchStreamBuilder<TIn, TBranch>> config);
+
+        /// <summary>
+        /// Adds a conditional branch to the running stream: only items matching <paramref name="condition"/> enter it.
+        /// The branch point is chosen as for <see cref="AddBranch{TBranch}(string, Action{IBranchStreamBuilder{TIn, TBranch}})"/>.
+        /// </summary>
+        /// <typeparam name="TBranch">The type of the items at the branch point.</typeparam>
+        /// <param name="name">The unique name of the branch.</param>
+        /// <param name="condition">A predicate deciding which items enter the branch. It follows the stream's error handling.</param>
+        /// <param name="config">An action that configures the branch's operators.</param>
+        /// <exception cref="System.ArgumentException">The name is null or empty, or a branch with this name already exists.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="condition"/> or <paramref name="config"/> is null.</exception>
+        /// <exception cref="System.InvalidOperationException">
+        /// The stream has no branch point, or more than one, for <typeparamref name="TBranch"/>; or the branch has no operators.
+        /// </exception>
+        void AddBranch<TBranch>(string name, Func<TBranch, bool> condition, Action<IBranchStreamBuilder<TIn, TBranch>> config);
+
+        /// <summary>
+        /// Removes a branch from the running stream. Items that enter the branch point after this call
+        /// returns no longer reach the branch; an item already being processed may still complete in it.
+        /// Disposable operators of the branch, such as window operators, are disposed, so windows still
+        /// open in the branch are dropped. Operators after a merge are shared and stay untouched.
+        /// </summary>
+        /// <param name="name">The name of the branch to remove.</param>
+        /// <returns>True if a branch with this name was removed; otherwise false.</returns>
+        bool RemoveBranch(string name);
 
         TStateStore GetStateStoreByName<TStateStore>(string name) where TStateStore : IDataStore;
         IEnumerable<TStateStore> GetStateStoresByType<TStateStore>() where TStateStore : IDataStore;

@@ -1,8 +1,10 @@
-﻿using Cortex.Streams.ErrorHandling;
+﻿using Cortex.Streams.Abstractions;
+using Cortex.Streams.ErrorHandling;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace Cortex.Streams.Operators
 {
@@ -10,9 +12,17 @@ namespace Cortex.Streams.Operators
     /// Operator that splits the stream into multiple branches for fan-out processing.
     /// Forwards telemetry and error handling configuration to all branches.
     /// </summary>
-    internal class ForkOperator<T> : IOperator, IHasNextOperators, ITelemetryEnabled, IErrorHandlingEnabled
+    /// <remarks>
+    /// Branches can be added and removed while items are flowing. Changes are copy-on-write:
+    /// each item reads the branch set once, so a change takes effect for items that reach the
+    /// fork after it, and an item already being processed finishes on the set it started with.
+    /// </remarks>
+    internal class ForkOperator<T> : IOperator, IHasNextOperators, ITelemetryEnabled, IErrorHandlingEnabled, IForkOperator
     {
-        private readonly Dictionary<string, BranchOperator<T>> _branches = new Dictionary<string, BranchOperator<T>>();
+        private readonly object _branchesLock = new object();
+
+        // Immutable snapshot, replaced as a whole under _branchesLock; read without a lock
+        private BranchOperator<T>[] _branches = Array.Empty<BranchOperator<T>>();
         private IOperator _continuationOperator;
 
         // Telemetry fields
@@ -25,6 +35,20 @@ namespace Cortex.Streams.Operators
 
         // Error handling
         private StreamExecutionOptions _executionOptions;
+
+        /// <param name="acceptsRuntimeBranches">
+        /// False for the fork of a merge, so <see cref="IStream{TIn}.AddBranch{TBranch}(string, Action{IBranchStreamBuilder{TIn, TBranch}})"/>
+        /// never attaches a branch that would not end in the merge.
+        /// </param>
+        public ForkOperator(bool acceptsRuntimeBranches = true)
+        {
+            AcceptsRuntimeBranches = acceptsRuntimeBranches;
+        }
+
+        /// <summary>
+        /// Gets whether branches may be added to this fork on a running stream.
+        /// </summary>
+        public bool AcceptsRuntimeBranches { get; }
 
         public void SetTelemetryProvider(ITelemetryProvider telemetryProvider)
         {
@@ -48,7 +72,7 @@ namespace Cortex.Streams.Operators
             }
 
             // Propagate telemetry to all branches
-            foreach (var branch in _branches.Values)
+            foreach (var branch in Volatile.Read(ref _branches))
             {
                 if (branch is ITelemetryEnabled telemetryEnabled)
                 {
@@ -71,7 +95,7 @@ namespace Cortex.Streams.Operators
             _executionOptions = options;
 
             // Forward error handling to all branches
-            foreach (var branch in _branches.Values)
+            foreach (var branch in Volatile.Read(ref _branches))
             {
                 if (branch is IErrorHandlingEnabled errorHandlingEnabled)
                 {
@@ -86,30 +110,96 @@ namespace Cortex.Streams.Operators
             }
         }
 
+        /// <summary>
+        /// Adds a branch, replacing a branch with the same name in its position.
+        /// </summary>
         public void AddBranch(string name, BranchOperator<T> branchOperator)
         {
-            if (string.IsNullOrEmpty(name))
-                throw new ArgumentException("Branch name cannot be null or empty.", nameof(name));
-            if (branchOperator == null)
-                throw new ArgumentNullException(nameof(branchOperator));
+            ValidateBranch(name, branchOperator);
+            ConfigureNewBranch(branchOperator);
 
-            _branches[name] = branchOperator;
-
-            // Propagate telemetry to the new branch if already configured
-            if (_telemetryProvider != null && branchOperator is ITelemetryEnabled telemetryEnabled)
+            lock (_branchesLock)
             {
-                telemetryEnabled.SetTelemetryProvider(_telemetryProvider);
-            }
+                var current = _branches;
+                var index = IndexOf(current, name);
+                BranchOperator<T>[] updated;
 
-            // Propagate error handling to the new branch if already configured
-            if (_executionOptions != null && branchOperator is IErrorHandlingEnabled errorHandlingEnabled)
-            {
-                errorHandlingEnabled.SetErrorHandling(_executionOptions);
+                if (index >= 0)
+                {
+                    updated = (BranchOperator<T>[])current.Clone();
+                    updated[index] = branchOperator;
+                }
+                else
+                {
+                    updated = Append(current, branchOperator);
+                }
+
+                Volatile.Write(ref _branches, updated);
             }
+        }
+
+        /// <summary>
+        /// Adds a branch unless a branch with the same name already exists.
+        /// </summary>
+        /// <returns>True if the branch was added; false if the name is already taken.</returns>
+        public bool TryAddBranch(string name, BranchOperator<T> branchOperator)
+        {
+            ValidateBranch(name, branchOperator);
+            ConfigureNewBranch(branchOperator);
+
+            lock (_branchesLock)
+            {
+                var current = _branches;
+                if (IndexOf(current, name) >= 0)
+                    return false;
+
+                Volatile.Write(ref _branches, Append(current, branchOperator));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes the branch with the given name.
+        /// </summary>
+        /// <returns>The removed branch, or null if the fork has no branch with this name.</returns>
+        public BranchOperator<T> RemoveBranch(string name)
+        {
+            if (name == null)
+                return null;
+
+            lock (_branchesLock)
+            {
+                var current = _branches;
+                var index = IndexOf(current, name);
+                if (index < 0)
+                    return null;
+
+                var updated = new BranchOperator<T>[current.Length - 1];
+                Array.Copy(current, 0, updated, 0, index);
+                Array.Copy(current, index + 1, updated, index, current.Length - index - 1);
+                Volatile.Write(ref _branches, updated);
+                return current[index];
+            }
+        }
+
+        IOperator IForkOperator.RemoveBranch(string name)
+        {
+            return RemoveBranch(name);
+        }
+
+        /// <summary>
+        /// Gets a snapshot of the branches currently attached to the fork, in insertion order.
+        /// </summary>
+        public IReadOnlyList<IBranchInfo> GetBranchInfos()
+        {
+            return (IBranchInfo[])Volatile.Read(ref _branches).Clone();
         }
 
         public void Process(object input)
         {
+            // Read the snapshot once so concurrent branch changes cannot affect this item
+            var branches = Volatile.Read(ref _branches);
+
             if (_telemetryProvider != null)
             {
                 var stopwatch = Stopwatch.StartNew();
@@ -118,8 +208,8 @@ namespace Cortex.Streams.Operators
                 {
                     try
                     {
-                        span.SetAttribute("branch_count", _branches.Count.ToString());
-                        foreach (var branch in _branches.Values)
+                        span.SetAttribute("branch_count", branches.Length.ToString());
+                        foreach (var branch in branches)
                         {
                             branch.Process(input);
                         }
@@ -145,7 +235,7 @@ namespace Cortex.Streams.Operators
             }
             else
             {
-                foreach (var branch in _branches.Values)
+                foreach (var branch in branches)
                 {
                     branch.Process(input);
                 }
@@ -168,7 +258,7 @@ namespace Cortex.Streams.Operators
 
         public IEnumerable<IOperator> GetNextOperators()
         {
-            foreach (var branch in _branches.Values)
+            foreach (var branch in Volatile.Read(ref _branches))
             {
                 yield return branch;
             }
@@ -179,6 +269,61 @@ namespace Cortex.Streams.Operators
             }
         }
 
-        public IReadOnlyDictionary<string, BranchOperator<T>> Branches => _branches;
+        /// <summary>
+        /// Gets a snapshot of the branches, keyed by name.
+        /// </summary>
+        public IReadOnlyDictionary<string, BranchOperator<T>> Branches
+        {
+            get
+            {
+                var snapshot = new Dictionary<string, BranchOperator<T>>();
+                foreach (var branch in Volatile.Read(ref _branches))
+                {
+                    snapshot[branch.BranchName] = branch;
+                }
+                return snapshot;
+            }
+        }
+
+        private static void ValidateBranch(string name, BranchOperator<T> branchOperator)
+        {
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentException("Branch name cannot be null or empty.", nameof(name));
+            if (branchOperator == null)
+                throw new ArgumentNullException(nameof(branchOperator));
+        }
+
+        private void ConfigureNewBranch(BranchOperator<T> branchOperator)
+        {
+            // Propagate telemetry to the new branch if already configured
+            if (_telemetryProvider != null)
+            {
+                branchOperator.SetTelemetryProvider(_telemetryProvider);
+            }
+
+            // Propagate error handling to the new branch if already configured
+            if (_executionOptions != null)
+            {
+                branchOperator.SetErrorHandling(_executionOptions);
+            }
+        }
+
+        private static int IndexOf(BranchOperator<T>[] branches, string name)
+        {
+            for (var i = 0; i < branches.Length; i++)
+            {
+                if (string.Equals(branches[i].BranchName, name, StringComparison.Ordinal))
+                    return i;
+            }
+            return -1;
+        }
+
+        private static BranchOperator<T>[] Append(BranchOperator<T>[] branches, BranchOperator<T> branchOperator)
+        {
+            var updated = new BranchOperator<T>[branches.Length + 1];
+            Array.Copy(branches, updated, branches.Length);
+            updated[branches.Length] = branchOperator;
+            return updated;
+        }
     }
 }

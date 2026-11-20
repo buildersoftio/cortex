@@ -73,6 +73,16 @@ namespace Cortex.Streams.Abstractions
         IStreamBuilder<TIn, TCurrent> AddBranch(string name, Action<IBranchStreamBuilder<TIn, TCurrent>> config);
 
         /// <summary>
+        /// Adds a conditional branch: only items matching <paramref name="condition"/> enter it,
+        /// while the main pipeline still receives every item.
+        /// </summary>
+        /// <param name="name">The name of the branch.</param>
+        /// <param name="condition">A predicate deciding which items enter the branch. It follows the stream's error handling.</param>
+        /// <param name="config">An action to configure the branch.</param>
+        /// <returns>The stream builder for method chaining.</returns>
+        IStreamBuilder<TIn, TCurrent> AddBranch(string name, Func<TCurrent, bool> condition, Action<IBranchStreamBuilder<TIn, TCurrent>> config);
+
+        /// <summary>
         /// Creates a fan-out pattern to send data to multiple sinks simultaneously.
         /// Use this when you need to send the same data to multiple destinations
         /// without intermediate transformations between sinks.
@@ -102,6 +112,29 @@ namespace Cortex.Streams.Abstractions
         /// </code>
         /// </example>
         IFanOutBuilder<TIn, TCurrent> FanOut(Action<IFanOutBuilder<TIn, TCurrent>> config);
+
+        /// <summary>
+        /// Splits the stream into branches and merges their outputs back into one stream.
+        /// Each item reaches every (matching) branch in the order they were added, and every
+        /// branch output continues to the operators chained after the merge.
+        /// </summary>
+        /// <typeparam name="TNext">The type of the merged items; every branch must produce it.</typeparam>
+        /// <param name="config">An action that adds the branches with <see cref="IMergeBuilder{TIn, TCurrent, TNext}.Branch(string, Func{IBranchStreamBuilder{TIn, TCurrent}, IBranchStreamBuilder{TIn, TNext}})"/>.</param>
+        /// <returns>A stream builder for the merged stream.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="config"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">No branch was added.</exception>
+        /// <example>
+        /// <code>
+        /// var stream = StreamBuilder&lt;Order&gt;.CreateNewStream("Orders")
+        ///     .Stream()
+        ///     .Merge&lt;string&gt;(merge =&gt; merge
+        ///         .Branch("all", b =&gt; b.Map(o =&gt; $"order {o.Id}"))
+        ///         .Branch("large", o =&gt; o.Amount &gt; 10000, b =&gt; b.Map(o =&gt; $"large order {o.Id}")))
+        ///     .Sink(Console.WriteLine)
+        ///     .Build();
+        /// </code>
+        /// </example>
+        IStreamBuilder<TIn, TNext> Merge<TNext>(Action<IMergeBuilder<TIn, TCurrent, TNext>> config);
 
         /// <summary>
         /// Builds the stream

@@ -1,0 +1,196 @@
+# Plan: Branch merge and dynamic branching for Cortex.Streams (issue #155)
+Status: done
+Date: 2026-11-20 · Agent: lead-developer · Size: large · Base: v3.2/release@47f87da · Branch: v3/feature/155
+Approved: 2026-11-20 via chat (plan card GO)
+Consent: Review panel (2026-11-20)
+Execution: inline
+Request: "In our journey of releasing v3.2 we need to work in the next feature, the documentation of it is at folloing issue #155 in github, lets analyise it and plan its implementation, create the PR to merge it into v3.2/release branch."
+
+## Goal
+A Cortex.Streams pipeline can merge the outputs of several (optionally conditional) branches back into one continuing stream, and a built stream can add and remove branches at runtime through a thread-safe fork, with tests proving each behaviour and a PR open against v3.2/release.
+## Context
+- Issue #155 (https://github.com/buildersoftio/cortex/issues/155), verbatim: "Branch merging – after processing in different branches, users may need to merge results. Provide a Merge operator that takes multiple branches and combines their outputs into a single stream. Dynamic branching – allow branches to be added or removed at runtime. Expose a RemoveBranch method and ensure that branch operator dictionaries are thread‑safe, and they can be conditional." GitHub milestone is "Cortex v3.5"; the user targets v3.2/release.
+- Fork storage is a plain `Dictionary` (src/Cortex.Streams/Operators/ForkOperator.cs:15), enumerated on the hot path (:122, :148) and mutated by `AddBranch`, which silently replaces a same-named branch (:89-96). `Branches` exposes the live dictionary (:182). There is no remove.
+- `AddBranch` telemetry/error-handling propagation to a late branch only reaches the `BranchOperator` and its first operator (ForkOperator.cs:98-108, BranchOperator.cs:60-76); `Stream` walks the full graph only once, in its constructor (src/Cortex.Streams/Stream.cs:53-56, :58-113).
+- `Stream.InitializeTelemetry` / `InitializeErrorHandling` recurse without a visited set (Stream.cs:58-113); `CollectStateStores` already uses one (:384-412). A merge point reachable from several branches needs the visited set.
+- Builder branching: src/Cortex.Streams/StreamBuilder.cs:234-276. One fork per builder instance; operators chained after `AddBranch` become the fork's continuation (ForkOperator.cs:158-167). Type-changing operators create a new builder without `_branchOperators` (StreamBuilder.cs:101), so `Stream.GetBranches()` (Stream.cs:366-374) loses branches declared before a `Map` — pre-existing.
+- Branch builder: src/Cortex.Streams/BranchStreamBuilder.cs:19-20 (internal `_firstOperator`, `_lastOperator`), `Sink` returns void (:84-118). `BranchOperator.SetNext` throws (BranchOperator.cs:113-116).
+- Conditional routing pattern to reuse: FanOut builds `FilterOperator` → sink inside a branch (src/Cortex.Streams/FanOutBuilder.cs:94-110).
+- Public surface touched: `IStream<TIn>` (src/Cortex.Streams/Abstractions/IStream.cs:10-79), `IStreamBuilder<TIn,TCurrent>` (src/Cortex.Streams/Abstractions/IStreamBuilder.cs:27-110).
+- Targets net10.0;net9.0;net8.0;net7.0;netstandard2.1 with `LangVersion 8.0` (src/Cortex.Streams/Cortex.Streams.csproj:4-5): no records, `is not`, target-typed `new`, or init-only setters.
+- No `InternalsVisibleTo` in Cortex.Streams: tests go through the public API. Tests live in src/Cortex.Tests/Streams/Tests (namespace `Cortex.Tests.Streams.Tests`, xUnit + Moq, TelemetryTests.cs:6-15).
+- Known pre-existing failures: 4 Cortex.Streams tests (issue #238: two SourceOperatorErrorHandlingTests, two SessionWindowOperatorTests). The full-suite run is reported with these named separately.
+- Project rules (CONTRIBUTING.md:77-78): "Ensure your code adheres to the existing style and conventions" and "Include or update tests for your changes."
+- Branch naming follows the repo's `v3/feature/<issue>` convention (e.g. v3/feature/214).
+- User choices (2026-11-20, info.request): runtime add attaches to the fork selected by element type; add a wiki page; review panel.
+- Assumption: "they can be conditional" means a branch may carry a predicate that decides which items enter it, both at build time and at runtime.
+- Assumption: merging happens inside one pipeline; merging two separately built `IStream` instances is out of scope.
+## Approach
+Make `ForkOperator<T>` copy-on-write: mutations take a lock and publish a new ordered `BranchOperator<T>[]` snapshot; `Process` reads the snapshot once, so in-flight items finish on the old set and no enumeration can be invalidated. Add `TryAddBranch` (rejects duplicates) and `RemoveBranch`, and an internal non-generic `IForkOperator` (element type, branch infos, remove) so `Stream` can find forks by walking the operator graph. `IStream<TIn>` gains `AddBranch<TBranch>(name, config)`, `AddBranch<TBranch>(name, condition, config)` and `bool RemoveBranch(name)`; runtime add targets the single non-merge fork whose element type is `TBranch` (none or several → `InvalidOperationException`), initialises telemetry and error handling on the whole new branch subgraph before publishing it, and `GetBranches()` is rebuilt from the live graph (fixing the lost-after-Map case). Conditional branches reuse the FanOut pattern: a `FilterOperator<T>(condition)` heads the branch chain, so error handling and telemetry come for free; `IStreamBuilder` gains `AddBranch(name, condition, config)`. Merge adds `IStreamBuilder.Merge<TNext>(Action<IMergeBuilder<TIn,TCurrent,TNext>>)`, where each `Branch(name[, condition], b => …)` returns the branch builder whose last operator is wired into a shared `MergeOperator<TNext>`; the merge forwards each branch output, in branch order, to whatever is chained after it, and an empty branch (`b => b`) passes items straight through.
+Rejected: `ConcurrentDictionary` — no stable branch order and enumeration still races with remove semantics; the snapshot array is cheaper on the hot path.
+Rejected: a lock around `Process` — serialises the whole pipeline and deadlocks when a branch re-enters `AddBranch`.
+Rejected: named fork points for runtime add — new concept and more API; the user chose type-selected fork with an ambiguity error.
+Rejected: a lock inside `MergeOperator` — every other operator is unsynchronised; serialising only after a merge would be inconsistent and slow.
+Rejected: changing build-time duplicate-name behaviour (silent replace) — existing behaviour; only the new runtime API rejects duplicates.
+## Out of scope
+- Merging separately built `IStream` instances; runtime add of merge branches (remove works on any branch); nested merges inside a branch builder.
+- Fixing the 4 known failing tests (issue #238); changing FanOut semantics; package version bumps; CI changes.
+- NativeAOT/trimming checks for Cortex.Streams.
+## Verification
+- `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release` → exit 0, "0 Error(s)" for all five target frameworks.
+- `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"` → "Failed: 0", exit 0.
+- `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → only the 4 issue-#238 tests fail; any other failure blocks the PR.
+- End to end: a test builds `Stream → Merge(two branches mapping to string, one conditional) → Sink`, emits values, then at runtime adds a conditional branch and removes another while `EmitAsync` runs concurrently, and asserts exact sink contents with no exception.
+## Orchestration
+- Consent: Review panel (2026-11-20) · Estimate: 4 agents, 2 waves, about 38 cards (3 extra), ≈2.4× Solo tokens
+- Companions: researcher=researcher · software-architect=software-architect · developer=developer · code-reviewer=— (stand-in; not on the allowed delegation list) · security-reviewer=— · qa-engineer=qa-engineer · debugger=— · ui-ux-designer=—
+| Wave | Phase | Agents | Access | Briefs | Gate | Status |
+|---|---|---|---|---|---|---|
+| 1 | Review | reviewer stand-in (correctness), reviewer stand-in (spec), qa-engineer (gaps) | read-only, code tools, 25 | READ_FIRST sophon-scratch-review.diff | FINDINGS ≥80, diff only; I refute each Critical/Important from the code | done |
+| 2 | Critic | reviewer stand-in (completeness) | read-only, code tools, 15 | request, Goal, Verification, commits | each item checked by me | done |
+## Tasks
+### Task 1: Thread-safe fork with runtime AddBranch and RemoveBranch
+- [x] Done
+Files: `src/Cortex.Streams/Operators/ForkOperator.cs` (modify), `src/Cortex.Streams/Operators/IForkOperator.cs` (create), `src/Cortex.Streams/Abstractions/IStream.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Tests/Streams/Tests/DynamicBranchingTests.cs` (create)
+Depends on: none
+- [x] Add `IStream.AddBranch<TBranch>(string name, Action<IBranchStreamBuilder<TIn,TBranch>> config)` and `bool RemoveBranch(string name)` with XML docs; implement in `Stream` (find forks via graph walk with a visited set; none or several matching → `InvalidOperationException`; duplicate name → `ArgumentException`; branch with no operators → `InvalidOperationException`, as StreamBuilder.cs:266-269).
+- [x] Write DynamicBranchingTests: added branch receives only later items; removed branch stops receiving; `RemoveBranch` of unknown name returns false; duplicate/no-fork/ambiguous errors; runtime branch gets error handling (a throwing Map with the Skip strategy does not stop the stream); `GetBranches()` reflects add/remove and still lists branches declared before a `Map`; re-entrant add from inside a branch sink; 4 threads `EmitAsync` while another adds/removes 100 times with no exception.
+- [x] Run the tests red: the re-entrant test fails with "Collection was modified" on the dictionary fork.
+- [x] Make `ForkOperator` copy-on-write (lock + `Volatile` snapshot array, ordered), add `TryAddBranch`/`RemoveBranch`, implement `IForkOperator`; `Branches` returns a snapshot copy; `GetBranches()` walks the graph; visited sets in `InitializeTelemetry`/`InitializeErrorHandling`.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: feat(streams): add runtime AddBranch and RemoveBranch with thread-safe fork
+### Task 2: Conditional branches at build time and runtime
+- [x] Done
+Files: `src/Cortex.Streams/Abstractions/IStreamBuilder.cs` (modify), `src/Cortex.Streams/StreamBuilder.cs` (modify), `src/Cortex.Streams/BranchStreamBuilder.cs` (modify), `src/Cortex.Streams/Abstractions/IStream.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Tests/Streams/Tests/BranchMergeTests.cs` (create), `src/Cortex.Tests/Streams/Tests/DynamicBranchingTests.cs` (modify)
+Depends on: Task 1
+- [x] Write tests first: `AddBranch(name, condition, config)` routes only matching items and the main path still gets all; null condition → `ArgumentNullException`; a throwing condition follows the stream's error strategy; runtime `AddBranch<T>(name, condition, config)` routes only matching items. Run red (compile error on the missing overloads).
+- [x] Add `IStreamBuilder.AddBranch(string name, Func<TCurrent,bool> condition, Action<IBranchStreamBuilder<TIn,TCurrent>> config)` and the `IStream` runtime overload; both prepend a `FilterOperator<T>(condition)` to the branch chain (FanOutBuilder.cs:102-107 pattern) through one shared helper.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: feat(streams): support conditional branches
+### Task 3: Merge operator combining branch outputs into one stream
+- [x] Done
+Files: `src/Cortex.Streams/Operators/MergeOperator.cs` (create), `src/Cortex.Streams/Abstractions/IMergeBuilder.cs` (create), `src/Cortex.Streams/MergeBuilder.cs` (create), `src/Cortex.Streams/Operators/ForkOperator.cs` (modify), `src/Cortex.Streams/Abstractions/IStreamBuilder.cs` (modify), `src/Cortex.Streams/StreamBuilder.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Tests/Streams/Tests/BranchMergeTests.cs` (modify)
+Depends on: Task 2
+- [x] Write tests first: two branches mapping `int` to `string` merge into one sink in branch order per item; a conditional merge branch; `b => b` pass-through branch; `Map`/`Filter` chained after the merge; merged branches listed by `GetBranches()`; operators after the merge count each merged item once; error strategy reaches operators after the merge; state stores in branches and after the merge are found by `GetStateStoreByName`; no branches → `InvalidOperationException`; duplicate branch name → `ArgumentException`; a config returning an unrelated builder → `ArgumentException`; `RemoveBranch` on a merge branch stops its output. Run red (compile error on missing `Merge`).
+- [x] Add `MergeOperator<T>` (`IOperator`, `IHasNextOperators`, `ITelemetryEnabled`, forwards to next), `IMergeBuilder<TIn,TCurrent,TNext>` with `Branch(name, config)` and `Branch(name, condition, config)` where config is `Func<IBranchStreamBuilder<TIn,TCurrent>, IBranchStreamBuilder<TIn,TNext>>`, `MergeBuilder`, and `IStreamBuilder.Merge<TNext>(Action<IMergeBuilder<…>>)` returning `IStreamBuilder<TIn,TNext>`; mark the merge's fork as non-targetable for runtime add.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: feat(streams): add Merge operator to combine branch outputs
+### Task 4: Document branching, merging and dynamic branches
+- [x] Done
+Files: `docs/wiki/Branch-and-Merge.md` (create)
+Depends on: Task 3
+- [x] Write the wiki page in the style of docs/wiki/FanOut-Multiple-Sinks.md: conditional branches, Merge, runtime AddBranch/RemoveBranch, thread-safety and ordering guarantees, the fork-selection rule and its errors; every snippet uses the signatures from Tasks 1-3.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(streams): document branch merge and dynamic branching
+### Task 5: Add real-life examples to the wiki
+- [x] Done
+Files: `docs/wiki/Branch-and-Merge.md` (modify)
+Depends on: Task 4
+- [x] Add a "Real-World Examples" section (order fulfilment, fraud signals, security log normalisation, IoT monitoring with a runtime debug tap, per-tenant webhook subscriptions), a "Choosing Between AddBranch, FanOut and Merge" table and a "Pitfalls" list; each example declares its own records and service interfaces.
+- [x] Compile and run every example verbatim in a throwaway test file with fakes and assertions for each claim the wiki makes, then delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(streams): add real-life branch and merge examples
+### Task 6: Make the FanOut wiki examples correct and runnable
+- [x] Done
+Files: `docs/wiki/FanOut-Multiple-Sinks.md` (modify)
+Depends on: Task 5
+- [x] Fix every code block against the current API: `IStream<X, X>` → `IStream<X>` (lines 211, 268, 327, 384); `SetupPipeline` declared `void` but returns the stream (:159-199); `WithErrorHandling(options => …)` and `ErrorAction` do not exist; it takes a `StreamExecutionOptions` with `ErrorHandlingStrategy`/`OnError` (`StreamErrorHandler` → `ErrorHandlingDecision`) (:515-531); `log with { … }` needs a record.
+- [x] Make each real-world example self-contained: declare its records and service interfaces, use constructor-injected fields, as on the Branch-and-Merge page.
+- [x] Fix the text: the "Sinks are executed in parallel" note (:140) contradicts the code and "Performance Considerations" (:538); sinks run one after another in the order added. Replace the garbled characters (`?`, `�C`) with plain text, and fix the "Related Documentation" links (:561-564) that point to pages that do not exist.
+- [x] Compile and run every full example verbatim in a throwaway test file, with fakes and assertions for each claim the page makes; compare the page's code lines with it; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make FanOut examples compile against the current API
+### Task 7: Make the Stream-Stream Joins wiki examples correct and runnable
+- [x] Done
+Files: `docs/wiki/Stream-Stream-Joins.md` (modify)
+Depends on: Task 6
+- [x] Check each example against `StreamStreamJoinOperator` (StreamStreamJoinOperator.cs:92-100, `ProcessRight` :179, `GetLeftBufferCount` :425) and `StreamJoinConfiguration` (StreamJoinTypes.cs:119-179; there is no `RightJoin` factory). Declare the undeclared types and helpers (`Location`, `NotifyCustomer`, queues, `Result`, …) or replace them with injected interfaces; replace the non-existent `KafkaSourceOperator<T>("orders-topic")` / `KafkaConsumer<T>` usage with the real Cortex.Streams.Kafka API or a clearly marked placeholder interface.
+- [x] Check the documented semantics against the operator (inner/left/outer emission, grace period, when unmatched rows are emitted, the "Output" block); fix the garbled characters and the "See Also" links.
+- [x] Compile and run every full example verbatim in a throwaway test file; compare the page's code lines; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make stream-stream join examples compile and match behaviour
+### Task 8: Make the Stream-Table Joins wiki examples correct and runnable
+- [x] Done
+Files: `docs/wiki/Stream-Table-Joins.md` (modify)
+Depends on: Task 7
+- [x] Check `Join`/`LeftJoin` usage (StreamBuilder.cs Join/LeftJoin) and the "Output" blocks; fix `o.ProductId` on an `Order` that has none (:271), the anonymous `new { o, c }` with an undeclared `Process`, the `RocksDbStateStore` example (needs Cortex.States.RocksDb; ctor `RocksDbStateStore(name, dbPath, options)`), the undeclared helpers, and the "See Also" links.
+- [x] Compile and run every full example verbatim in a throwaway test file; compare the page's code lines; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make stream-table join examples compile and match behaviour
+### Task 9: Make the stream performance wiki examples correct and runnable
+- [x] Done
+Files: `docs/wiki/stream-performance.md` (modify)
+Depends on: Task 8
+- [x] Fix `IStream<Order, ProcessedOrder>` (:546) and the "IStream&lt;TIn, TCurrent&gt; Methods" heading (:507); check every option, default, preset and exception against StreamPerformanceOptions.cs:9-157 and BufferFullException.cs; check the backpressure "Behavior" claims (return values, timeouts) against the buffered processor; declare the undeclared types and the logger.
+- [x] Compile and run the complete example and the presets verbatim in a throwaway test file; compare the page's code lines; delete the file.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make stream performance examples compile against the current API
+### Task 10: Recheck the Branch-and-Merge wiki examples
+- [x] Done
+Files: `docs/wiki/Branch-and-Merge.md` (modify), `docs/wiki/FanOut-Multiple-Sinks.md` (modify)
+Depends on: Task 9
+- [x] Make the sensor example's pager text culture-independent (`{r.Temperature:F1}` prints `95,0` under a German culture); link the other wiki pages from "Choosing Between AddBranch, FanOut and Merge"; rerun all five examples verbatim and compare the code lines again.
+Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
+Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
+Commit: docs(wiki): make branch and merge examples culture-independent
+## Risks
+- Adding members to public `IStream<TIn>` and `IStreamBuilder<TIn,TCurrent>` breaks third-party implementations of those interfaces; called out in the PR.
+- Concurrency tests can be timing-dependent; they assert absence of exceptions and final counts with joins, never sleeps.
+- An item already inside the old snapshot can still reach a branch removed mid-flight; documented as the guarantee ("takes effect for items that enter the fork afterwards").
+- Full-suite exit code is non-zero until issue #238 is fixed; the gate checks that only those 4 tests fail.
+## Progress
+- 2026-11-20 Task 1: red — DynamicBranchingTests on the dictionary fork → "Failed: 1, Passed: 12" (AddBranch_FromInsideRunningBranch_TakesEffectForLaterItems; failure message not captured).
+- 2026-11-20 Ruling: `Stream` keeps its `branchOperators` constructor parameter but no longer stores it; `GetBranches()` reads the operator graph — avoids changing the public `SinkBuilder` constructor — cost if wrong: one unused internal parameter.
+- 2026-11-20 Ruling: runtime branch names must be unique across the whole stream (checked under a stream-level lock), and `RemoveBranch` removes the name from every fork — `GetBranches()` is keyed by name — cost if wrong: two forks can no longer hold the same runtime name.
+- 2026-11-20 Ruling: Task 3's "telemetry initialised once per downstream operator" test becomes "operators after the merge count each merged item once" — operators already re-propagate telemetry to their next operator (MapOperator.cs:59-63), so providers are set more than once today — cost if wrong: none; metrics are what users observe.
+- 2026-11-20 Task 1: complete — build and filtered tests green (see commit feat(streams): add runtime AddBranch and RemoveBranch with thread-safe fork).
+- 2026-11-20 Ruling: Task 2 tests were written after the overloads, so no red run was captured; the new overloads did not exist before this task, so every new test would have failed to compile — cost if wrong: none for behaviour; TDD evidence missing for this task.
+- 2026-11-20 Ruling: the shared helper is `BranchStreamBuilder.BuildBranch` (internal), so BranchStreamBuilder.cs joins Task 2's files; the condition filter is prepended after the user's chain is built, so `b => { }` still fails as an empty branch — cost if wrong: none.
+- 2026-11-20 Task 2: repair 1/3 — filter `FullyQualifiedName~ErrorHandlingTests` also matched `SourceOperatorErrorHandlingTests`, whose 2 known issue-#238 failures failed the run ("Failed: 2, Passed: 62"; all new tests passed) → filter narrowed to `FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests` in every Run line and Verification; those tests stay covered by the full-suite gate.
+- 2026-11-20 Task 2: complete — build and filtered tests green (see commit feat(streams): support conditional branches).
+- 2026-11-20 Task 3: red — `dotnet build src/Cortex.Tests/Cortex.Tests.csproj -c Release` → "error CS1061: 'IStreamBuilder<int, int>' does not contain a definition for 'Merge'" (BranchMergeTests.cs:105 and others).
+- 2026-11-20 Ruling: the "not targetable by runtime add" flag lives on `ForkOperator` (`AcceptsRuntimeBranches`), so ForkOperator.cs joins Task 3's files; the end-to-end Verification scenario is the test `BranchMergeTests.EndToEnd_MergeWithRuntimeBranchChanges` — cost if wrong: none.
+- 2026-11-20 Task 3: complete — build and filtered tests green (see commit feat(streams): add Merge operator to combine branch outputs).
+- 2026-11-20 Task 4: complete — docs/wiki/Branch-and-Merge.md; build and filtered tests green (see commit docs(streams): document branch merge and dynamic branching).
+- 2026-11-20 Review wave 1: correctness stand-in 0 findings ≥80 (APPROVE); spec stand-in 1 Important (F1: `RemoveBranch` leaves window/join timers of the removed branch running); qa-engineer 6 Important test gaps (no forced overlap in concurrency tests, in-flight snapshot, FanOut runtime add, runtime name vs merge branch, failed Merge leaves pipeline unchanged, branch point after an operator without `IHasNextOperators`).
+- 2026-11-20 Refute (inline, from the code): F1 CONFIRMED — TumblingWindowOperator.cs:57 starts a 100 ms timer that only Dispose stops (:231), and `Stream.RemoveBranch` never disposed; red test `RemoveBranch_DisposesWindowOperatorsOfTheRemovedBranch` → "Failed: 1, Passed: 34". Test gaps accepted as written.
+- 2026-11-20 Ruling: removal disposes only operators exclusive to the removed branch (walk stops at the merge); open windows are dropped, not flushed — flushing would emit from a branch the caller just removed — cost if wrong: users expecting a final flush lose the last partial window.
+- 2026-11-20 Fix: complete — red test green; filtered tests "Passed! - Failed: 0, Passed: 112" (see commit fix(streams): dispose operators of removed branches).
+- 2026-11-20 Re-review: done inline on the fix commit (one round, F1 ADDRESSED: Stream.cs RemoveBranch disposes exclusive operators, stops at IMergeOperator; covered by RemoveBranch_DisposesWindowOperatorsOfTheRemovedBranch and RemoveMergeBranch_KeepsOperatorsAfterTheMergeRunning).
+- 2026-11-20 Cap: re-review ran inline, not through a code-reviewer agent — the agent is not on the allowed delegation list and the estimate had no slot for it.
+- 2026-11-20 Critic: completeness stand-in → COMPLETE, 0 findings ≥80; POSSIBLE: the concurrent phase of the end-to-end test asserts a count, not exact contents.
+- 2026-11-20 Verification: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → "Failed: 4, Passed: 915, Skipped: 6"; the 4 failures are exactly the issue-#238 tests.
+- 2026-11-20 Review: 7 findings (1 spec, 6 test gaps), 7 confirmed, 7 fixed, 0 deferred; minor test ideas from qa-engineer (items 7-12) not pursued.
+- 2026-11-20 Ruling: Task 5 was added after the PR at the user's request ("in the Wiki, please add real-life examples on using Branches and merges") and run without a separate plan approval — docs only, one file, the user named the change — cost if wrong: one docs commit to revise.
+- 2026-11-20 Task 5: examples checked — a throwaway test file with the 5 examples copied verbatim → "Total tests: 5, Passed: 5"; a line-by-line comparison of the wiki code blocks against it → "Checked 171 code lines, missing 1" (only a trailing comment differs); the file was deleted, not committed.
+- 2026-11-20 Task 5: complete (see commit docs(streams): add real-life branch and merge examples).
+- 2026-11-20 Ruling: Tasks 6-10 added at the user's request ("lets update the examples again, it is important"; answers: "All wiki pages", "Add to PR #239") — the Review panel consent covers one final docs review (a reviewer stand-in, accuracy lens) — cost if wrong: one extra delegate call.
+- 2026-11-20 Approved: Tasks 6-10 via info.request ("Approve and start").
+- 2026-11-20 Task 6: examples checked — throwaway tests with the page's examples verbatim (basic usage, 5 real-world examples, error handling incl. Skip/Retry/Stop/Rethrow claims, duplicate-name and no-sink errors, per-sink telemetry name) → "Total tests: 8, Passed: 8"; code-line comparison → "Checked 384 csharp lines, missing 32", all of them best-practice fragments (`.To(...)` snippets) or the placeholder method bodies; file deleted.
+- 2026-11-20 Ruling: the FanOut real-world examples use their own record names (`ShopOrder`, `ShopOrderMetrics`) so they do not clash with the basic-usage `Order` model on the same page; async calls (`SaveAsync(...).GetAwaiter().GetResult()`) became synchronous service methods, with a best practice explaining why sinks are synchronous — cost if wrong: readers who copy the old async calls see a different style.
+- 2026-11-20 Task 6: complete (see commit docs(wiki): make FanOut examples compile against the current API).
+- 2026-11-20 Task 7: findings — matching compares expiry (`timestamp + WindowSize`, StreamStreamJoinOperator.cs:77) with `DateTime.UtcNow` (:234, :290), every unexpired pair emits, unmatched rows come from the cleanup timer thread after `WindowSize + GracePeriod` (:319-412); the old click-attribution example used an outer join whose join function dereferenced the null impression of an unmatched click, which would throw on the timer thread → changed to a left join and explained; `StreamStreamJoinOperator` lives in `Cortex.Streams.Operators`, not `.Joins` → a namespaces block was added.
+- 2026-11-20 Task 7: examples checked — throwaway tests (basic usage incl. its exact console output, 5 use cases incl. unmatched emission via `ForceCleanup`, right join, configuration defaults, the Kafka pattern built without connecting) → "Total tests: 8, Passed: 8"; code-line comparison → "Checked 364 csharp lines, missing 12", all of them the ASP.NET Core webhook illustration (not compilable in the test project) or best-practice fragments; file deleted.
+- 2026-11-20 Task 7: complete (see commit docs(wiki): make stream-stream join examples compile and match behaviour).
+- 2026-11-20 Task 8: examples checked — throwaway tests (inner and left join with their exact "Output" blocks under the invariant culture, the 3 use cases, the table-update loop with a fake change feed, the backend snippet with an in-memory store) → "Total tests: 5, Passed: 5"; code-line comparison → "Checked 191 csharp lines, missing 7": the RocksDB lines (Cortex.States.RocksDb is not referenced by the test project; ctor checked by reading RocksDbStateStore.cs:20) and the best-practice fragment; file deleted.
+- 2026-11-20 Ruling: the gaming example routes premium and standard players with two conditional `AddBranch` calls instead of an `if` in the sink, to show the new feature — cost if wrong: one example changes style.
+- 2026-11-20 Task 8: complete (see commit docs(wiki): make stream-table join examples compile and match behaviour).
+- 2026-11-20 Task 9: findings — the old page's backpressure claims were wrong in three places, each reproduced in a throwaway test: (1) DropNewest discards the most recently *buffered* item, not the incoming one (BufferedProcessor.cs:67-71 maps it to `BoundedChannelFullMode.DropNewest`); (2) with DropNewest/DropOldest the channel drops items itself, so `OnItemDropped` is never called and `TotalDropped` stays 0 (:241-257 only fire when `TryWrite` fails on a closed channel); (3) `EmitAndForget` returns `true` for those drops. Also: `BatchSize` only batches buffer reads, sinks still run per item (:325-336); exceptions that escape the pipeline are swallowed by the consumer (:270-274); `StopAsync`'s token never reaches `Task.WhenAll` (:359-374), so it cannot shorten the drain.
+- 2026-11-20 Ruling: the page documents the library's actual behaviour, with a "Known Limitation" section for the drop callback and counter and a note on `StopAsync`, instead of changing BufferedProcessor in a docs task — cost if wrong: users learn about a limitation that a small code fix could remove; reported to the user as a follow-up.
+- 2026-11-20 Task 9: examples checked — throwaway tests (quick start, every emit method, custom configuration, all three presets field by field, Block timeout, ThrowException with `RejectedItem`, DropOldest → [1,3,4] and DropNewest → [1,2,4] with 0 callbacks and `TotalDropped` 0, swallowed exceptions, `StopAsync` with a cancelled token still waiting, the complete example with mocks, Retry stopping the stream) → "Total tests: 8, Passed: 8" (the 2 drop-strategy rows included); code-line comparison → "Checked 270 csharp lines, missing 25": comments, fragments and the preset variable name `options` (scratch used `opts`); file deleted.
+- 2026-11-20 Task 9: complete (see commit docs(wiki): make stream performance examples compile against the current API).
+- 2026-11-20 Ruling: Task 10 also gives the page's three intro snippets their own declarations (`CustomerOrder`, `Reading`, service interfaces) because they used undeclared `Alert`, `alertService`, `crm`, …, and adds a namespaces block to the FanOut page for consistency; FanOut-Multiple-Sinks.md joins Task 10's files — cost if wrong: one extra file in a docs commit.
+- 2026-11-20 Task 10: examples checked — throwaway tests with the intro snippets (including the merge snippet's exact console output) and all five real-world examples verbatim, the sensor example under the de-DE culture now paging "s1 at vienna reports 95.0 C" → "Total tests: 6, Passed: 6"; code-line comparison → "Checked 223 csharp lines, missing 10": the API-reference signatures and one `RemoveBranch` call written as `var removed = …` in the scratch; file deleted.
+- 2026-11-20 Task 10: complete (see commit docs(wiki): make branch and merge examples culture-independent).
+- 2026-11-20 Review (Tasks 6-10): reviewer stand-in, documentation-accuracy lens, all five pages against the code → APPROVE, 0 findings ≥80; 2 of its 3 POSSIBLE items applied as wording fixes (a join-function exception on the cleanup timer terminates the process; `TotalDropped` only counts stop-time rejections under DropNewest/DropOldest); the third (Stop then Start on a buffered stream never recreates the buffer) is not claimed by any page and is reported as a follow-up.
+- 2026-11-20 Cap: the review did not cover the Branch-and-Merge page's prose against the code (outside its brief's file list); that page's examples were run in Task 10.
+- 2026-11-20 Review: 0 findings ≥80, 0 confirmed, 0 fixed, 0 deferred; 2 low-confidence wording fixes applied.
