@@ -54,18 +54,18 @@ Run: `dotnet build src/Cortex.Mediator.Scheduling/Cortex.Mediator.Scheduling.csp
 Expected: build exit 0; tests 0 failed, exit 0.
 Commit: feat(scheduling): add Cortex.Mediator.Scheduling contracts and serializer
 ### Task 2: Add the in-memory store and CommandScheduler
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.Scheduling/Stores/InMemoryScheduledCommandStore.cs` (create), `src/Cortex.Mediator.Scheduling/CommandScheduler.cs` (create), `src/Cortex.Tests/Mediator/Scheduling/Tests/InMemoryScheduledCommandStoreTests.cs` (create), `src/Cortex.Tests/Mediator/Scheduling/Tests/CommandSchedulerTests.cs` (create), `src/Cortex.Tests/Mediator/Scheduling/Tests/FakeTimeProvider.cs` (create), `docs/plans/2026-11-20-mediator-scheduling.md` (modify)
 Depends on: Task 1
-- [ ] Tests first: delay and absolute schedules store the right ExecuteAt; null command → ArgumentNullException; negative delay → ArgumentOutOfRangeException; cancel of a pending row → Cancelled and never claimable; cancel of unknown/completed id is a no-op; claim returns only due rows, each once, and re-offers rows whose lock expired.
+- [x] Tests first: delay and absolute schedules store the right ExecuteAt; null command → ArgumentNullException; negative delay → ArgumentOutOfRangeException; cancel of a pending row → Cancelled and never claimable; cancel of unknown/completed id is a no-op; claim returns only due rows, each once, and re-offers rows whose lock expired.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedName~Cortex.Tests.Mediator.Scheduling`
 Expected: 0 failed, exit 0.
 Commit: feat(scheduling): add in-memory store and command scheduler
 ### Task 3: Add the processor, options and DI registration
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.Scheduling/SchedulingOptions.cs` (create), `src/Cortex.Mediator.Scheduling/ScheduledCommandProcessor.cs` (create), `src/Cortex.Mediator.Scheduling/DependencyInjection/ServiceCollectionExtensions.cs` (create), `src/Cortex.Tests/Mediator/Scheduling/Tests/ScheduledCommandProcessorTests.cs` (create), `src/Cortex.Tests/Mediator/Scheduling/Tests/SchedulingServiceCollectionTests.cs` (create), `docs/plans/2026-11-20-mediator-scheduling.md` (modify)
 Depends on: Task 2
-- [ ] Tests first, through a real `AddCortexMediator` container: a due command reaches its handler once and is Completed; a not-yet-due one is not dispatched; a cancelled one is never dispatched; a throwing handler is retried after RetryDelay and becomes Failed with LastError after MaxAttempts; one failing command does not stop the rest of the batch; `EnableProcessor = false` registers no hosted service; options are validated (positive intervals, MaxAttempts ≥ 1).
+- [x] Tests first, through a real `AddCortexMediator` container: a due command reaches its handler once and is Completed; a not-yet-due one is not dispatched; a cancelled one is never dispatched; a throwing handler is retried after RetryDelay and becomes Failed with LastError after MaxAttempts; one failing command does not stop the rest of the batch; `EnableProcessor = false` registers no hosted service; options are validated (positive intervals, MaxAttempts ≥ 1).
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedName~Cortex.Tests.Mediator.Scheduling`
 Expected: 0 failed, exit 0.
 Commit: feat(scheduling): add hosted processor and DI registration
@@ -94,3 +94,8 @@ Commit: docs(scheduling): document Cortex.Mediator.Scheduling
 - 2026-11-20 Task 1: complete — `dotnet build …Scheduling.csproj -c Release && dotnet test … --filter …Mediator.Scheduling` → 0 Error(s), no warnings in the new project, Cortex.Mediator.Scheduling.3.0.0.nupkg produced; "Passed! - Failed: 0, Passed: 8".
 - 2026-11-20 Ruling: branch named v3/feature/228 (repo convention) instead of sophon/<slug> — matches existing feature branches merged into v3.2/release — cost if wrong: a rename before push.
 - 2026-11-20 Ruling: stored type name is "FullName, AssemblyName" (no version) and only concrete ICommand types are deserialized — survives package upgrades and refuses arbitrary types from the store — cost if wrong: commands whose assembly is renamed can no longer be read.
+- 2026-11-20 Task 2: complete — red: CS0246 'CommandScheduler'/'InMemoryScheduledCommandStore' not found; green: `dotnet test … --filter …Mediator.Scheduling` → "Passed! - Failed: 0, Passed: 29" (committed as d9b4e86; its plan tick was folded into the Task 3 commit after a failed plan patch).
+- 2026-11-20 Ruling: CancelAsync is idempotent (unknown, processing, completed or cancelled ids are a no-op; empty id throws) — matches the issue's Task-returning signature — cost if wrong: callers cannot tell a late cancel failed (the store's CancelAsync still returns bool).
+- 2026-11-20 Task 3: complete — red: CS0234 'Cortex.Mediator.Scheduling.DependencyInjection' missing, CS0246 'SchedulingOptions'; green: `dotnet test … --filter …Mediator.Scheduling` → "Passed! - Failed: 0, Passed: 49".
+- 2026-11-20 Ruling: the store increments Attempts on claim; a command reclaimed after lock expiry with Attempts > MaxAttempts is marked Failed without dispatch, and an unreadable command fails at once without retry — stops crash loops and pointless retries — cost if wrong: a slow handler that outlives LockDuration burns an attempt.
+- 2026-11-20 Ruling: on shutdown the in-flight command is left Processing (no LastError) and is re-offered after LockDuration; state writes use CancellationToken.None — avoids losing a completed mark during shutdown — cost if wrong: up to LockDuration delay before redelivery after a restart.
