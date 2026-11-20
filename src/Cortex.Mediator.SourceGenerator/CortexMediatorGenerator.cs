@@ -84,8 +84,18 @@ namespace Cortex.Mediator.SourceGeneration
                 // Handlers that generated code cannot name were reported above (CXMED008) and are left out.
                 var emittedHandlers = distinctHandlers.Where(h => h.IsAccessible).ToImmutableArray();
 
+                // Route every notification type the generated code can name, with or without a generated handler.
+                var notificationTypes = emittedHandlers
+                    .Where(h => h.Kind == InterfaceKind.Notification)
+                    .Select(h => h.MessageFullyQualifiedName)
+                    .Concat(distinctMessages
+                        .Where(m => m.Kind == InterfaceKind.Notification && m.IsAccessible)
+                        .Select(m => m.MessageFullyQualifiedName))
+                    .Distinct()
+                    .ToImmutableArray();
+
                 // Emit GeneratedMediator
-                var mediatorSource = GeneratedMediatorEmitter.Emit(emittedHandlers);
+                var mediatorSource = GeneratedMediatorEmitter.Emit(emittedHandlers, notificationTypes);
                 spc.AddSource("GeneratedMediator.g.cs", mediatorSource);
 
                 // Emit GeneratedServiceCollectionExtensions

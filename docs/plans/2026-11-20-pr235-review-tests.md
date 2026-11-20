@@ -76,13 +76,13 @@ Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedNa
 Expected: red regressions captured before fixes; final exit 0, nonzero discovery, 0 failed.
 Commit: fix(mediator): handle generator declaration edge cases
 ### Task 3: Cover and repair dispatch and registration parity
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.SourceGenerator/Emitters/GeneratedMediatorEmitter.cs` (modify), `src/Cortex.Mediator.SourceGenerator/Emitters/GeneratedDIEmitter.cs` (modify), `src/Cortex.Mediator.SourceGenerator/CortexMediatorGenerator.cs` (modify if discovered message metadata is required), `src/Cortex.Tests/Mediator/SourceGenerator/GeneratorDriverTests.cs` (modify), `src/Cortex.Tests/Mediator/SourceGenerator/GeneratedMediatorIntegrationTests.cs` (modify only if expected source text changes), `src/Cortex.Tests/Mediator/SourceGenerator/GeneratedMediatorRuntimeTests.cs` (modify), `docs/plans/2026-11-20-pr235-review-tests.md` (modify)
 Depends on: Task 2
-- [ ] Reproduce base/derived dispatch compilation/order failures in both source orders, then preserve exact registered runtime-type dispatch without reflection invocation or accidental base fallback for unknown subclasses.
-- [ ] Reproduce ignored HandlerLifetime for singleton/scoped/transient registrations, then honor options without changing the mediator's own scoped lifetime or transient processor lifetime.
-- [ ] Reproduce interface publication failure for discovered notifications with no handlers; align it with the typed zero-handler path without hiding manually registered handlers for known message types.
-- [ ] Verify null guards, unknown requests, notification fan-out/strategy, cancellation, pipeline order and legacy opt-out remain intact.
+- [x] Reproduce base/derived dispatch compilation/order failures in both source orders, then preserve exact registered runtime-type dispatch without reflection invocation or accidental base fallback for unknown subclasses.
+- [x] Reproduce ignored HandlerLifetime for singleton/scoped/transient registrations, then honor options without changing the mediator's own scoped lifetime or transient processor lifetime.
+- [x] Reproduce interface publication failure for discovered notifications with no handlers; align it with the typed zero-handler path without hiding manually registered handlers for known message types.
+- [x] Verify null guards, unknown requests, notification fan-out/strategy, cancellation, pipeline order and legacy opt-out remain intact.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedName~Cortex.Tests.Mediator`
 Expected: red regressions captured before fixes; final exit 0, nonzero discovery, 0 failed.
 Commit: fix(mediator): preserve generated dispatch and DI parity
@@ -121,3 +121,8 @@ Commit: test(mediator): add generated consumer native smoke coverage
 - 2026-11-20 Ruling: CXMED008 (inaccessible handler) is a Warning, not an Error — it matches CXMED001 for an unhandled command, which it effectively is; cost if wrong: a skipped handler fails at runtime instead of at build.
 - 2026-11-20 Ruling: GeneratedMediatorEmitter (listed under Task 3) and the generator README diagnostics table changed in Task 2 — one switch case per message keeps CXMED005-007 the only error, and the table must list the two new IDs; cost if wrong: none.
 - 2026-11-20 Task 2: complete — `dotnet test … --filter FullyQualifiedName~Cortex.Tests.Mediator.SourceGenerator` → "Total tests: 40, Passed: 40".
+- 2026-11-20 Task 3: red — 4 new tests failed: base handler declared first → CS8120 in the command and notification switches; derived first → `Unrouted : Charge` dispatched to ChargeHandler; HandlerLifetime Singleton/Transient → "Scoped"; PublishAsync((INotification)new Quiet()) → InvalidOperationException.
+- 2026-11-20 Ruling: generated cases match the exact runtime type (`case X typed when typed.GetType() == typeof(X)`) — this is what the reflection Mediator does (MS DI does not resolve contravariant handlers), and it makes case order irrelevant; cost if wrong: anyone wanting base-handler fallback for subclasses must register a handler per subclass, as they already must with the reflection Mediator.
+- 2026-11-20 Ruling: open generic message types are skipped by MessageDiscovery, like generic handlers — they cannot be switch cases and only produced false missing-handler diagnostics; MessageDiscovery/MessageRegistration and the README examples changed in Task 3; cost if wrong: no diagnostic for an unhandled open generic message.
+- 2026-11-20 Ruling: 15 text assertions in GeneratorDriverTests/GeneratedMediatorIntegrationTests updated to the new generated text (full case label; handler line with options.HandlerLifetime) — same strictness, and the scoped default is proven at runtime by GeneratedRegistrations_AreScoped_AndResolvePerScope.
+- 2026-11-20 Task 3: complete — `dotnet test … --filter FullyQualifiedName~Cortex.Tests.Mediator` → "Passed! - Failed: 0, Passed: 270".

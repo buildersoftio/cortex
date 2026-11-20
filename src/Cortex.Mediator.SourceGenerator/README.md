@@ -77,9 +77,9 @@ public Task<TResult> SendCommandAsync<TResult>(ICommand<TResult> command, Cancel
 {
     switch (command)
     {
-        case CreateUserCommand typed:
+        case CreateUserCommand typed when typed.GetType() == typeof(CreateUserCommand):
             return (Task<TResult>)(object)SendCommandAsync<CreateUserCommand, Guid>(typed, ct);
-        case UpdateUserCommand typed:
+        case UpdateUserCommand typed when typed.GetType() == typeof(UpdateUserCommand):
             return (Task<TResult>)(object)SendCommandAsync<UpdateUserCommand, bool>(typed, ct);
         default:
             throw new InvalidOperationException(...);
@@ -105,7 +105,7 @@ public static IServiceCollection AddCortexGeneratedMediator(
     services.Add(new ServiceDescriptor(
         typeof(ICommandHandler<CreateUserCommand, Guid>),
         typeof(CreateUserCommandHandler),
-        ServiceLifetime.Scoped));
+        options.HandlerLifetime));
     // ...
 
     // Pipeline behaviors are still runtime-configured

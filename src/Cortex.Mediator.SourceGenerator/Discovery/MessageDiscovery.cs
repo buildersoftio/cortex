@@ -19,8 +19,12 @@ namespace Cortex.Mediator.SourceGenerator.Discovery
         {
             var builder = ImmutableArray.CreateBuilder<MessageRegistration>();
 
-            if (classSymbol.IsAbstractOrInterface())
+            // Open generic messages cannot be dispatched by name, and handlers are only ever closed over them,
+            // so they are skipped like generic handlers are.
+            if (classSymbol.IsAbstractOrInterface() || classSymbol.IsGenericType)
                 return builder.ToImmutable();
+
+            var isAccessible = classSymbol.IsAccessibleFromGeneratedCode();
 
             foreach (var iface in classSymbol.AllInterfaces)
             {
@@ -43,6 +47,7 @@ namespace Cortex.Mediator.SourceGenerator.Discovery
                             kind: kind,
                             messageFullyQualifiedName: classSymbol.ToFullyQualifiedString(),
                             resultFullyQualifiedName: resultType.ToFullyQualifiedString(),
+                            isAccessible: isAccessible,
                             location: location));
                     }
                     else
@@ -66,6 +71,7 @@ namespace Cortex.Mediator.SourceGenerator.Discovery
                             kind: kind,
                             messageFullyQualifiedName: classSymbol.ToFullyQualifiedString(),
                             resultFullyQualifiedName: null,
+                            isAccessible: isAccessible,
                             location: location));
                     }
                 }

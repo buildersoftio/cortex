@@ -504,6 +504,169 @@ namespace TestApp
         Assert.Equal("6|8|1", output);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DerivedMessages_DispatchOnTheExactRuntimeType_InEitherDeclarationOrder(bool baseHandlersFirst)
+    {
+        const string baseHandlers = @"
+    public class ChargeHandler : ICommandHandler<Charge, string>
+    {
+        public Task<string> Handle(Charge command, CancellationToken cancellationToken) => Task.FromResult(""charge"");
+    }
+
+    public class HappenedHandler : INotificationHandler<Happened>
+    {
+        private readonly Log _log;
+        public HappenedHandler(Log log) => _log = log;
+        public Task Handle(Happened notification, CancellationToken cancellationToken) { _log.Entries.Add(""base-event""); return Task.CompletedTask; }
+    }
+";
+        const string derivedHandlers = @"
+    public class RefundHandler : ICommandHandler<Refund, string>
+    {
+        public Task<string> Handle(Refund command, CancellationToken cancellationToken) => Task.FromResult(""refund"");
+    }
+
+    public class HappenedAgainHandler : INotificationHandler<HappenedAgain>
+    {
+        private readonly Log _log;
+        public HappenedAgainHandler(Log log) => _log = log;
+        public Task Handle(HappenedAgain notification, CancellationToken cancellationToken) { _log.Entries.Add(""derived-event""); return Task.CompletedTask; }
+    }
+";
+
+        var output = await GeneratorTestHarness.RunScenarioAsync(OptInHeader + SharedTypes + @"
+namespace TestApp
+{
+    public class Charge : ICommand<string> { }
+    public class Refund : Charge { }
+    public class Unrouted : Charge { }
+    public class Happened : INotification { }
+    public class HappenedAgain : Happened { }
+" + (baseHandlersFirst ? baseHandlers + derivedHandlers : derivedHandlers + baseHandlers) + @"
+    public static class Scenario
+    {
+        public static async Task<string> Run()
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<Log>();
+            services.AddCortexGeneratedMediator();
+
+            using var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            var log = provider.GetRequiredService<Log>();
+
+            var parts = new List<string>
+            {
+                await mediator.SendCommandAsync(new Charge()),
+                await mediator.SendCommandAsync(new Refund()),
+            };
+
+            try
+            {
+                parts.Add(await mediator.SendCommandAsync(new Unrouted()));
+            }
+            catch (InvalidOperationException)
+            {
+                parts.Add(""unrouted-rejected"");
+            }
+
+            await mediator.PublishAsync((INotification)new Happened());
+            await mediator.PublishAsync((INotification)new HappenedAgain());
+            parts.AddRange(log.Entries);
+            return string.Join(""|"", parts);
+        }
+    }
+}");
+
+        Assert.Equal("charge|refund|unrouted-rejected|base-event|derived-event", output);
+    }
+
+    [Fact]
+    public async Task HandlerLifetimeOption_AppliesToGeneratedHandlerRegistrations()
+    {
+        var output = await GeneratorTestHarness.RunScenarioAsync(OptInHeader + SharedTypes + @"
+namespace TestApp
+{
+    public class AuditPre : IRequestPreProcessor<CreateOrder>
+    {
+        public Task ProcessAsync(CreateOrder request, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    public static class Scenario
+    {
+        public static Task<string> Run()
+        {
+            var parts = new List<string>();
+            foreach (var lifetime in new[] { ServiceLifetime.Singleton, ServiceLifetime.Transient, ServiceLifetime.Scoped })
+            {
+                var services = new ServiceCollection();
+                services.AddCortexGeneratedMediator(options => options.HandlerLifetime = lifetime);
+
+                var handler = services.Single(d => d.ServiceType == typeof(ICommandHandler<CreateOrder, int>)).Lifetime;
+                var processor = services.Single(d => d.ServiceType == typeof(IRequestPreProcessor<CreateOrder>)).Lifetime;
+                var mediator = services.Single(d => d.ServiceType == typeof(IMediator)).Lifetime;
+                parts.Add(handler + ""/"" + processor + ""/"" + mediator);
+            }
+
+            return Task.FromResult(string.Join(""|"", parts));
+        }
+    }
+}");
+
+        Assert.Equal("Singleton/Transient/Scoped|Transient/Transient/Scoped|Scoped/Transient/Scoped", output);
+    }
+
+    [Fact]
+    public async Task DiscoveredNotificationsWithoutGeneratedHandlers_PublishThroughBothOverloads()
+    {
+        var output = await GeneratorTestHarness.RunScenarioAsync(OptInHeader + SharedTypes + @"
+namespace TestApp
+{
+    public class Quiet : INotification { }
+    public class Lonely : INotification { }
+
+    // Neither of these may break the generated switch.
+    public class Envelope<T> : INotification { }
+    public class Box { private class Secret : INotification { } }
+
+    // Generic handlers are not discovered, so this one is only reachable through a manual registration.
+    public class Catch<T> : INotificationHandler<T> where T : INotification
+    {
+        private readonly Log _log;
+        public Catch(Log log) => _log = log;
+        public Task Handle(T notification, CancellationToken cancellationToken) { _log.Entries.Add(""caught:"" + typeof(T).Name); return Task.CompletedTask; }
+    }
+
+    public static class Scenario
+    {
+        public static async Task<string> Run()
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<Log>();
+            services.AddCortexGeneratedMediator();
+            services.AddTransient<INotificationHandler<Lonely>, Catch<Lonely>>();
+
+            using var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            var log = provider.GetRequiredService<Log>();
+
+            await mediator.PublishAsync(new Quiet());
+            log.Entries.Add(""quiet-typed"");
+            await mediator.PublishAsync((INotification)new Quiet());
+            log.Entries.Add(""quiet-interface"");
+            await mediator.PublishAsync((INotification)new Lonely());
+            return string.Join(""|"", log.Entries);
+        }
+    }
+}");
+
+        Assert.Equal("quiet-typed|quiet-interface|caught:Lonely", output);
+    }
+
     [Fact]
     public async Task UnknownAndNullRequests_FailWithClearExceptions()
     {

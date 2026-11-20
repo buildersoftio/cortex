@@ -110,7 +110,7 @@ namespace TestApp
             .SourceText.ToString();
 
         // Verify switch dispatch
-        Assert.Contains("case global::TestApp.CreateUserCommand typed:", mediatorSource);
+        Assert.Contains("case global::TestApp.CreateUserCommand typed when typed.GetType() == typeof(global::TestApp.CreateUserCommand):", mediatorSource);
         Assert.Contains("SendCommandAsync<global::TestApp.CreateUserCommand, global::System.Guid>", mediatorSource);
     }
 
@@ -148,8 +148,9 @@ namespace TestApp
 
         Assert.Contains("AddCortexGeneratedMediator", diSource);
         Assert.Contains("GeneratedMediator", diSource);
-        Assert.Contains("global::TestApp.CreateUserCommandHandler", diSource);
-        Assert.Contains("ServiceLifetime.Scoped", diSource);
+        Assert.Contains(
+            "typeof(global::Cortex.Mediator.Commands.ICommandHandler<global::TestApp.CreateUserCommand, global::System.Guid>), typeof(global::TestApp.CreateUserCommandHandler), options.HandlerLifetime)",
+            diSource);
     }
 
     [Fact]
@@ -184,7 +185,7 @@ namespace TestApp
             .First(s => s.HintName == "GeneratedMediator.g.cs")
             .SourceText.ToString();
 
-        Assert.Contains("case global::TestApp.DeleteUserCommand typed:", mediatorSource);
+        Assert.Contains("case global::TestApp.DeleteUserCommand typed when typed.GetType() == typeof(global::TestApp.DeleteUserCommand):", mediatorSource);
     }
 
     [Fact]
@@ -219,7 +220,7 @@ namespace TestApp
             .First(s => s.HintName == "GeneratedMediator.g.cs")
             .SourceText.ToString();
 
-        Assert.Contains("case global::TestApp.GetUserQuery typed:", mediatorSource);
+        Assert.Contains("case global::TestApp.GetUserQuery typed when typed.GetType() == typeof(global::TestApp.GetUserQuery):", mediatorSource);
         Assert.Contains("SendQueryAsync<global::TestApp.GetUserQuery, string>", mediatorSource);
     }
 
@@ -255,7 +256,7 @@ namespace TestApp
             .First(s => s.HintName == "GeneratedMediator.g.cs")
             .SourceText.ToString();
 
-        Assert.Contains("case global::TestApp.UserCreatedNotification typed:", mediatorSource);
+        Assert.Contains("case global::TestApp.UserCreatedNotification typed when typed.GetType() == typeof(global::TestApp.UserCreatedNotification):", mediatorSource);
     }
 
     [Fact]
@@ -289,7 +290,7 @@ namespace TestApp
             .First(s => s.HintName == "GeneratedMediator.g.cs")
             .SourceText.ToString();
 
-        Assert.Contains("case global::TestApp.GetUsersStreamQuery typed:", mediatorSource);
+        Assert.Contains("case global::TestApp.GetUsersStreamQuery typed when typed.GetType() == typeof(global::TestApp.GetUsersStreamQuery):", mediatorSource);
     }
 
     [Fact]
@@ -367,9 +368,9 @@ namespace TestApp
             .First(s => s.HintName == "GeneratedMediator.g.cs")
             .SourceText.ToString();
 
-        Assert.Contains("case global::TestApp.CommandA typed:", mediatorSource);
-        Assert.Contains("case global::TestApp.CommandB typed:", mediatorSource);
-        Assert.Contains("case global::TestApp.QueryA typed:", mediatorSource);
+        Assert.Contains("case global::TestApp.CommandA typed when typed.GetType() == typeof(global::TestApp.CommandA):", mediatorSource);
+        Assert.Contains("case global::TestApp.CommandB typed when typed.GetType() == typeof(global::TestApp.CommandB):", mediatorSource);
+        Assert.Contains("case global::TestApp.QueryA typed when typed.GetType() == typeof(global::TestApp.QueryA):", mediatorSource);
     }
 
     [Fact]

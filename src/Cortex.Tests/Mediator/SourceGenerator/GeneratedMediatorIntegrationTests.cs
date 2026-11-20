@@ -152,11 +152,11 @@ namespace TestApp
             .SourceText.ToString();
 
         // All switch cases should be present
-        Assert.Contains("case global::TestApp.CreateCommand typed:", mediatorSource);
-        Assert.Contains("case global::TestApp.DeleteCommand typed:", mediatorSource);
-        Assert.Contains("case global::TestApp.GetQuery typed:", mediatorSource);
-        Assert.Contains("case global::TestApp.ItemCreated typed:", mediatorSource);
-        Assert.Contains("case global::TestApp.StreamItems typed:", mediatorSource);
+        Assert.Contains("case global::TestApp.CreateCommand typed when typed.GetType() == typeof(global::TestApp.CreateCommand):", mediatorSource);
+        Assert.Contains("case global::TestApp.DeleteCommand typed when typed.GetType() == typeof(global::TestApp.DeleteCommand):", mediatorSource);
+        Assert.Contains("case global::TestApp.GetQuery typed when typed.GetType() == typeof(global::TestApp.GetQuery):", mediatorSource);
+        Assert.Contains("case global::TestApp.ItemCreated typed when typed.GetType() == typeof(global::TestApp.ItemCreated):", mediatorSource);
+        Assert.Contains("case global::TestApp.StreamItems typed when typed.GetType() == typeof(global::TestApp.StreamItems):", mediatorSource);
 
         // Verify DI source content
         var diSource = generatedSources
@@ -281,7 +281,7 @@ namespace TestApp
             .SourceText.ToString();
 
         // Only one switch case for the notification (deduplicated)
-        var caseCount = mediatorSource.Split("case global::TestApp.MyEvent typed:").Length - 1;
+        var caseCount = mediatorSource.Split("case global::TestApp.MyEvent typed when").Length - 1;
         Assert.Equal(1, caseCount);
 
         // But both handlers registered in DI

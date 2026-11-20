@@ -71,7 +71,7 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
                 sb.AppendLine("// Handler registrations");
                 foreach (var reg in handlerRegs)
                 {
-                    sb.AppendLine($"services.Add(new ServiceDescriptor(typeof({reg.ServiceInterfaceFullyQualifiedName}), typeof({reg.HandlerFullyQualifiedName}), ServiceLifetime.Scoped));");
+                    sb.AppendLine($"services.Add(new ServiceDescriptor(typeof({reg.ServiceInterfaceFullyQualifiedName}), typeof({reg.HandlerFullyQualifiedName}), options.HandlerLifetime));");
                 }
                 sb.AppendLine();
             }
