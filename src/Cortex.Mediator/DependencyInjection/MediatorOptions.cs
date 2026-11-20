@@ -5,6 +5,7 @@ using Cortex.Mediator.Streaming;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 namespace Cortex.Mediator.DependencyInjection
@@ -31,7 +32,12 @@ namespace Cortex.Mediator.DependencyInjection
         /// Defaults to <see cref="ParallelNotificationStrategy"/>.
         /// Use <see cref="UseNotificationPublishStrategy{TStrategy}"/> to change.
         /// </summary>
-        internal Type NotificationPublishStrategyType { get; private set; } = typeof(ParallelNotificationStrategy);
+        /// <remarks>
+        /// Annotated so the strategy's public constructor survives trimming and NativeAOT: the type is
+        /// registered with DI by <see cref="Type"/>, so nothing else tells the trimmer to keep it.
+        /// </remarks>
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
+        public Type NotificationPublishStrategyType { get; private set; } = typeof(ParallelNotificationStrategy);
 
         /// <summary>
         /// Sets the strategy used to publish notifications to multiple handlers.
@@ -42,7 +48,7 @@ namespace Cortex.Mediator.DependencyInjection
         /// <see cref="SequentialNotificationStrategy"/> — handlers run one at a time in registration order,
         /// <see cref="StopOnFirstFailureNotificationStrategy"/> — sequential, stops on first exception.
         /// </typeparam>
-        public MediatorOptions UseNotificationPublishStrategy<TStrategy>()
+        public MediatorOptions UseNotificationPublishStrategy<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TStrategy>()
             where TStrategy : class, INotificationPublishStrategy
         {
             NotificationPublishStrategyType = typeof(TStrategy);

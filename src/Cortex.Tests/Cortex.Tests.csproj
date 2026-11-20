@@ -23,10 +23,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.3.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Cortex.Mediator.Behaviors.FluentValidation\Cortex.Mediator.Behaviors.FluentValidation.csproj" />
+    <ProjectReference Include="..\Cortex.Mediator.SourceGenerator\Cortex.Mediator.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\Cortex.Mediator.Behaviors.Transactional\Cortex.Mediator.Behaviors.Transactional.csproj" />
     <ProjectReference Include="..\Cortex.Mediator\Cortex.Mediator.csproj" />
     <ProjectReference Include="..\Cortex.Serialization.Yaml\Cortex.Serialization.Yaml.csproj" />

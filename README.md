@@ -135,6 +135,9 @@
 - **Cortex.Mediator.Behaviors.Transactional:** implementation of the Transactional Behaviors for Commands
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Mediator.Behaviors.Transactional?label=Cortex.Mediator.Behaviors.Transactional)](https://www.nuget.org/packages/Cortex.Mediator.Behaviors.Transactional)
 
+- **Cortex.Mediator.SourceGenerator:** optional Roslyn source generator that eliminates runtime reflection by generating compile-time dispatch with switch-based routing and explicit DI registrations.
+[![NuGet Version](https://img.shields.io/nuget/v/Cortex.Mediator.SourceGenerator?label=Cortex.Mediator.SourceGenerator)](https://www.nuget.org/packages/Cortex.Mediator.SourceGenerator)
+
 - **Cortex.Vectors:** is a High‑performance vector types—Dense, Sparse, and Bit—for AI.
 [![NuGet Version](https://img.shields.io/nuget/v/Cortex.Vectors?label=Cortex.Vectors)](https://www.nuget.org/packages/Cortex.Vectors)
 

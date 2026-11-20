@@ -111,7 +111,7 @@ namespace Cortex.Mediator.DependencyInjection
             }
         }
 
-        private static void RegisterPipelineBehaviors(IServiceCollection services, MediatorOptions options)
+        public static void RegisterPipelineBehaviors(IServiceCollection services, MediatorOptions options)
         {
             // Sort each behavior list by Order (stable sort preserves registration order for equal values).
             // OrderBy in LINQ is a stable sort.
