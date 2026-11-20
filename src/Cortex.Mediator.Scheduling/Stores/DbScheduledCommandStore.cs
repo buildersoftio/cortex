@@ -131,6 +131,10 @@ namespace Cortex.Mediator.Scheduling.Stores
             var claimed = new List<ScheduledCommand>(candidates.Count);
             foreach (var id in candidates)
             {
+                // Stop claiming on cancellation, but return what is already claimed so no row is stranded.
+                if (ct.IsCancellationRequested)
+                    break;
+
                 using (var claim = connection.CreateCommand())
                 {
                     claim.CommandText =
@@ -143,11 +147,12 @@ namespace Cortex.Mediator.Scheduling.Stores
                     AddParameter(claim, "@pending", StatusPending, DbType.Int32);
                     AddParameter(claim, "@now", nowTicks, DbType.Int64);
 
-                    if (await claim.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
+                    if (await claim.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false) != 1)
                         continue;
                 }
 
-                var command = await ReadByIdAsync(connection, id, ct).ConfigureAwait(false);
+                // The row is ours now; read it back even if cancellation was requested, so it is not stranded unreported.
+                var command = await ReadByIdAsync(connection, id, CancellationToken.None).ConfigureAwait(false);
                 if (command != null)
                     claimed.Add(command);
             }

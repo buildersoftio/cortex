@@ -83,7 +83,7 @@ When the command is due, the processor sends it with `IMediator.SendCommandAsync
 builder.Services.AddCortexMediatorScheduling(options =>
 {
     options.PollingInterval = TimeSpan.FromSeconds(5); // how often to look for due commands
-    options.BatchSize = 100;                           // commands claimed per poll
+    options.BatchSize = 100;                           // most commands run per poll
     options.MaxAttempts = 3;                           // 1 = no retries
     options.RetryDelay = TimeSpan.FromSeconds(30);     // wait before retrying a failed command
     options.LockDuration = TimeSpan.FromMinutes(5);    // longer than your slowest handler
@@ -159,7 +159,7 @@ builder.Services.AddCortexMediatorScheduling();
 
 ## How processing works
 
-1. Every `PollingInterval`, the processor claims up to `BatchSize` due commands: pending commands whose time has come, and commands whose lock expired. Claiming marks a command `Processing`, locks it until now + `LockDuration` and counts an attempt. If a full batch was claimed, it polls again straight away.
+1. Every `PollingInterval`, the processor runs up to `BatchSize` due commands: pending commands whose time has come, and commands whose lock expired. It claims them one at a time, just before running each: claiming marks a command `Processing`, locks it until now + `LockDuration` and counts an attempt. If it ran a full batch, it polls again straight away.
 2. Each command is sent through `IMediator` in its own scope. On success it is marked `Completed`.
 3. If the handler throws, the command goes back to `Pending`, due after `RetryDelay`, with the error in `LastError`. After `MaxAttempts` attempts it is marked `Failed`.
 4. A command that cannot be read (its type no longer exists or is not an `ICommand`) is marked `Failed` without retrying.

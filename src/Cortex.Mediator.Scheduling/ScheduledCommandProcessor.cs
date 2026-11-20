@@ -46,23 +46,28 @@ namespace Cortex.Mediator.Scheduling
         }
 
         /// <summary>
-        /// Claims up to <see cref="SchedulingOptions.BatchSize"/> due commands and dispatches them one by one.
+        /// Runs up to <see cref="SchedulingOptions.BatchSize"/> due commands one by one. Each command is claimed
+        /// just before it runs, so its lock covers only its own handler and a stop never strands commands that did not start.
         /// A failing command is retried or marked failed and does not stop the rest of the batch.
         /// </summary>
-        /// <param name="ct">Stops processing; commands claimed but not finished are offered again after the lock expires.</param>
+        /// <param name="ct">Stops processing; a command that was running is offered again after its lock expires.</param>
         /// <returns>The number of commands claimed in this call.</returns>
         public async Task<int> ProcessDueCommandsAsync(CancellationToken ct = default)
         {
-            var now = _timeProvider.GetUtcNow();
-            var claimed = await _store.ClaimDueAsync(now, _options.BatchSize, _options.LockDuration, ct).ConfigureAwait(false);
-
-            foreach (var scheduled in claimed)
+            var processed = 0;
+            while (processed < _options.BatchSize)
             {
                 ct.ThrowIfCancellationRequested();
-                await DispatchAsync(scheduled, ct).ConfigureAwait(false);
+
+                var claimed = await _store.ClaimDueAsync(_timeProvider.GetUtcNow(), 1, _options.LockDuration, ct).ConfigureAwait(false);
+                if (claimed.Count == 0)
+                    break;
+
+                processed++;
+                await DispatchAsync(claimed[0], ct).ConfigureAwait(false);
             }
 
-            return claimed.Count;
+            return processed;
         }
 
         /// <inheritdoc />

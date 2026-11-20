@@ -24,10 +24,17 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
         {
         }
 
+        public class SlowCommand : ICommand
+        {
+            public string Name { get; set; } = string.Empty;
+        }
+
         public sealed class Recorder
         {
             public ConcurrentQueue<string> Handled { get; } = new();
             public CancellationTokenSource Stop { get; } = new();
+            public FakeTimeProvider? Clock { get; set; }
+            public Func<Task>? AfterSecondSlowCommand { get; set; }
         }
 
         public class SendReminderHandler : ICommandHandler<SendReminderCommand>
@@ -61,6 +68,21 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             }
         }
 
+        public class SlowHandler : ICommandHandler<SlowCommand>
+        {
+            private readonly Recorder _recorder;
+            public SlowHandler(Recorder recorder) => _recorder = recorder;
+
+            public async Task Handle(SlowCommand command, CancellationToken cancellationToken)
+            {
+                _recorder.Handled.Enqueue(command.Name);
+                _recorder.Clock!.Advance(TimeSpan.FromSeconds(40));
+
+                if (command.Name == "2" && _recorder.AfterSecondSlowCommand != null)
+                    await _recorder.AfterSecondSlowCommand();
+            }
+        }
+
         private static readonly DateTimeOffset T0 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
         private readonly FakeTimeProvider _clock = new(T0);
@@ -74,6 +96,7 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             services.AddScoped<ICommandHandler<SendReminderCommand>, SendReminderHandler>();
             services.AddScoped<ICommandHandler<FailingCommand>, FailingHandler>();
             services.AddScoped<ICommandHandler<CancellingCommand>, CancellingHandler>();
+            services.AddScoped<ICommandHandler<SlowCommand>, SlowHandler>();
             services.AddSingleton<TimeProvider>(_clock);
             services.AddCortexMediatorScheduling(configure);
             return services.BuildServiceProvider();
@@ -243,6 +266,60 @@ namespace Cortex.Tests.Mediator.Scheduling.Tests
             var stored = await store.GetAsync(id);
             Assert.Equal(ScheduledCommandStatus.Processing, stored.Status);
             Assert.Null(stored.LastError);
+        }
+
+        [Fact]
+        public async Task StoppingDuringDispatch_DoesNotSpendAttemptsOfCommandsThatDidNotStart()
+        {
+            using var provider = BuildProvider(o =>
+            {
+                o.MaxAttempts = 1;
+                o.LockDuration = TimeSpan.FromMinutes(1);
+            });
+            var scheduler = provider.GetRequiredService<ICommandScheduler>();
+            var processor = provider.GetRequiredService<ScheduledCommandProcessor>();
+            var store = provider.GetRequiredService<IScheduledCommandStore>();
+
+            await scheduler.ScheduleAsync(new CancellingCommand(), TimeSpan.Zero);
+            var waitingId = await scheduler.ScheduleAsync(new SendReminderCommand { Email = "waiting" }, TimeSpan.FromSeconds(1));
+            _clock.Advance(TimeSpan.FromSeconds(2));
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => processor.ProcessDueCommandsAsync(_recorder.Stop.Token));
+
+            var waiting = await store.GetAsync(waitingId);
+            Assert.Equal(ScheduledCommandStatus.Pending, waiting.Status);
+            Assert.Equal(0, waiting.Attempts);
+
+            // After a restart the waiting command still runs.
+            _clock.Advance(TimeSpan.FromMinutes(2));
+            await processor.ProcessDueCommandsAsync();
+            Assert.Equal(new[] { "waiting" }, _recorder.Handled);
+            Assert.Equal(ScheduledCommandStatus.Completed, (await store.GetAsync(waitingId)).Status);
+        }
+
+        [Fact]
+        public async Task SlowBatch_SecondProcessor_NeverRunsACommandTwice()
+        {
+            using var provider = BuildProvider(o => o.LockDuration = TimeSpan.FromMinutes(1));
+            var scheduler = provider.GetRequiredService<ICommandScheduler>();
+            var processorA = provider.GetRequiredService<ScheduledCommandProcessor>();
+            var processorB = new ScheduledCommandProcessor(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IScheduledCommandStore>(),
+                provider.GetRequiredService<Cortex.Mediator.Scheduling.Serialization.IScheduledCommandSerializer>(),
+                new SchedulingOptions { LockDuration = TimeSpan.FromMinutes(1), BatchSize = 1 },
+                _clock);
+            _recorder.Clock = _clock;
+            // Each command takes 40 s (less than the 1 min lock); a second processor runs one command while command 2 finishes.
+            _recorder.AfterSecondSlowCommand = () => processorB.ProcessDueCommandsAsync();
+
+            for (var i = 1; i <= 3; i++)
+                await scheduler.ScheduleAsync(new SlowCommand { Name = i.ToString() }, TimeSpan.Zero);
+
+            await processorA.ProcessDueCommandsAsync();
+
+            Assert.Equal(new[] { "1", "2", "3" }, _recorder.Handled.OrderBy(n => n));
         }
 
         [Fact]
