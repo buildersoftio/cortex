@@ -102,6 +102,8 @@ namespace Cortex.Streams
         /// <summary>
         /// Removes a branch from the running stream. Items that enter the branch point after this call
         /// returns no longer reach the branch; an item already being processed may still complete in it.
+        /// Disposable operators of the branch, such as window operators, are disposed, so windows still
+        /// open in the branch are dropped. Operators after a merge are shared and stay untouched.
         /// </summary>
         /// <param name="name">The name of the branch to remove.</param>
         /// <returns>True if a branch with this name was removed; otherwise false.</returns>

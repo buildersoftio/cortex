@@ -283,10 +283,96 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void RemoveBranch_FromInsideRunningBranch_TakesEffectForLaterItems()
+        {
+            var second = new List<int>();
+            IStream<int> stream = null;
+            stream = StreamBuilder<int>
+                .CreateNewStream("ReentrantRemove")
+                .Stream()
+                .AddBranch("first", b => b.Sink(x =>
+                {
+                    if (x == 1)
+                        stream.RemoveBranch("second");
+                }))
+                .AddBranch("second", b => b.Sink(x => second.Add(x)))
+                .Sink(_ => { })
+                .Build();
+            stream.Start();
+
+            stream.Emit(1);
+            stream.Emit(2);
+
+            // Item 1 had already read the branch snapshot, so it still reaches "second"
+            Assert.Equal(new[] { 1 }, second);
+        }
+
+        [Fact]
+        public void AddBranch_AtRuntime_AttachesToFanOutBranchPoint()
+        {
+            var database = new List<int>();
+            var dynamicBranch = new List<int>();
+            var stream = StreamBuilder<int>
+                .CreateNewStream("FanOutRuntimeAdd")
+                .Stream()
+                .FanOut(fanOut => fanOut.To("database", x => database.Add(x)))
+                .Build();
+            stream.Start();
+
+            stream.AddBranch<int>("dynamic", b => b.Sink(x => dynamicBranch.Add(x)));
+            stream.Emit(7);
+
+            Assert.Equal(new[] { 7 }, database);
+            Assert.Equal(new[] { 7 }, dynamicBranch);
+            Assert.Equal(new[] { "database", "dynamic" }, stream.GetBranches().Keys.OrderBy(k => k));
+        }
+
+        [Fact]
+        public void AddBranch_AtRuntime_FindsBranchPointAfterOperatorWithoutNextOperatorList()
+        {
+            var dynamicBranch = new List<int>();
+            var stream = StreamBuilder<int>
+                .CreateNewStream("BranchPointAfterGroupBy")
+                .Stream()
+                .GroupBySilently(x => x % 2)
+                .AddBranch("grouped", b => b.Sink(_ => { }))
+                .Sink(_ => { })
+                .Build();
+            stream.Start();
+
+            stream.AddBranch<int>("dynamic", b => b.Sink(x => dynamicBranch.Add(x)));
+            stream.Emit(3);
+
+            Assert.Equal(new[] { 3 }, dynamicBranch);
+            Assert.Equal(new[] { "dynamic", "grouped" }, stream.GetBranches().Keys.OrderBy(k => k));
+        }
+
+        [Fact]
+        public async Task RemoveBranch_DisposesWindowOperatorsOfTheRemovedBranch()
+        {
+            var windows = new ConcurrentQueue<string>();
+            var stream = BuildStreamWithBranch("RemoveDisposesWindow", new List<int>(), new List<int>());
+            stream.Start();
+            stream.AddBranch<int>("windowed", b => b
+                .TumblingWindow(x => "all", x => DateTime.UtcNow, TimeSpan.FromMilliseconds(100))
+                .Map(w => w.Key)
+                .Sink(k => windows.Enqueue(k)));
+
+            stream.Emit(1);
+            Assert.True(stream.RemoveBranch("windowed"));
+            await Task.Delay(1000);
+
+            // The window timer stopped with the branch, so the open window is never emitted
+            Assert.Empty(windows);
+        }
+
+        [Fact]
         public async Task ConcurrentEmitAndBranchChanges_DoNotThrowOrLoseItems()
         {
             var mainCount = 0;
             var staticCount = 0;
+            var mutations = 0;
+            var emittingDone = 0;
             var stream = StreamBuilder<int>
                 .CreateNewStream("ConcurrentBranchChanges")
                 .Stream()
@@ -295,24 +381,33 @@ namespace Cortex.Tests.Streams.Tests
                 .Build();
             stream.Start();
 
+            // The mutator starts first and runs until every emitter has finished, so they overlap
+            var mutatorStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var mutator = Task.Run(() =>
+            {
+                while (Volatile.Read(ref emittingDone) == 0)
+                {
+                    var name = $"dynamic-{mutations}";
+                    stream.AddBranch<int>(name, b => b.Sink(_ => { }));
+                    mutatorStarted.TrySetResult(true);
+                    Assert.True(stream.RemoveBranch(name));
+                    mutations++;
+                }
+            });
+            await Task.WhenAny(mutatorStarted.Task, mutator);
+
             var emitters = Enumerable.Range(0, 4).Select(_ => Task.Run(async () =>
             {
                 for (var i = 0; i < 250; i++)
                     await stream.EmitAsync(i);
-            }));
-            var mutator = Task.Run(() =>
-            {
-                for (var i = 0; i < 100; i++)
-                {
-                    stream.AddBranch<int>($"dynamic-{i}", b => b.Sink(_ => { }));
-                    Assert.True(stream.RemoveBranch($"dynamic-{i}"));
-                }
-            });
-
-            await Task.WhenAll(emitters.Append(mutator));
+            })).ToArray();
+            await Task.WhenAll(emitters);
+            Volatile.Write(ref emittingDone, 1);
+            await mutator;
 
             Assert.Equal(1000, mainCount);
             Assert.Equal(1000, staticCount);
+            Assert.True(mutations > 0);
             Assert.Equal(new[] { "static" }, stream.GetBranches().Keys);
         }
     }

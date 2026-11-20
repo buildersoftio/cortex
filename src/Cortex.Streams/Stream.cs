@@ -92,9 +92,13 @@ namespace Cortex.Streams
             return result;
         }
 
-        private static void CollectOperators(IOperator op, List<IOperator> result, HashSet<IOperator> visited)
+        private static void CollectOperators(IOperator op, List<IOperator> result, HashSet<IOperator> visited, bool stopAtMerge = false)
         {
             if (op == null || !visited.Add(op))
+                return;
+
+            // A merge and everything after it are shared with the merge's other branches
+            if (stopAtMerge && op is IMergeOperator)
                 return;
 
             result.Add(op);
@@ -103,7 +107,7 @@ namespace Cortex.Streams
             {
                 foreach (var nextOp in hasNextOperators.GetNextOperators())
                 {
-                    CollectOperators(nextOp, result, visited);
+                    CollectOperators(nextOp, result, visited, stopAtMerge);
                 }
             }
             else
@@ -112,7 +116,7 @@ namespace Cortex.Streams
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (field != null)
                 {
-                    CollectOperators(field.GetValue(op) as IOperator, result, visited);
+                    CollectOperators(field.GetValue(op) as IOperator, result, visited, stopAtMerge);
                 }
             }
         }
@@ -422,15 +426,29 @@ namespace Cortex.Streams
             if (string.IsNullOrEmpty(name))
                 return false;
 
+            var removedBranches = new List<IOperator>();
             lock (_branchMutationLock)
             {
-                var removed = false;
                 foreach (var fork in CollectOperators(_operatorChain).OfType<IForkOperator>())
                 {
-                    removed |= fork.RemoveBranch(name);
+                    var removed = fork.RemoveBranch(name);
+                    if (removed != null)
+                        removedBranches.Add(removed);
                 }
-                return removed;
             }
+
+            // Release the removed branches' own resources, such as window timers
+            foreach (var removed in removedBranches)
+            {
+                var branchOperators = new List<IOperator>();
+                CollectOperators(removed, branchOperators, new HashSet<IOperator>(), stopAtMerge: true);
+                foreach (var disposable in branchOperators.OfType<IDisposable>())
+                {
+                    disposable.Dispose();
+                }
+            }
+
+            return removedBranches.Count > 0;
         }
 
         private ForkOperator<TBranch> FindRuntimeBranchPoint<TBranch>()

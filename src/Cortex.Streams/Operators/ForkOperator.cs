@@ -161,25 +161,30 @@ namespace Cortex.Streams.Operators
         /// <summary>
         /// Removes the branch with the given name.
         /// </summary>
-        /// <returns>True if a branch was removed; otherwise false.</returns>
-        public bool RemoveBranch(string name)
+        /// <returns>The removed branch, or null if the fork has no branch with this name.</returns>
+        public BranchOperator<T> RemoveBranch(string name)
         {
             if (name == null)
-                return false;
+                return null;
 
             lock (_branchesLock)
             {
                 var current = _branches;
                 var index = IndexOf(current, name);
                 if (index < 0)
-                    return false;
+                    return null;
 
                 var updated = new BranchOperator<T>[current.Length - 1];
                 Array.Copy(current, 0, updated, 0, index);
                 Array.Copy(current, index + 1, updated, index, current.Length - index - 1);
                 Volatile.Write(ref _branches, updated);
-                return true;
+                return current[index];
             }
+        }
+
+        IOperator IForkOperator.RemoveBranch(string name)
+        {
+            return RemoveBranch(name);
         }
 
         /// <summary>

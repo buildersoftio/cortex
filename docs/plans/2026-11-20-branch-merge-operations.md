@@ -46,7 +46,7 @@ Rejected: changing build-time duplicate-name behaviour (silent replace) — exis
 - Companions: researcher=researcher · software-architect=software-architect · developer=developer · code-reviewer=— (stand-in; not on the allowed delegation list) · security-reviewer=— · qa-engineer=qa-engineer · debugger=— · ui-ux-designer=—
 | Wave | Phase | Agents | Access | Briefs | Gate | Status |
 |---|---|---|---|---|---|---|
-| 1 | Review | reviewer stand-in (correctness), reviewer stand-in (spec), qa-engineer (gaps) | read-only, code tools, 25 | READ_FIRST sophon-scratch-review.diff | FINDINGS ≥80, diff only; I refute each Critical/Important from the code | pending |
+| 1 | Review | reviewer stand-in (correctness), reviewer stand-in (spec), qa-engineer (gaps) | read-only, code tools, 25 | READ_FIRST sophon-scratch-review.diff | FINDINGS ≥80, diff only; I refute each Critical/Important from the code | done |
 | 2 | Critic | reviewer stand-in (completeness) | read-only, code tools, 15 | request, Goal, Verification, commits | each item checked by me | pending |
 ## Tasks
 ### Task 1: Thread-safe fork with runtime AddBranch and RemoveBranch
@@ -105,3 +105,6 @@ Commit: docs(streams): document branch merge and dynamic branching
 - 2026-11-20 Ruling: the "not targetable by runtime add" flag lives on `ForkOperator` (`AcceptsRuntimeBranches`), so ForkOperator.cs joins Task 3's files; the end-to-end Verification scenario is the test `BranchMergeTests.EndToEnd_MergeWithRuntimeBranchChanges` — cost if wrong: none.
 - 2026-11-20 Task 3: complete — build and filtered tests green (see commit feat(streams): add Merge operator to combine branch outputs).
 - 2026-11-20 Task 4: complete — docs/wiki/Branch-and-Merge.md; build and filtered tests green (see commit docs(streams): document branch merge and dynamic branching).
+- 2026-11-20 Review wave 1: correctness stand-in 0 findings ≥80 (APPROVE); spec stand-in 1 Important (F1: `RemoveBranch` leaves window/join timers of the removed branch running); qa-engineer 6 Important test gaps (no forced overlap in concurrency tests, in-flight snapshot, FanOut runtime add, runtime name vs merge branch, failed Merge leaves pipeline unchanged, branch point after an operator without `IHasNextOperators`).
+- 2026-11-20 Refute (inline, from the code): F1 CONFIRMED — TumblingWindowOperator.cs:57 starts a 100 ms timer that only Dispose stops (:231), and `Stream.RemoveBranch` never disposed; red test `RemoveBranch_DisposesWindowOperatorsOfTheRemovedBranch` → "Failed: 1, Passed: 34". Test gaps accepted as written.
+- 2026-11-20 Ruling: removal disposes only operators exclusive to the removed branch (walk stops at the merge); open windows are dropped, not flushed — flushing would emit from a branch the caller just removed — cost if wrong: users expecting a final flush lose the last partial window.

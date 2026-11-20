@@ -17,7 +17,7 @@ namespace Cortex.Streams.Operators
         /// <summary>
         /// Removes the branch with the given name.
         /// </summary>
-        /// <returns>True if a branch was removed; otherwise false.</returns>
-        bool RemoveBranch(string name);
+        /// <returns>The removed branch operator, or null if the fork has no branch with this name.</returns>
+        IOperator RemoveBranch(string name);
     }
 }

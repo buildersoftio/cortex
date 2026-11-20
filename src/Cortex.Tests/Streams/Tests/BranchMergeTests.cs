@@ -328,6 +328,62 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void Merge_FailedConfigurationLeavesPipelineUnchanged()
+        {
+            var main = new List<int>();
+            var builder = StreamBuilder<int>
+                .CreateNewStream("MergeFailedThenUsed")
+                .Stream();
+
+            Assert.Throws<ArgumentException>(() => builder.Merge<int>(m => m
+                .Branch("a", b => b.Map(x => x * 100))
+                .Branch("a", b => b)));
+            var stream = builder.Sink(x => main.Add(x)).Build();
+            stream.Start();
+            stream.Emit(1);
+
+            Assert.Equal(new[] { 1 }, main);
+            Assert.Empty(stream.GetBranches());
+        }
+
+        [Fact]
+        public void RuntimeAddBranch_NameUsedByMergeBranch_Throws()
+        {
+            var stream = StreamBuilder<int>
+                .CreateNewStream("RuntimeNameClash")
+                .Stream()
+                .AddBranch("audit", b => b.Sink(_ => { }))
+                .Merge<int>(m => m.Branch("a", b => b))
+                .Sink(_ => { })
+                .Build();
+
+            Assert.Throws<ArgumentException>(() => stream.AddBranch<int>("a", b => b.Sink(_ => { })));
+            Assert.Equal(new[] { "a", "audit" }, stream.GetBranches().Keys.OrderBy(k => k));
+        }
+
+        [Fact]
+        public void RemoveMergeBranch_KeepsOperatorsAfterTheMergeRunning()
+        {
+            var windows = new ConcurrentQueue<int>();
+            var stream = StreamBuilder<int>
+                .CreateNewStream("RemoveMergeBranchKeepsWindow")
+                .Stream()
+                .Merge<int>(m => m
+                    .Branch("a", b => b)
+                    .Branch("b", b => b.Map(x => x * 10)))
+                .TumblingWindow(x => "all", x => DateTime.UtcNow, TimeSpan.FromMilliseconds(100))
+                .Sink(w => windows.Enqueue(w.Items.Count))
+                .Build();
+            stream.Start();
+
+            Assert.True(stream.RemoveBranch("b"));
+            stream.Emit(1);
+
+            // The window after the merge is shared by the remaining branch and must keep emitting
+            Assert.True(SpinWait.SpinUntil(() => !windows.IsEmpty, TimeSpan.FromSeconds(5)));
+        }
+
+        [Fact]
         public async Task EndToEnd_MergeWithRuntimeBranchChanges()
         {
             var merged = new ConcurrentQueue<string>();
@@ -354,22 +410,34 @@ namespace Cortex.Tests.Streams.Tests
             Assert.Equal(new[] { "p1", "p2", "e2", "p4", "p100" }, merged);
             Assert.Equal(new[] { 100 }, large);
 
+            // The mutator starts first and runs until every emitter has finished, so they overlap
+            var emittingDone = 0;
+            var mutations = 0;
+            var mutatorStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var mutator = Task.Run(() =>
+            {
+                while (Volatile.Read(ref emittingDone) == 0)
+                {
+                    var name = $"temp-{mutations}";
+                    stream.AddBranch<int>(name, x => x % 3 == 0, b => b.Sink(_ => { }));
+                    mutatorStarted.TrySetResult(true);
+                    Assert.True(stream.RemoveBranch(name));
+                    mutations++;
+                }
+            });
+            await Task.WhenAny(mutatorStarted.Task, mutator);
+
             var emitters = Enumerable.Range(0, 4).Select(_ => Task.Run(async () =>
             {
                 for (var i = 0; i < 100; i++)
                     await stream.EmitAsync(i);
-            }));
-            var mutator = Task.Run(() =>
-            {
-                for (var i = 0; i < 50; i++)
-                {
-                    stream.AddBranch<int>($"temp-{i}", x => x % 3 == 0, b => b.Sink(_ => { }));
-                    Assert.True(stream.RemoveBranch($"temp-{i}"));
-                }
-            });
-            await Task.WhenAll(emitters.Append(mutator));
+            })).ToArray();
+            await Task.WhenAll(emitters);
+            Volatile.Write(ref emittingDone, 1);
+            await mutator;
 
             Assert.Equal(5 + 400, merged.Count);
+            Assert.True(mutations > 0);
             Assert.Equal(new[] { "audit", "large", "plain" }, stream.GetBranches().Keys.OrderBy(k => k));
         }
     }

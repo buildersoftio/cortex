@@ -97,6 +97,10 @@ The new branch gets the stream's telemetry provider and error handling before it
 
 Runtime branch names must be unique across the whole stream; adding a name that already exists throws `ArgumentException` and leaves the existing branch in place. `RemoveBranch(name)` removes the branch with that name wherever it is and returns `false` if there was none.
 
+### What removal releases
+
+`RemoveBranch` disposes the operators that belong only to the removed branch, such as window and stream-stream join operators, which stops their timers. Windows still open in the removed branch are dropped, not emitted. When the branch belongs to a `Merge`, the merge and the operators after it are shared with the other branches and keep running.
+
 ## Thread Safety and Ordering
 
 - `AddBranch<T>` and `RemoveBranch` can be called from any thread while items are being emitted, including from inside a sink of the same stream.

@@ -15,7 +15,7 @@ namespace Cortex.Streams.Operators
     /// for each input item, exactly as they would reach any other operator in the pipeline.
     /// </remarks>
     /// <typeparam name="T">The type of the merged items.</typeparam>
-    public class MergeOperator<T> : IOperator, IHasNextOperators, ITelemetryEnabled, IErrorHandlingEnabled
+    public class MergeOperator<T> : IOperator, IHasNextOperators, ITelemetryEnabled, IErrorHandlingEnabled, IMergeOperator
     {
         private IOperator _nextOperator;
 
