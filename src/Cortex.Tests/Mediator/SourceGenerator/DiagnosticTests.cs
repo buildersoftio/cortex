@@ -251,4 +251,169 @@ namespace TestApp
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "CXMED001");
     }
+
+    [Fact]
+    public void RecordAndStructMessagesWithoutHandlers_ReportMissingHandlerDiagnosticsAtTheType()
+    {
+        var run = GeneratorTestHarness.Run(@"
+using Cortex.Mediator.Commands;
+using Cortex.Mediator.Notifications;
+using Cortex.Mediator.Queries;
+using Cortex.Mediator.Streaming;
+
+[assembly: Cortex.Mediator.SourceGeneration.CortexMediatorGeneration]
+
+namespace TestApp
+{
+    public record OrphanRecordCommand(int Id) : ICommand<int>;
+    public record struct OrphanRecordStructCommand : ICommand;
+    public struct OrphanStructQuery : IQuery<string> { }
+    public record OrphanStream : IStreamQuery<int>;
+    public record OrphanNotification : INotification;
+}");
+
+        AssertSingleDiagnostic(run, "CXMED001", DiagnosticSeverity.Warning, "OrphanRecordCommand");
+        AssertSingleDiagnostic(run, "CXMED001", DiagnosticSeverity.Warning, "OrphanRecordStructCommand");
+        AssertSingleDiagnostic(run, "CXMED002", DiagnosticSeverity.Warning, "OrphanStructQuery");
+        AssertSingleDiagnostic(run, "CXMED003", DiagnosticSeverity.Warning, "OrphanStream");
+        AssertSingleDiagnostic(run, "CXMED004", DiagnosticSeverity.Info, "OrphanNotification");
+    }
+
+    [Fact]
+    public void PartialTypesDeclaredInSeveralParts_AreDiscoveredOnce()
+    {
+        var run = GeneratorTestHarness.Run(@"
+using Cortex.Mediator.Commands;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+[assembly: Cortex.Mediator.SourceGeneration.CortexMediatorGeneration]
+
+namespace TestApp
+{
+    public class Ping : ICommand<int> { }
+
+    public partial class PingHandler : ICommandHandler<Ping, int> { }
+
+    public partial class PingHandler : IDisposable
+    {
+        public Task<int> Handle(Ping command, CancellationToken cancellationToken) => Task.FromResult(1);
+        public void Dispose() { }
+    }
+
+    public partial class Unanswered : ICommand<int> { }
+
+    public partial class Unanswered : IComparable
+    {
+        public int CompareTo(object other) => 0;
+    }
+}");
+
+        Assert.DoesNotContain(run.GeneratorDiagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Empty(run.CompilationErrors());
+        Assert.Single(run.GeneratorDiagnostics, d => d.Id == "CXMED001");
+
+        var di = run.GetSource("GeneratedServiceCollectionExtensions.g.cs");
+        Assert.Equal(1, CountOccurrences(di, "typeof(global::TestApp.PingHandler)"));
+    }
+
+    [Theory]
+    [InlineData("ICommand<int>", "ICommandHandler<Msg, int>",
+        "public Task<int> Handle(Msg message, CancellationToken cancellationToken) => Task.FromResult(1);", "CXMED005")]
+    [InlineData("ICommand", "ICommandHandler<Msg>",
+        "public Task Handle(Msg message, CancellationToken cancellationToken) => Task.CompletedTask;", "CXMED005")]
+    [InlineData("IQuery<int>", "IQueryHandler<Msg, int>",
+        "public Task<int> Handle(Msg message, CancellationToken cancellationToken) => Task.FromResult(1);", "CXMED006")]
+    [InlineData("IStreamQuery<int>", "IStreamQueryHandler<Msg, int>",
+        "public async IAsyncEnumerable<int> Handle(Msg message, CancellationToken cancellationToken) { await Task.Yield(); yield return 1; }", "CXMED007")]
+    public void DuplicateHandlers_ReportOneTargetedError_WithoutBreakingGeneratedCode(
+        string messageInterface, string handlerInterface, string handlerBody, string expectedId)
+    {
+        var run = GeneratorTestHarness.Run($@"
+using Cortex.Mediator.Commands;
+using Cortex.Mediator.Queries;
+using Cortex.Mediator.Streaming;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+[assembly: Cortex.Mediator.SourceGeneration.CortexMediatorGeneration]
+
+namespace TestApp
+{{
+    public class Msg : {messageInterface} {{ }}
+    public class FirstHandler : {handlerInterface} {{ {handlerBody} }}
+    public class SecondHandler : {handlerInterface} {{ {handlerBody} }}
+}}");
+
+        var error = Assert.Single(run.GeneratorDiagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Equal(expectedId, error.Id);
+        Assert.Equal("SecondHandler", LocatedText(error));
+        Assert.Empty(run.CompilationErrors());
+    }
+
+    [Fact]
+    public void HandlersHiddenFromGeneratedCode_AreReportedAndSkipped()
+    {
+        var run = GeneratorTestHarness.Run(@"
+using Cortex.Mediator.Commands;
+using System.Threading;
+using System.Threading.Tasks;
+
+[assembly: Cortex.Mediator.SourceGeneration.CortexMediatorGeneration]
+
+namespace TestApp
+{
+    public class Visible : ICommand<int> { }
+    public class Shared : ICommand<int> { }
+
+    public class Container
+    {
+        private class Hidden : ICommandHandler<Visible, int>
+        {
+            public Task<int> Handle(Visible command, CancellationToken cancellationToken) => Task.FromResult(1);
+        }
+
+        protected internal class Reachable : ICommandHandler<Shared, int>
+        {
+            public Task<int> Handle(Shared command, CancellationToken cancellationToken) => Task.FromResult(2);
+        }
+    }
+}");
+
+        AssertSingleDiagnostic(run, "CXMED008", DiagnosticSeverity.Warning, "Hidden");
+        Assert.DoesNotContain(run.GeneratorDiagnostics, d => d.Id == "CXMED001");
+        Assert.Empty(run.CompilationErrors());
+
+        var di = run.GetSource("GeneratedServiceCollectionExtensions.g.cs");
+        Assert.DoesNotContain("Container.Hidden", di);
+        Assert.Contains("typeof(global::TestApp.Container.Reachable)", di);
+    }
+
+    private static void AssertSingleDiagnostic(
+        GeneratorTestHarness.GeneratorRun run, string id, DiagnosticSeverity severity, string locatedAt)
+    {
+        var matches = run.GeneratorDiagnostics.Where(d => d.Id == id && LocatedText(d) == locatedAt).ToArray();
+        Assert.True(matches.Length == 1,
+            $"Expected one {id} at '{locatedAt}', got:{Environment.NewLine}{GeneratorTestHarness.Format(run.GeneratorDiagnostics)}");
+        Assert.Equal(severity, matches[0].Severity);
+    }
+
+    private static string? LocatedText(Diagnostic diagnostic) =>
+        diagnostic.Location.IsInSource
+            ? diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan)
+            : null;
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        for (var index = text.IndexOf(value, StringComparison.Ordinal); index >= 0;
+             index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
 }

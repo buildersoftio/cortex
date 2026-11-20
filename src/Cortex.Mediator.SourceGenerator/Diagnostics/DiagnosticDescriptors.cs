@@ -51,5 +51,21 @@ namespace Cortex.Mediator.SourceGenerator.Diagnostics
             category: "Cortex.Mediator",
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
+
+        public static readonly DiagnosticDescriptor MultipleHandlersForStreamQuery = new(
+            id: "CXMED007",
+            title: "Multiple handlers for same stream query",
+            messageFormat: "StreamQuery '{0}' has multiple handlers: {1}. Only one handler per stream query is allowed.",
+            category: "Cortex.Mediator",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        public static readonly DiagnosticDescriptor HandlerNotAccessible = new(
+            id: "CXMED008",
+            title: "Handler is not accessible to generated code",
+            messageFormat: "Handler '{0}' is private or protected, so the generated mediator cannot register it. Make it and its containing types public or internal.",
+            category: "Cortex.Mediator",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
     }
 }

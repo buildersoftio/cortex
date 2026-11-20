@@ -8,21 +8,12 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
     {
         public static string Emit(ImmutableArray<HandlerRegistration> handlers)
         {
-            var returningCommands = handlers
-                .Where(h => h.Kind == InterfaceKind.ReturningCommand)
-                .ToArray();
-
-            var voidCommands = handlers
-                .Where(h => h.Kind == InterfaceKind.VoidCommand)
-                .ToArray();
-
-            var queries = handlers
-                .Where(h => h.Kind == InterfaceKind.Query)
-                .ToArray();
-
-            var streamQueries = handlers
-                .Where(h => h.Kind == InterfaceKind.StreamQuery)
-                .ToArray();
+            // Duplicate handlers are reported as errors (CXMED005-CXMED007); one case per message keeps
+            // the generated switch compilable so that error is the only one the user sees.
+            var returningCommands = FirstPerMessage(handlers, InterfaceKind.ReturningCommand);
+            var voidCommands = FirstPerMessage(handlers, InterfaceKind.VoidCommand);
+            var queries = FirstPerMessage(handlers, InterfaceKind.Query);
+            var streamQueries = FirstPerMessage(handlers, InterfaceKind.StreamQuery);
 
             var notifications = handlers
                 .Where(h => h.Kind == InterfaceKind.Notification)
@@ -110,6 +101,15 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
             sb.CloseBrace(); // namespace
 
             return sb.ToString();
+        }
+
+        private static HandlerRegistration[] FirstPerMessage(ImmutableArray<HandlerRegistration> handlers, InterfaceKind kind)
+        {
+            return handlers
+                .Where(h => h.Kind == kind)
+                .GroupBy(h => h.MessageFullyQualifiedName)
+                .Select(g => g.First())
+                .ToArray();
         }
 
         private static void EmitStronglyTypedSendCommandReturning(SourceTextBuilder sb)

@@ -126,6 +126,8 @@ The generator reports diagnostics during compilation:
 | `CXMED004` | Info | Notification has no handler (zero handlers is valid) |
 | `CXMED005` | Error | Multiple handlers for same command |
 | `CXMED006` | Error | Multiple handlers for same query |
+| `CXMED007` | Error | Multiple handlers for same stream query |
+| `CXMED008` | Warning | Handler is private or protected, so generated code cannot register it |
 
 ## Supported Handler Types
 

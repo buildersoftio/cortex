@@ -65,13 +65,13 @@ Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedNa
 Expected: exit 0, nonzero discovered tests, 0 failed; runtime fixtures actually awaited.
 Commit: test(mediator): execute generated mediator through DI
 ### Task 2: Cover and repair declaration and diagnostic edge cases
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.SourceGenerator/CortexMediatorGenerator.cs` (modify), `src/Cortex.Mediator.SourceGenerator/Discovery/HandlerDiscovery.cs` (modify), `src/Cortex.Mediator.SourceGenerator/Discovery/MessageDiscovery.cs` (modify), `src/Cortex.Mediator.SourceGenerator/Models/HandlerRegistration.cs` (modify if diagnostic location metadata is needed), `src/Cortex.Mediator.SourceGenerator/Diagnostics/DiagnosticDescriptors.cs` (modify), `src/Cortex.Tests/Mediator/SourceGenerator/DiagnosticTests.cs` (modify), `src/Cortex.Tests/Mediator/SourceGenerator/GeneratorDriverTests.cs` (modify), `src/Cortex.Tests/Mediator/SourceGenerator/GeneratedMediatorRuntimeTests.cs` (modify), `docs/plans/2026-11-20-pr235-review-tests.md` (modify)
 Depends on: Task 1
-- [ ] Reproduce missing diagnostics for record/struct messages and missing record handler discovery, then broaden syntax selection with semantic filtering.
-- [ ] Reproduce repeated registrations from partial declarations; deduplicate by handler/service identity before diagnostics and emission.
-- [ ] Reproduce duplicate stream handlers and inaccessible nested handlers; emit targeted generator errors with source locations where available and avoid redundant generated-code errors.
-- [ ] Assert diagnostic IDs, severities and locations, valid output compilation, single registration/invocation, opt-in and opt-out controls.
+- [x] Reproduce missing diagnostics for record/struct messages and missing record handler discovery, then broaden syntax selection with semantic filtering.
+- [x] Reproduce repeated registrations from partial declarations; deduplicate by handler/service identity before diagnostics and emission.
+- [x] Reproduce duplicate stream handlers and inaccessible nested handlers; emit targeted generator errors with source locations where available and avoid redundant generated-code errors.
+- [x] Assert diagnostic IDs, severities and locations, valid output compilation, single registration/invocation, opt-in and opt-out controls.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj --filter FullyQualifiedName~Cortex.Tests.Mediator.SourceGenerator`
 Expected: red regressions captured before fixes; final exit 0, nonzero discovery, 0 failed.
 Commit: fix(mediator): handle generator declaration edge cases
@@ -117,3 +117,7 @@ Commit: test(mediator): add generated consumer native smoke coverage
 - 2026-11-20 Task 1: unblocked — user repaired the SDK (now 10.0.404); baseline focused run → "Passed! - Failed: 0, Passed: 24".
 - 2026-11-20 Ruling: fixture references = the test host's trusted platform assemblies minus Cortex.Tests.dll — Cortex.Tests carries its own generated marker attribute; cost if wrong: slower fixture compilation only.
 - 2026-11-20 Task 1: complete — `dotnet test … --filter FullyQualifiedName~Cortex.Tests.Mediator.SourceGenerator` → "Passed! - Failed: 0, Passed: 32" (8 new runtime tests).
+- 2026-11-20 Task 2: red — 8 new tests failed for the predicted reasons: no CXMED001-004 for record/struct messages; partial PingHandler → false CXMED005 + CS8120, partial message → CXMED001 twice; CXMED005/006 at Location.None; no stream duplicate diagnostic; no diagnostic for a private nested handler; record handler not registered.
+- 2026-11-20 Ruling: CXMED008 (inaccessible handler) is a Warning, not an Error — it matches CXMED001 for an unhandled command, which it effectively is; cost if wrong: a skipped handler fails at runtime instead of at build.
+- 2026-11-20 Ruling: GeneratedMediatorEmitter (listed under Task 3) and the generator README diagnostics table changed in Task 2 — one switch case per message keeps CXMED005-007 the only error, and the table must list the two new IDs; cost if wrong: none.
+- 2026-11-20 Task 2: complete — `dotnet test … --filter FullyQualifiedName~Cortex.Tests.Mediator.SourceGenerator` → "Total tests: 40, Passed: 40".

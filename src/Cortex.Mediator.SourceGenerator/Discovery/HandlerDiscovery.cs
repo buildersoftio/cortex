@@ -25,6 +25,9 @@ namespace Cortex.Mediator.SourceGenerator.Discovery
             if (classSymbol.IsAbstractOrInterface() || classSymbol.IsGenericType)
                 return builder.ToImmutable();
 
+            var isAccessible = classSymbol.IsAccessibleFromGeneratedCode();
+            var location = classSymbol.Locations.Length > 0 ? classSymbol.Locations[0] : Location.None;
+
             foreach (var iface in classSymbol.AllInterfaces)
             {
                 if (!iface.IsGenericType)
@@ -49,7 +52,9 @@ namespace Cortex.Mediator.SourceGenerator.Discovery
                         handlerFullyQualifiedName: classSymbol.ToFullyQualifiedString(),
                         messageFullyQualifiedName: messageType.ToFullyQualifiedString(),
                         resultFullyQualifiedName: resultType?.ToFullyQualifiedString(),
-                        serviceInterfaceFullyQualifiedName: iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                        serviceInterfaceFullyQualifiedName: iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                        isAccessible: isAccessible,
+                        location: location);
 
                     builder.Add(registration);
                 }

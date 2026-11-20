@@ -442,6 +442,69 @@ namespace TestApp
     }
 
     [Fact]
+    public async Task RecordStructAndPartialDeclarations_AreRegisteredAndDispatched()
+    {
+        var output = await GeneratorTestHarness.RunScenarioAsync(OptInHeader + SharedTypes + @"
+namespace TestApp
+{
+    public record Ship(int Quantity) : ICommand<int>;
+
+    public sealed record ShipHandler : ICommandHandler<Ship, int>
+    {
+        public Task<int> Handle(Ship command, CancellationToken cancellationToken) => Task.FromResult(command.Quantity + 1);
+    }
+
+    public struct Measure : IQuery<int> { public int Value { get; set; } }
+
+    public class MeasureHandler : IQueryHandler<Measure, int>
+    {
+        public Task<int> Handle(Measure query, CancellationToken cancellationToken) => Task.FromResult(query.Value * 2);
+    }
+
+    public class Ping : ICommand { }
+
+    public partial class PingHandler : ICommandHandler<Ping> { }
+
+    public partial class PingHandler : IDisposable
+    {
+        private readonly Log _log;
+        public PingHandler(Log log) => _log = log;
+
+        public Task Handle(Ping command, CancellationToken cancellationToken)
+        {
+            _log.Entries.Add(""ping"");
+            return Task.CompletedTask;
+        }
+
+        public void Dispose() { }
+    }
+
+    public static class Scenario
+    {
+        public static async Task<string> Run()
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<Log>();
+            services.AddCortexGeneratedMediator();
+
+            using var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+            var shipped = await mediator.SendCommandAsync(new Ship(5));
+            var measured = await mediator.SendQueryAsync(new Measure { Value = 4 });
+            await mediator.SendCommandAsync((ICommand)new Ping());
+
+            var pings = provider.GetRequiredService<Log>().Entries.Count(e => e == ""ping"");
+            return string.Join(""|"", shipped, measured, pings);
+        }
+    }
+}");
+
+        Assert.Equal("6|8|1", output);
+    }
+
+    [Fact]
     public async Task UnknownAndNullRequests_FailWithClearExceptions()
     {
         var output = await GeneratorTestHarness.RunScenarioAsync(OptInHeader + SharedTypes + @"
