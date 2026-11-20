@@ -114,6 +114,29 @@ namespace Cortex.Streams.Abstractions
         IFanOutBuilder<TIn, TCurrent> FanOut(Action<IFanOutBuilder<TIn, TCurrent>> config);
 
         /// <summary>
+        /// Splits the stream into branches and merges their outputs back into one stream.
+        /// Each item reaches every (matching) branch in the order they were added, and every
+        /// branch output continues to the operators chained after the merge.
+        /// </summary>
+        /// <typeparam name="TNext">The type of the merged items; every branch must produce it.</typeparam>
+        /// <param name="config">An action that adds the branches with <see cref="IMergeBuilder{TIn, TCurrent, TNext}.Branch(string, Func{IBranchStreamBuilder{TIn, TCurrent}, IBranchStreamBuilder{TIn, TNext}})"/>.</param>
+        /// <returns>A stream builder for the merged stream.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="config"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">No branch was added.</exception>
+        /// <example>
+        /// <code>
+        /// var stream = StreamBuilder&lt;Order&gt;.CreateNewStream("Orders")
+        ///     .Stream()
+        ///     .Merge&lt;string&gt;(merge =&gt; merge
+        ///         .Branch("all", b =&gt; b.Map(o =&gt; $"order {o.Id}"))
+        ///         .Branch("large", o =&gt; o.Amount &gt; 10000, b =&gt; b.Map(o =&gt; $"large order {o.Id}")))
+        ///     .Sink(Console.WriteLine)
+        ///     .Build();
+        /// </code>
+        /// </example>
+        IStreamBuilder<TIn, TNext> Merge<TNext>(Action<IMergeBuilder<TIn, TCurrent, TNext>> config);
+
+        /// <summary>
         /// Builds the stream
         /// </summary>
         /// <returns></returns>

@@ -36,6 +36,20 @@ namespace Cortex.Streams.Operators
         // Error handling
         private StreamExecutionOptions _executionOptions;
 
+        /// <param name="acceptsRuntimeBranches">
+        /// False for the fork of a merge, so <see cref="IStream{TIn}.AddBranch{TBranch}(string, Action{IBranchStreamBuilder{TIn, TBranch}})"/>
+        /// never attaches a branch that would not end in the merge.
+        /// </param>
+        public ForkOperator(bool acceptsRuntimeBranches = true)
+        {
+            AcceptsRuntimeBranches = acceptsRuntimeBranches;
+        }
+
+        /// <summary>
+        /// Gets whether branches may be added to this fork on a running stream.
+        /// </summary>
+        public bool AcceptsRuntimeBranches { get; }
+
         public void SetTelemetryProvider(ITelemetryProvider telemetryProvider)
         {
             _telemetryProvider = telemetryProvider;

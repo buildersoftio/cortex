@@ -330,6 +330,45 @@ namespace Cortex.Streams
             return fanOutBuilder;
         }
 
+        /// <summary>
+        /// Splits the stream into branches and merges their outputs back into one stream.
+        /// </summary>
+        /// <typeparam name="TNext">The type of the merged items.</typeparam>
+        /// <param name="config">An action that adds the merge branches.</param>
+        /// <returns>A stream builder for the merged stream.</returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="InvalidOperationException"></exception>
+        public IStreamBuilder<TIn, TNext> Merge<TNext>(Action<IMergeBuilder<TIn, TCurrent, TNext>> config)
+        {
+            if (config == null)
+            {
+                throw new ArgumentNullException(nameof(config));
+            }
+
+            var forkOperator = new ForkOperator<TCurrent>(acceptsRuntimeBranches: false);
+            var mergeOperator = new MergeOperator<TNext>();
+            var mergeBuilder = new MergeBuilder<TIn, TCurrent, TNext>(_name, forkOperator, mergeOperator);
+            config(mergeBuilder);
+
+            if (mergeBuilder.BranchCount == 0)
+            {
+                throw new InvalidOperationException("Merge must have at least one branch. Use .Branch() to add branches.");
+            }
+
+            // Attach only after the configuration succeeded, so a failed Merge leaves the pipeline unchanged
+            if (_firstOperator == null)
+            {
+                _firstOperator = forkOperator;
+            }
+            else
+            {
+                _lastOperator.SetNext(forkOperator);
+            }
+            _lastOperator = mergeOperator;
+
+            return new StreamBuilder<TIn, TNext>(_name, _firstOperator, mergeOperator, _sourceAdded, _telemetryProvider, _executionOptions, _performanceOptions);
+        }
+
         public IStreamBuilder<TIn, TCurrent> GroupBySilently<TKey>(Func<TCurrent, TKey> keySelector, string stateStoreName = null, States.IDataStore<TKey, List<TCurrent>> stateStore = null)
         {
             if (stateStore == null)

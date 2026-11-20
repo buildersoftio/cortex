@@ -435,7 +435,10 @@ namespace Cortex.Streams
 
         private ForkOperator<TBranch> FindRuntimeBranchPoint<TBranch>()
         {
-            var forks = CollectOperators(_operatorChain).OfType<ForkOperator<TBranch>>().ToList();
+            var forks = CollectOperators(_operatorChain)
+                .OfType<ForkOperator<TBranch>>()
+                .Where(fork => fork.AcceptsRuntimeBranches)
+                .ToList();
 
             if (forks.Count == 0)
                 throw new InvalidOperationException(
