@@ -1,6 +1,6 @@
 ﻿# Stream Performance & Async Processing
 
-This guide covers the performance optimization features in Cortex.Streams, including buffered async processing, backpressure handling, and high-throughput configurations.
+This guide covers the performance features in Cortex.Streams: buffered async processing, backpressure handling and high-throughput configurations.
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@ This guide covers the performance optimization features in Cortex.Streams, inclu
 - [Best Practices](#best-practices)
 - [Migration Guide](#migration-guide)
 - [API Reference](#api-reference)
+- [Complete Example](#complete-example)
 
 ---
 
@@ -23,27 +24,35 @@ Cortex.Streams provides optional performance features for high-throughput scenar
 
 | Feature | Description |
 |---------|-------------|
-| **Buffered Processing** | Internal bounded buffer with async consumers |
-| **Backpressure Handling** | Configurable strategies when buffer is full |
-| **Async Emission** | Non-blocking `EmitAsync` and `EmitAndForget` |
-| **Batch Processing** | Process multiple items in batches for throughput |
-| **Parallel Consumers** | Multiple concurrent processing tasks |
-| **Buffer Statistics** | Real-time monitoring of buffer state |
+| **Buffered processing** | A bounded internal buffer, drained by background consumer tasks |
+| **Backpressure handling** | Configurable behavior when the buffer is full |
+| **Async emission** | `EmitAsync` and `EmitAndForget` return once the item is buffered |
+| **Batched reads** | Consumers read several buffered items at a time |
+| **Parallel consumers** | Several consumer tasks run the pipeline concurrently |
+| **Buffer statistics** | Real-time view of the buffer |
 
 ### Key Benefits
 
-- ✅ **Non-blocking emission** - Producers don't wait for pipeline completion
-- ✅ **Backpressure control** - Handle overload scenarios gracefully
-- ✅ **Higher throughput** - Batch processing and parallel consumers
-- ✅ **Backward compatible** - Opt-in features, existing code works unchanged
+- **Non-blocking emission**: producers do not wait for the pipeline to finish.
+- **Backpressure control**: decide what happens when producers are faster than the pipeline.
+- **Higher throughput**: parallel consumers process several items at once.
+- **Backward compatible**: everything is opt-in; existing code works unchanged.
+
+The examples on this page use these namespaces:
+
+```csharp
+using Cortex.Streams;
+using Cortex.Streams.ErrorHandling;   // StreamExecutionOptions
+using Cortex.Streams.Performance;     // StreamPerformanceOptions, BackpressureStrategy, BufferFullException
+```
 
 ---
 
 ## Quick Start
 
-### Basic Async Stream (Default Behavior)
+### Basic Stream (Default Behavior)
 
-Without any performance configuration, streams work synchronously:
+Without performance options, a stream processes each item synchronously:
 
 ```csharp
 var stream = StreamBuilder<int>.CreateNewStream("BasicStream")
@@ -53,8 +62,8 @@ var stream = StreamBuilder<int>.CreateNewStream("BasicStream")
     .Build();
 
 stream.Start();
-stream.Emit(42);        // Blocks until processing completes
-await stream.EmitAsync(42); // Runs on thread pool, still waits
+stream.Emit(42);             // Blocks until the sink has run
+await stream.EmitAsync(42);  // Runs the pipeline on the thread pool and waits for it
 stream.Stop();
 ```
 
@@ -72,20 +81,22 @@ var stream = StreamBuilder<int>.CreateNewStream("FastStream")
     })
     .Stream()
     .Map(x => x * 2)
-    .Sink(ProcessItem)
+    .Sink(x => Console.WriteLine(x))
     .Build();
 
 stream.Start();
 
-// Non-blocking - returns immediately after buffering
+// Returns as soon as the item is buffered
 stream.EmitAndForget(42);
 
-// Async - awaits buffering (not processing)
+// Awaits buffering, not processing
 await stream.EmitAsync(42);
 
-// Graceful shutdown - waits for buffer to drain
+// Graceful shutdown: waits for the buffer to drain
 await stream.StopAsync();
 ```
+
+`Emit` keeps its synchronous behavior even when buffering is enabled: it runs the pipeline on the calling thread and bypasses the buffer.
 
 ---
 
@@ -95,14 +106,14 @@ await stream.StopAsync();
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `EnableBufferedProcessing` | `bool` | `false` | Enable internal buffer and async consumers |
-| `BufferCapacity` | `int` | `10,000` | Maximum items in buffer |
-| `BackpressureStrategy` | `BackpressureStrategy` | `Block` | Behavior when buffer is full |
-| `BatchSize` | `int` | `1` | Items per batch (1 = immediate processing) |
-| `BatchTimeout` | `TimeSpan` | `100ms` | Max wait time for batch to fill |
+| `EnableBufferedProcessing` | `bool` | `false` | Enables the internal buffer and consumer tasks |
+| `BufferCapacity` | `int` | `10,000` | Maximum number of buffered items |
+| `BackpressureStrategy` | `BackpressureStrategy` | `Block` | Behavior when the buffer is full |
+| `BatchSize` | `int` | `1` | Items a consumer reads before processing them (1 = immediately) |
+| `BatchTimeout` | `TimeSpan` | `100 ms` | Longest a consumer waits to fill a batch |
 | `ConcurrencyLevel` | `int` | `1` | Number of parallel consumer tasks |
-| `BlockingTimeout` | `TimeSpan` | `30s` | Timeout for blocking operations |
-| `OnItemDropped` | `Action<object, DropReason>` | `null` | Callback when items are dropped |
+| `BlockingTimeout` | `TimeSpan` | `30 s` | How long `Block` waits for space before throwing |
+| `OnItemDropped` | `Action<object, DropReason>` | `null` | Called when an item is rejected because the stream is stopped (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
 
 ### Example: Custom Configuration
 
@@ -116,77 +127,90 @@ var options = new StreamPerformanceOptions
     BatchTimeout = TimeSpan.FromMilliseconds(50),
     ConcurrencyLevel = Environment.ProcessorCount,
     BlockingTimeout = TimeSpan.FromSeconds(60),
-    OnItemDropped = (item, reason) => 
-        Console.WriteLine($"Dropped: {item}, Reason: {reason}")
+    OnItemDropped = (item, reason) => Console.WriteLine($"Dropped: {item}, Reason: {reason}")
 };
 
-var stream = StreamBuilder<Event>.CreateNewStream("CustomStream")
+var stream = StreamBuilder<SensorEvent>.CreateNewStream("CustomStream")
     .WithPerformanceOptions(options)
     .Stream()
-    // ... pipeline
+    .Filter(e => e.Value > 0)
+    .Sink(e => Console.WriteLine(e))
     .Build();
 ```
+
+`SensorEvent` stands for your event type, for example `public record SensorEvent(string Id, double Value);`.
 
 ---
 
 ## Backpressure Strategies
 
-When the internal buffer reaches capacity, the backpressure strategy determines behavior:
+When the buffer is full, the backpressure strategy decides what happens to a new item.
 
 ### Block (Default)
 
-Waits for space to become available. Best for scenarios where data loss is unacceptable.
+Waits for space. Best when data loss is unacceptable.
 
 ```csharp
-BackpressureStrategy = BackpressureStrategy.Block,
-BlockingTimeout = TimeSpan.FromSeconds(30) // Throws after timeout
+var blocking = new StreamPerformanceOptions
+{
+    EnableBufferedProcessing = true,
+    BackpressureStrategy = BackpressureStrategy.Block,
+    BlockingTimeout = TimeSpan.FromSeconds(30)   // Throws after this long
+};
 ```
 
 **Behavior:**
-- `EmitAsync` blocks (asynchronously) until space available
-- `EmitAndForget` blocks synchronously
-- Throws `OperationCanceledException` on timeout
+- `EmitAsync` waits asynchronously until there is space.
+- `EmitAndForget` waits synchronously, blocking the calling thread.
+- Both throw `OperationCanceledException` when `BlockingTimeout` passes. Use `Timeout.InfiniteTimeSpan` to wait forever.
 
 ### DropNewest
 
-Silently drops incoming items when buffer is full. Best for real-time data where latest data is more important.
+Makes room by removing the **most recently buffered** item; the new item is buffered. Best when the oldest waiting items must be processed.
 
 ```csharp
-BackpressureStrategy = BackpressureStrategy.DropNewest,
-OnItemDropped = (item, reason) => metrics.IncrementDropped()
+var dropNewest = new StreamPerformanceOptions
+{
+    EnableBufferedProcessing = true,
+    BackpressureStrategy = BackpressureStrategy.DropNewest
+};
 ```
 
 **Behavior:**
-- Writes always succeed (return `true`)
-- Excess items are silently dropped
-- Use `OnItemDropped` callback to track dropped items
+- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally.
+- The item that was buffered last is discarded without notice.
 
 ### DropOldest
 
-Removes oldest items to make room for new ones. Best for keeping the most recent data.
+Makes room by removing the **oldest buffered** item; the new item is buffered. Best when only the latest data matters.
 
 ```csharp
-BackpressureStrategy = BackpressureStrategy.DropOldest,
-OnItemDropped = (item, reason) => LogDropped(item)
+var dropOldest = new StreamPerformanceOptions
+{
+    EnableBufferedProcessing = true,
+    BackpressureStrategy = BackpressureStrategy.DropOldest
+};
 ```
 
 **Behavior:**
-- New items always accepted
-- Oldest buffered items are evicted
-- Callback receives evicted items
+- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally.
+- The oldest buffered item is discarded without notice.
 
 ### ThrowException
 
-Throws `BufferFullException` when buffer is full. Best for explicit failure handling.
+Throws `BufferFullException` when the buffer is full. Best when the caller must decide.
 
 ```csharp
-BackpressureStrategy = BackpressureStrategy.ThrowException
+var throwing = new StreamPerformanceOptions
+{
+    EnableBufferedProcessing = true,
+    BackpressureStrategy = BackpressureStrategy.ThrowException
+};
 ```
 
 **Behavior:**
-- `EmitAndForget` throws `BufferFullException`
-- `EmitAsync` throws `BufferFullException`
-- Caller must handle the exception
+- `EmitAndForget` and `EmitAsync` throw `BufferFullException`; the item is not buffered.
+- The exception carries `BufferCapacity` and the `RejectedItem`.
 
 ```csharp
 try
@@ -196,9 +220,13 @@ try
 catch (BufferFullException ex)
 {
     Console.WriteLine($"Buffer full! Capacity: {ex.BufferCapacity}");
-    // Implement retry logic or alternative handling
+    // Retry later, or hand the item to another path
 }
 ```
+
+### Known Limitation: Drop Callbacks and Counters
+
+With `DropNewest` and `DropOldest` the buffer discards items itself. Those discarded items are **not** reported to `OnItemDropped` and are **not** counted in `BufferStatistics.TotalDropped`. Today the callback and the counter only see items rejected because the stream is stopping. To detect data loss under these strategies, compare `TotalEnqueued` with `TotalProcessed` after a graceful stop (see [Monitor Buffer Health](#4-monitor-buffer-health)).
 
 ---
 
@@ -206,17 +234,17 @@ catch (BufferFullException ex)
 
 ### Emit (Synchronous)
 
-Blocks until the entire pipeline processes the item. Unchanged from previous behavior.
+Runs the whole pipeline on the calling thread and returns when it has finished, with or without buffering.
 
 ```csharp
-stream.Emit(item); // Blocks until Sink completes
+stream.Emit(item); // Returns after the sink has run
 ```
 
 ### EmitAsync
 
 Asynchronously emits an item:
-- **Without buffering**: Runs pipeline on thread pool, awaits completion
-- **With buffering**: Awaits buffer space, returns when buffered (not processed)
+- **Without buffering**: runs the pipeline on the thread pool and completes when it has finished.
+- **With buffering**: completes when the item is buffered, not when it is processed.
 
 ```csharp
 await stream.EmitAsync(item);
@@ -225,18 +253,20 @@ await stream.EmitAsync(item, cancellationToken);
 
 ### EmitAndForget
 
-Fire-and-forget emission. **Requires buffered processing enabled.**
+Fire-and-forget emission. **Requires buffered processing**; throws `InvalidOperationException` otherwise.
 
 ```csharp
 bool accepted = stream.EmitAndForget(item);
-// Returns immediately
-// accepted = true if buffered, false if dropped (DropNewest/DropOldest)
-// Throws BufferFullException if strategy is ThrowException
+// Returns as soon as the item is buffered.
+// accepted is false only when the stream is stopping; drops under DropNewest/DropOldest still return true.
+// Throws BufferFullException with ThrowException, and OperationCanceledException when Block times out.
 ```
 
 ### EmitBatchAsync
 
-Efficiently emit multiple items:
+Emits several items:
+- **Without buffering**: runs the pipeline once per item on the thread pool, one item after another.
+- **With buffering**: buffers the items one after another, applying backpressure to each.
 
 ```csharp
 var items = Enumerable.Range(1, 1000);
@@ -244,13 +274,15 @@ await stream.EmitBatchAsync(items);
 await stream.EmitBatchAsync(items, cancellationToken);
 ```
 
+All emit methods throw `InvalidOperationException` when the stream has not been started, or when it has a source operator.
+
 ---
 
 ## Monitoring & Statistics
 
 ### GetBufferStatistics
 
-Returns real-time buffer metrics (only when buffered processing is enabled):
+Returns buffer metrics, or `null` when buffered processing is disabled:
 
 ```csharp
 BufferStatistics stats = stream.GetBufferStatistics();
@@ -270,25 +302,34 @@ if (stats != null)
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `CurrentCount` | `int` | Items currently in buffer |
+| `CurrentCount` | `int` | Items currently in the buffer |
 | `Capacity` | `int` | Maximum buffer capacity |
-| `TotalEnqueued` | `long` | Total items added since start |
-| `TotalProcessed` | `long` | Total items successfully processed |
-| `TotalDropped` | `long` | Total items dropped due to backpressure |
+| `TotalEnqueued` | `long` | Items buffered since the stream started |
+| `TotalProcessed` | `long` | Items that went through the pipeline without an exception |
+| `TotalDropped` | `long` | Items rejected because the stream was stopping (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
 | `UtilizationPercent` | `double` | Current buffer utilization (0-100) |
 
 ### Health Monitoring Example
 
 ```csharp
-// Periodic monitoring
-var timer = new Timer(_ =>
+public class BufferHealthMonitor : IDisposable
 {
-    var stats = stream.GetBufferStatistics();
-    if (stats != null && stats.UtilizationPercent > 80)
+    private readonly Timer _timer;
+
+    public BufferHealthMonitor(IStream<int> stream, Action<string> warn)
     {
-        logger.Warn($"Buffer utilization high: {stats.UtilizationPercent:F1}%");
+        _timer = new Timer(_ =>
+        {
+            var stats = stream.GetBufferStatistics();
+            if (stats != null && stats.UtilizationPercent > 80)
+            {
+                warn($"Buffer utilization high: {stats.UtilizationPercent:F1}%");
+            }
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
-}, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+
+    public void Dispose() => _timer.Dispose();
+}
 ```
 
 ---
@@ -297,16 +338,15 @@ var timer = new Timer(_ =>
 
 ### HighThroughput
 
-Optimized for maximum throughput with parallel processing:
+Large buffer and parallel consumers:
 
 ```csharp
 var options = StreamPerformanceOptions.HighThroughput(
     bufferCapacity: 100_000,      // Default: 100,000
-    concurrencyLevel: 8           // Default: Environment.ProcessorCount
-);
+    concurrencyLevel: 8);         // Default: Environment.ProcessorCount
 
 // Equivalent to:
-new StreamPerformanceOptions
+var equivalent = new StreamPerformanceOptions
 {
     EnableBufferedProcessing = true,
     BufferCapacity = 100_000,
@@ -315,57 +355,55 @@ new StreamPerformanceOptions
     BatchTimeout = TimeSpan.FromMilliseconds(50),
     ConcurrencyLevel = 8,
     BlockingTimeout = TimeSpan.FromSeconds(60)
-}
+};
 ```
 
-**Best for:** Log ingestion, metrics collection, high-volume event processing
+**Best for:** log ingestion, metrics collection, high-volume event processing where order does not matter.
 
 ### LowLatency
 
-Optimized for minimal latency with immediate processing:
+Immediate processing by a single consumer, so items are processed in the order they were buffered:
 
 ```csharp
 var options = StreamPerformanceOptions.LowLatency(
-    bufferCapacity: 10_000        // Default: 10,000
-);
+    bufferCapacity: 10_000);      // Default: 10,000
 
 // Equivalent to:
-new StreamPerformanceOptions
+var equivalent = new StreamPerformanceOptions
 {
     EnableBufferedProcessing = true,
     BufferCapacity = 10_000,
     BackpressureStrategy = BackpressureStrategy.Block,
     BatchSize = 1,                // Process immediately
-    ConcurrencyLevel = 1,         // Single consumer for ordering
+    ConcurrencyLevel = 1,         // Single consumer keeps the order
     BlockingTimeout = TimeSpan.FromSeconds(30)
-}
+};
 ```
 
-**Best for:** Real-time notifications, interactive applications
+**Best for:** real-time notifications, interactive applications.
 
 ### DropOldest
 
-Optimized for scenarios where latest data matters most:
+Keeps the latest data under pressure:
 
 ```csharp
 var options = StreamPerformanceOptions.DropOldest(
     bufferCapacity: 10_000,
-    onItemDropped: (item, reason) => metrics.Track("dropped", item)
-);
+    onItemDropped: (item, reason) => Console.WriteLine($"Dropped {item}: {reason}"));
 
 // Equivalent to:
-new StreamPerformanceOptions
+var equivalent = new StreamPerformanceOptions
 {
     EnableBufferedProcessing = true,
     BufferCapacity = 10_000,
     BackpressureStrategy = BackpressureStrategy.DropOldest,
     BatchSize = 1,
     ConcurrencyLevel = 1,
-    OnItemDropped = onItemDropped
-}
+    OnItemDropped = (item, reason) => Console.WriteLine($"Dropped {item}: {reason}")
+};
 ```
 
-**Best for:** Stock tickers, sensor data, real-time dashboards
+**Best for:** stock tickers, sensor data, real-time dashboards. The callback is not called for the items the buffer discards; see [Known Limitation](#known-limitation-drop-callbacks-and-counters).
 
 ---
 
@@ -373,31 +411,34 @@ new StreamPerformanceOptions
 
 ### 1. Choose the Right Backpressure Strategy
 
-| Scenario | Recommended Strategy |
+| Scenario | Recommended strategy |
 |----------|---------------------|
-| Financial transactions | `Block` - Never lose data |
-| Real-time metrics | `DropOldest` - Keep latest |
-| Log aggregation | `Block` with large buffer |
-| Live video frames | `DropNewest` - Skip if behind |
-| Critical alerts | `ThrowException` - Explicit handling |
+| Financial transactions | `Block`: never lose data |
+| Real-time metrics | `DropOldest`: keep the latest |
+| Log aggregation | `Block` with a large buffer |
+| Work queues where the oldest items matter most | `DropNewest` |
+| Critical alerts | `ThrowException`: handle it explicitly |
 
-### 2. Size Your Buffer Appropriately
+### 2. Size Your Buffer
 
 ```csharp
-// Rule of thumb: Buffer should hold 2-5 seconds of peak throughput
+// Rule of thumb: the buffer holds 2-5 seconds of peak throughput
 var peakItemsPerSecond = 10_000;
 var bufferSeconds = 3;
 var bufferCapacity = peakItemsPerSecond * bufferSeconds; // 30,000
 ```
 
-### 3. Use Batch Processing for High Throughput
+### 3. Use Parallel Consumers for Throughput, Not Batches
+
+`BatchSize` only changes how many items a consumer reads from the buffer before processing them; each item still goes through the pipeline, and every sink is still called once per item. To process more items at once, raise `ConcurrencyLevel`:
 
 ```csharp
 // For I/O-bound sinks (database, network)
 var options = new StreamPerformanceOptions
 {
     EnableBufferedProcessing = true,
-    BatchSize = 100,                    // Batch writes
+    ConcurrencyLevel = 8,            // 8 items in flight at a time
+    BatchSize = 100,                 // Fewer buffer reads under load
     BatchTimeout = TimeSpan.FromMilliseconds(100)
 };
 ```
@@ -405,50 +446,53 @@ var options = new StreamPerformanceOptions
 ### 4. Monitor Buffer Health
 
 ```csharp
-// Set up alerts
+var stats = stream.GetBufferStatistics();
+
 if (stats.UtilizationPercent > 90)
 {
-    // Scale up consumers or reduce input rate
+    // Add consumers or reduce the input rate
 }
 
-if (stats.TotalDropped > previousDropped)
-{
-    // Data loss occurring - investigate
-}
+// After a graceful stop, every buffered item was either processed or lost
+await stream.StopAsync();
+var final = stream.GetBufferStatistics();
+var lost = final.TotalEnqueued - final.TotalProcessed;   // Discarded by the buffer or failed in the pipeline
 ```
 
 ### 5. Graceful Shutdown
 
-Always use `StopAsync` to ensure all buffered items are processed:
+Use `StopAsync` so buffered items are processed:
 
 ```csharp
-// ❌ Bad - may lose buffered items
+// Bad: buffered items that were not processed yet are lost
 stream.Stop();
 
-// ✅ Good - waits for buffer to drain
+// Good: waits until the buffer is drained
 await stream.StopAsync();
-
-// ✅ Good - with timeout
-using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-await stream.StopAsync(cts.Token);
 ```
 
-### 6. Thread Safety with Parallel Consumers
+`StopAsync` waits until the consumers have processed every buffered item. Its cancellation token does not shorten that wait today, so a sink that hangs keeps `StopAsync` from completing; give your sinks their own timeouts.
 
-When using `ConcurrencyLevel > 1`, ensure your operators are thread-safe:
+### 6. Configure Error Handling
+
+With buffered processing, an exception that escapes the pipeline is caught by the consumer task and the item is skipped, without a log or a callback. Configure `WithErrorHandling` (for example `Retry` or an `OnError` callback that logs) so that failures are visible.
+
+### 7. Thread Safety with Parallel Consumers
+
+With `ConcurrencyLevel > 1`, operators and sinks run on several threads at once:
 
 ```csharp
-// ❌ Bad - not thread-safe
+// Bad: List<T> is not thread-safe
 var list = new List<int>();
-.Sink(x => list.Add(x))
+builder.Sink(x => list.Add(x));
 
-// ✅ Good - thread-safe collection
+// Good: a thread-safe collection
 var bag = new ConcurrentBag<int>();
-.Sink(x => bag.Add(x))
+builder.Sink(x => bag.Add(x));
 
-// ✅ Good - atomic operations
+// Good: atomic operations
 var counter = 0;
-.Sink(x => Interlocked.Increment(ref counter))
+builder.Sink(x => Interlocked.Increment(ref counter));
 ```
 
 ---
@@ -463,34 +507,34 @@ Existing code continues to work unchanged:
 // Before (still works)
 stream.Emit(item);
 
-// After (same behavior, async wrapper)
+// After (same processing, awaited on the thread pool)
 await stream.EmitAsync(item);
 ```
 
 ### Enabling Buffered Processing
 
-Add performance options without changing pipeline logic:
+Add performance options without changing the pipeline:
 
 ```csharp
 // Before
 var stream = StreamBuilder<int>.CreateNewStream("MyStream")
     .Stream()
     .Map(x => x * 2)
-    .Sink(ProcessItem)
+    .Sink(x => Console.WriteLine(x))
     .Build();
 
 // After (just add WithPerformanceOptions)
-var stream = StreamBuilder<int>.CreateNewStream("MyStream")
+var buffered = StreamBuilder<int>.CreateNewStream("MyStream")
     .WithPerformanceOptions(StreamPerformanceOptions.LowLatency())
     .Stream()
     .Map(x => x * 2)
-    .Sink(ProcessItem)
+    .Sink(x => Console.WriteLine(x))
     .Build();
 ```
 
 ### Updating Stop Calls
 
-Replace synchronous stop with async for graceful shutdown:
+Replace the synchronous stop with the async one for a graceful shutdown:
 
 ```csharp
 // Before
@@ -504,58 +548,71 @@ await stream.StopAsync();
 
 ## API Reference
 
-### IStream&lt;TIn, TCurrent&gt; Methods
+### IStream&lt;TIn&gt; Methods
 
 | Method | Description |
 |--------|-------------|
-| `void Emit(TIn value)` | Synchronous emission (blocks until processed) |
+| `void Emit(TIn value)` | Synchronous emission (returns after processing) |
 | `Task EmitAsync(TIn value, CancellationToken ct)` | Async emission |
-| `Task EmitBatchAsync(IEnumerable<TIn> values, CancellationToken ct)` | Batch emission |
+| `Task EmitBatchAsync(IEnumerable<TIn> values, CancellationToken ct)` | Emits several items |
 | `bool EmitAndForget(TIn value)` | Fire-and-forget (requires buffering) |
-| `void Start()` | Start the stream |
-| `void Stop()` | Stop immediately |
+| `void Start()` | Starts the stream |
+| `void Stop()` | Stops immediately |
 | `Task StopAsync(CancellationToken ct)` | Graceful async stop |
-| `BufferStatistics GetBufferStatistics()` | Get buffer metrics (null if no buffering) |
+| `BufferStatistics GetBufferStatistics()` | Buffer metrics (`null` without buffering) |
 
 ### IInitialStreamBuilder&lt;TIn&gt; Methods
 
 | Method | Description |
 |--------|-------------|
-| `WithPerformanceOptions(StreamPerformanceOptions)` | Configure performance options |
-| `WithErrorHandling(StreamExecutionOptions)` | Configure error handling |
-| `WithTelemetry(ITelemetryProvider)` | Configure telemetry |
+| `WithPerformanceOptions(StreamPerformanceOptions)` | Configures performance options |
+| `WithErrorHandling(StreamExecutionOptions)` | Configures error handling |
+| `WithTelemetry(ITelemetryProvider)` | Configures telemetry |
 
 ### Exceptions
 
-| Exception | When Thrown |
+| Exception | When thrown |
 |-----------|-------------|
-| `BufferFullException` | Buffer full with `ThrowException` strategy |
-| `OperationCanceledException` | Blocking timeout or cancellation |
-| `InvalidOperationException` | `EmitAndForget` without buffering enabled |
+| `BufferFullException` | The buffer is full with the `ThrowException` strategy |
+| `OperationCanceledException` | `Block` timed out, or the cancellation token was cancelled |
+| `InvalidOperationException` | `EmitAndForget` without buffering; any emit before `Start()` or on a stream with a source operator |
 
 ---
 
 ## Complete Example
 
 ```csharp
-using Cortex.Streams;
-using Cortex.Streams.Performance;
+public record Order(string Id, decimal Amount, bool IsValid);
+public record ProcessedOrder(string Id, decimal Total);
+
+public interface IOrderServices
+{
+    Order Enrich(Order order);
+    ProcessedOrder Process(Order order);
+    void Save(ProcessedOrder order);
+}
+
+public interface IAppLog
+{
+    void Info(string message);
+    void Warn(string message);
+}
 
 public class OrderProcessor
 {
-    private readonly IStream<Order, ProcessedOrder> _stream;
+    private readonly IStream<Order> _stream;
+    private readonly IAppLog _log;
 
-    public OrderProcessor()
+    public OrderProcessor(IOrderServices services, IAppLog log)
     {
+        _log = log;
         _stream = StreamBuilder<Order>.CreateNewStream("OrderProcessor")
             .WithPerformanceOptions(new StreamPerformanceOptions
             {
                 EnableBufferedProcessing = true,
                 BufferCapacity = 50_000,
                 BackpressureStrategy = BackpressureStrategy.Block,
-                ConcurrencyLevel = 4,
-                OnItemDropped = (item, reason) => 
-                    Logger.Warn($"Order dropped: {((Order)item).Id}")
+                ConcurrencyLevel = 4
             })
             .WithErrorHandling(new StreamExecutionOptions
             {
@@ -565,26 +622,23 @@ public class OrderProcessor
             })
             .Stream()
             .Filter(order => order.IsValid)
-            .Map(order => EnrichOrder(order))
-            .Map(order => ProcessOrder(order))
-            .Sink(order => SaveToDatabase(order))
+            .Map(order => services.Enrich(order))
+            .Map(order => services.Process(order))
+            .Sink(order => services.Save(order))
             .Build();
     }
 
     public void Start() => _stream.Start();
 
-    public async Task StopAsync() => await _stream.StopAsync();
+    public Task StopAsync() => _stream.StopAsync();
 
-    public async Task SubmitOrderAsync(Order order)
-    {
-        await _stream.EmitAsync(order);
-    }
+    public Task SubmitOrderAsync(Order order) => _stream.EmitAsync(order);
 
     public void SubmitOrderFireAndForget(Order order)
     {
         if (!_stream.EmitAndForget(order))
         {
-            Logger.Warn($"Order {order.Id} was dropped");
+            _log.Warn($"Order {order.Id} was rejected: the stream is stopping");
         }
     }
 
@@ -593,11 +647,13 @@ public class OrderProcessor
         var stats = _stream.GetBufferStatistics();
         if (stats != null)
         {
-            Logger.Info($"Buffer: {stats.CurrentCount}/{stats.Capacity} " +
-                       $"({stats.UtilizationPercent:F1}%), " +
-                       $"Processed: {stats.TotalProcessed}, " +
-                       $"Dropped: {stats.TotalDropped}");
+            _log.Info($"Buffer: {stats.CurrentCount}/{stats.Capacity} " +
+                      $"({stats.UtilizationPercent:F1}%), " +
+                      $"Processed: {stats.TotalProcessed}, " +
+                      $"Dropped: {stats.TotalDropped}");
         }
     }
 }
 ```
+
+With `Retry`, an operator that keeps failing after `MaxRetries` attempts stops the stream; use `Skip`, or an `OnError` callback, if one bad order must not stop processing.
