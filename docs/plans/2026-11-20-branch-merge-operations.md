@@ -117,11 +117,11 @@ Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: docs(wiki): make stream-stream join examples compile and match behaviour
 ### Task 8: Make the Stream-Table Joins wiki examples correct and runnable
-- [ ] Done
+- [x] Done
 Files: `docs/wiki/Stream-Table-Joins.md` (modify)
 Depends on: Task 7
-- [ ] Check `Join`/`LeftJoin` usage (StreamBuilder.cs Join/LeftJoin) and the "Output" blocks; fix `o.ProductId` on an `Order` that has none (:271), the anonymous `new { o, c }` with an undeclared `Process`, the `RocksDbStateStore` example (needs Cortex.States.RocksDb; ctor `RocksDbStateStore(name, dbPath, options)`), the undeclared helpers, and the "See Also" links.
-- [ ] Compile and run every full example verbatim in a throwaway test file; compare the page's code lines; delete the file.
+- [x] Check `Join`/`LeftJoin` usage (StreamBuilder.cs Join/LeftJoin) and the "Output" blocks; fix `o.ProductId` on an `Order` that has none (:271), the anonymous `new { o, c }` with an undeclared `Process`, the `RocksDbStateStore` example (needs Cortex.States.RocksDb; ctor `RocksDbStateStore(name, dbPath, options)`), the undeclared helpers, and the "See Also" links.
+- [x] Compile and run every full example verbatim in a throwaway test file; compare the page's code lines; delete the file.
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests|FullyQualifiedName~StreamBuilderTests|FullyQualifiedName~FanOut|FullyQualifiedName~TelemetryTests|FullyQualifiedName~Cortex.Streams.Tests.ErrorHandlingTests"`
 Expected: build exit 0 "0 Error(s)"; tests "Failed: 0", exit 0
 Commit: docs(wiki): make stream-table join examples compile and match behaviour
@@ -181,3 +181,6 @@ Commit: docs(wiki): make branch and merge examples culture-independent
 - 2026-11-20 Task 7: findings — matching compares expiry (`timestamp + WindowSize`, StreamStreamJoinOperator.cs:77) with `DateTime.UtcNow` (:234, :290), every unexpired pair emits, unmatched rows come from the cleanup timer thread after `WindowSize + GracePeriod` (:319-412); the old click-attribution example used an outer join whose join function dereferenced the null impression of an unmatched click, which would throw on the timer thread → changed to a left join and explained; `StreamStreamJoinOperator` lives in `Cortex.Streams.Operators`, not `.Joins` → a namespaces block was added.
 - 2026-11-20 Task 7: examples checked — throwaway tests (basic usage incl. its exact console output, 5 use cases incl. unmatched emission via `ForceCleanup`, right join, configuration defaults, the Kafka pattern built without connecting) → "Total tests: 8, Passed: 8"; code-line comparison → "Checked 364 csharp lines, missing 12", all of them the ASP.NET Core webhook illustration (not compilable in the test project) or best-practice fragments; file deleted.
 - 2026-11-20 Task 7: complete (see commit docs(wiki): make stream-stream join examples compile and match behaviour).
+- 2026-11-20 Task 8: examples checked — throwaway tests (inner and left join with their exact "Output" blocks under the invariant culture, the 3 use cases, the table-update loop with a fake change feed, the backend snippet with an in-memory store) → "Total tests: 5, Passed: 5"; code-line comparison → "Checked 191 csharp lines, missing 7": the RocksDB lines (Cortex.States.RocksDb is not referenced by the test project; ctor checked by reading RocksDbStateStore.cs:20) and the best-practice fragment; file deleted.
+- 2026-11-20 Ruling: the gaming example routes premium and standard players with two conditional `AddBranch` calls instead of an `if` in the sink, to show the new feature — cost if wrong: one example changes style.
+- 2026-11-20 Task 8: complete (see commit docs(wiki): make stream-table join examples compile and match behaviour).
