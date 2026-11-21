@@ -46,7 +46,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
-		<PackageReference Include="MongoDB.Driver" Version="3.3.0" />
+		<PackageReference Include="MongoDB.Driver" Version="3.14.1" />
 	</ItemGroup>
 
 	<ItemGroup>

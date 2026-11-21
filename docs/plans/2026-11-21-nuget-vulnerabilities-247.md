@@ -46,10 +46,10 @@ Run: `dotnet build src/Cortex.Telemetry.OpenTelemetry -c Release -nologo && dotn
 Expected: exit 0, "0 Error(s)", "has no vulnerable packages"
 Commit: fix(telemetry): bump OpenTelemetry to 1.15.3 for GHSA-g94r-2vxg-569j
 ### Task 2: Bump MongoDB.Driver to 3.14.1
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.States.MongoDb/Cortex.States.MongoDb.csproj` (modify), `src/Cortex.Streams.MongoDb/Cortex.Streams.MongoDb.csproj` (modify)
 Depends on: none
-- [ ] MongoDB.Driver 3.14.1 in both projects; SharpCompress resolves 0.48.1, Snappier 1.3.1
+- [x] MongoDB.Driver 3.14.1 in both projects; SharpCompress resolves 0.48.1, Snappier 1.3.1
 Run: `dotnet build src/Cortex.States.MongoDb -c Release -nologo && dotnet build src/Cortex.Streams.MongoDb -c Release -nologo && dotnet list src/Cortex.States.MongoDb package --vulnerable --include-transitive && dotnet list src/Cortex.Streams.MongoDb package --vulnerable --include-transitive`
 Expected: exit 0, "0 Error(s)" twice, "has no vulnerable packages" twice
 Commit: fix(mongodb): bump MongoDB.Driver to 3.14.1 for Snappier and SharpCompress advisories
@@ -85,3 +85,4 @@ Commit: build: audit transitive NuGet packages on restore
 - 2026-11-21 Ruling: Task 5 warnings only, no WarningsAsErrors — user's Audit answer — cost if wrong: one line to add later
 - 2026-11-21 Baseline: `dotnet build Cortex.sln -c Release -nologo` on 71768f40 → "615 Warning(s)", "0 Error(s)"
 - 2026-11-21 Task 1: complete — `dotnet build src/Cortex.Telemetry.OpenTelemetry -c Release` + `dotnet list … --vulnerable` → 0 Error(s), no vulnerable packages
+- 2026-11-21 Task 2: complete — both MongoDb builds + `dotnet list … --vulnerable` → 0 Error(s), no vulnerable packages
