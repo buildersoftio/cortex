@@ -64,10 +64,10 @@ Run: `dotnet build src/Cortex.States.MSSqlServer -c Release -nologo && dotnet bu
 Expected: exit 0, "0 Error(s)", no "NU1701" in the output, "has no vulnerable packages" twice
 Commit: fix(mssql): bump Microsoft.Data.SqlClient to 6.1.8 and drop net7.0
 ### Task 4: Pin a patched SQLitePCLRaw bundle
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.States.SQLite/Cortex.States.SQLite.csproj` (modify), `src/Cortex.Tests/Cortex.Tests.csproj` (modify)
 Depends on: none
-- [ ] Direct `SQLitePCLRaw.bundle_e_sqlite3` 2.1.14 reference next to Microsoft.Data.Sqlite 9.0.3 in both projects; lib.e_sqlite3 resolves 2.1.14
+- [x] Direct `SQLitePCLRaw.bundle_e_sqlite3` 2.1.14 reference next to Microsoft.Data.Sqlite 9.0.3 in both projects; lib.e_sqlite3 resolves 2.1.14
 Run: `dotnet build src/Cortex.States.SQLite -c Release -nologo && dotnet list src/Cortex.States.SQLite package --vulnerable --include-transitive && dotnet list src/Cortex.Tests package --vulnerable --include-transitive && dotnet test src/Cortex.Tests -nologo --filter FullyQualifiedName~Scheduling`
 Expected: exit 0, "has no vulnerable packages" twice, scheduling tests "Failed: 0"
 Commit: fix(sqlite): pin SQLitePCLRaw.bundle_e_sqlite3 2.1.14 for CVE-2025-6965
@@ -92,3 +92,4 @@ Commit: build: audit transitive NuGet packages on restore
 - 2026-11-21 Task 3: repair 1/3 — Cortex.Streams.MSSqlServer build: "error NU1605: Detected package downgrade: Microsoft.Extensions.Logging.Abstractions from 9.0.21 to 9.0.3" (SqlClient 6.1.8 → Caching.Memory 9.0.21 on net9.0) → direct reference bumped to 9.0.21
 - 2026-11-21 Ruling: Logging.Abstractions 9.0.3 → 9.0.21 in Cortex.Streams.MSSqlServer — patch bump on the same 9.0 line, forced by SqlClient 6.1.8 — cost if wrong: none expected
 - 2026-11-21 Task 3: complete — both MSSqlServer builds, forced restore without NU1701, `dotnet list … --vulnerable` → no vulnerable packages
+- 2026-11-21 Task 4: complete — Cortex.States.SQLite build, `dotnet list … --vulnerable` for it and Cortex.Tests, scheduling tests → no vulnerable packages, Failed: 0
