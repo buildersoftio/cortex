@@ -72,12 +72,12 @@ Expected: exit 0, `Failed: 0`
 Commit: fix(streams): stop retrying terminal stops and stabilise #238 tests
 
 ### Task 2: Report every buffer drop and drop the incoming item under DropNewest
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Performance/BufferedProcessor.cs` (modify), `src/Cortex.Streams/Performance/BackpressureStrategy.cs` (modify), `src/Cortex.Tests/Streams/Tests/StreamPerformanceTests.cs` (modify), `docs/wiki/stream-performance.md` (modify)
 Depends on: Task 1
-- [ ] Tests (red first): DropOldest with capacity 2 and a blocked sink → processed `[1,3,4]`, one `BufferFullDropOldest` callback for item 2, `TotalDropped == 1`; DropNewest → processed `[1,2,3]`, `EmitAndForget(4) == false`, one `BufferFullDropNewest` callback for 4, `TotalDropped == 1`; a closed-channel write under Block and under DropOldest → `StreamStopped`, counted.
-- [ ] Create the channel with an `itemDropped` callback for DropOldest; use `Wait` mode + `TryWrite` for DropNewest; add `_writerCompleted`; count every stopped rejection.
-- [ ] Replace the existing DropNewest test that expects every write to succeed; update the enum XML docs and the wiki (remove "Known Limitation: Drop Callbacks and Counters", fix the DropNewest and `TotalDropped` text).
+- [x] Tests (red first): DropOldest with capacity 2 and a blocked sink → processed `[1,3,4]`, one `BufferFullDropOldest` callback for item 2, `TotalDropped == 1`; DropNewest → processed `[1,2,3]`, `EmitAndForget(4) == false`, one `BufferFullDropNewest` callback for 4, `TotalDropped == 1`; a closed-channel write under Block and under DropOldest → `StreamStopped`, counted.
+- [x] Create the channel with an `itemDropped` callback for DropOldest; use `Wait` mode + `TryWrite` for DropNewest; add `_writerCompleted`; count every stopped rejection.
+- [x] Replace the existing DropNewest test that expects every write to succeed; update the enum XML docs and the wiki (remove "Known Limitation: Drop Callbacks and Counters", fix the DropNewest and `TotalDropped` text).
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~StreamPerformanceTests"`
 Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): report buffer drops and drop incoming items on DropNewest
@@ -136,4 +136,7 @@ Commit: fix(streams): handle errors when join expiry emits unmatched events
 - 2026-11-21 Task 1: red — `SourceOperatorErrorHandlingTests` → `Failed: 2, Passed: 8` (retry count, new OnError test) before the helper fix.
 - 2026-11-21 Task 1: complete — Run line × 3 → `Passed! - Failed: 0, Passed: 53` each time.
 - 2026-11-21 Ruling: the existing retry test (expects 2 calls) was right; the nested-retry fix in `ErrorHandlingHelper` is the root cause, and the test itself is the regression test — cost if wrong: none.
+- 2026-11-21 Task 2: red — `StreamPerformanceTests` → `Failed: 4, Passed: 16` (the 3 new drop tests + the rewritten DropNewest test).
+- 2026-11-21 Task 2: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 20`.
+- 2026-11-21 Ruling: no public-API test for closed-channel writes — `Emit*` throw before reaching the buffer once `_isStarted` is false, so a closed write needs a stop/emit race; the counting is a one-line `ReportDrop` call on each path — cost if wrong: an uncounted stopped drop goes unnoticed. Also: `ThrowException` on a closed buffer now reports `StreamStopped` and returns `false` instead of a misleading `BufferFullException`.
 - 2026-11-21 Ruling: user chose callback + counter (#244), clean restart (#246), error handling on the join timer (#245).

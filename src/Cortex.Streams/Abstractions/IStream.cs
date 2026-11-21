@@ -145,7 +145,10 @@ namespace Cortex.Streams
         public long TotalProcessed { get; set; }
 
         /// <summary>
-        /// Total number of items dropped due to backpressure since the stream started.
+        /// Total number of items dropped since the stream started: items discarded by
+        /// <see cref="BackpressureStrategy.DropOldest"/> or <see cref="BackpressureStrategy.DropNewest"/>,
+        /// and items rejected because the stream was stopping. Each one is also reported to
+        /// <see cref="StreamPerformanceOptions.OnItemDropped"/>.
         /// </summary>
         public long TotalDropped { get; set; }
 

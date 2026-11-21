@@ -24,6 +24,7 @@ namespace Cortex.Streams.Performance
         private long _itemsProcessed;
         private long _itemsDropped;
         private bool _isDisposed;
+        private volatile bool _writerCompleted;
 
         /// <summary>
         /// Gets the current number of items in the buffer.
@@ -41,7 +42,7 @@ namespace Cortex.Streams.Performance
         public long ItemsProcessed => Interlocked.Read(ref _itemsProcessed);
 
         /// <summary>
-        /// Gets the total number of items dropped due to backpressure since the processor started.
+        /// Gets the total number of items dropped (by backpressure or because the processor was stopping) since the processor started.
         /// </summary>
         public long ItemsDropped => Interlocked.Read(ref _itemsDropped);
 
@@ -61,21 +62,22 @@ namespace Cortex.Streams.Performance
             _onStop = onStop;
             _cts = new CancellationTokenSource();
 
-            // Configure channel based on backpressure strategy
+            // Configure channel based on backpressure strategy.
+            // DropNewest uses Wait mode: EnqueueWithDrop rejects the incoming item itself when TryWrite fails,
+            // because the channel's own DropNewest mode would evict the newest buffered item instead.
             var channelOptions = new BoundedChannelOptions(_options.BufferCapacity)
             {
-                FullMode = _options.BackpressureStrategy switch
-                {
-                    BackpressureStrategy.DropOldest => BoundedChannelFullMode.DropOldest,
-                    BackpressureStrategy.DropNewest => BoundedChannelFullMode.DropNewest,
-                    _ => BoundedChannelFullMode.Wait
-                },
+                FullMode = _options.BackpressureStrategy == BackpressureStrategy.DropOldest
+                    ? BoundedChannelFullMode.DropOldest
+                    : BoundedChannelFullMode.Wait,
                 SingleReader = _options.ConcurrencyLevel == 1,
                 SingleWriter = false,
                 AllowSynchronousContinuations = true
             };
 
-            _channel = Channel.CreateBounded<T>(channelOptions);
+            _channel = _options.BackpressureStrategy == BackpressureStrategy.DropOldest
+                ? Channel.CreateBounded<T>(channelOptions, evicted => ReportDrop(evicted, DropReason.BufferFullDropOldest))
+                : Channel.CreateBounded<T>(channelOptions);
 
             // Start consumer tasks
             _consumerTasks = new Task[_options.ConcurrencyLevel];
@@ -99,7 +101,7 @@ namespace Cortex.Streams.Performance
         {
             if (_isDisposed)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
 
@@ -130,7 +132,7 @@ namespace Cortex.Streams.Performance
         {
             if (_isDisposed)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
 
@@ -195,7 +197,7 @@ namespace Cortex.Streams.Performance
             }
             catch (ChannelClosedException)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
         }
@@ -222,7 +224,7 @@ namespace Cortex.Streams.Performance
             }
             catch (ChannelClosedException)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
         }
@@ -235,25 +237,36 @@ namespace Cortex.Streams.Performance
                 return true;
             }
 
+            if (_writerCompleted)
+            {
+                ReportDrop(item, DropReason.StreamStopped);
+                return false;
+            }
+
             throw new BufferFullException(_options.BufferCapacity, item);
         }
 
         private bool EnqueueWithDrop(T item)
         {
-            // Channel handles dropping internally with DropOldest/DropNewest modes
+            // DropOldest: the channel evicts the oldest item itself and reports it through ReportDrop.
+            // DropNewest: the channel is in Wait mode, so TryWrite fails when the buffer is full.
             if (_channel.Writer.TryWrite(item))
             {
                 Interlocked.Increment(ref _itemsEnqueued);
                 return true;
             }
 
-            // If TryWrite fails even with drop modes, it means channel is closed
-            Interlocked.Increment(ref _itemsDropped);
-            var reason = _options.BackpressureStrategy == BackpressureStrategy.DropNewest
-                ? DropReason.BufferFullDropNewest
-                : DropReason.BufferFullDropOldest;
-            _options.OnItemDropped?.Invoke(item, reason);
+            var reason = _writerCompleted || _options.BackpressureStrategy == BackpressureStrategy.DropOldest
+                ? DropReason.StreamStopped
+                : DropReason.BufferFullDropNewest;
+            ReportDrop(item, reason);
             return false;
+        }
+
+        private void ReportDrop(T item, DropReason reason)
+        {
+            Interlocked.Increment(ref _itemsDropped);
+            _options.OnItemDropped?.Invoke(item, reason);
         }
 
         private async Task RunSingleItemConsumerAsync(CancellationToken cancellationToken)
@@ -358,6 +371,7 @@ namespace Cortex.Streams.Performance
         /// <param name="cancellationToken">Cancellation token.</param>
         public async Task CompleteAsync(CancellationToken cancellationToken = default)
         {
+            _writerCompleted = true;
             _channel.Writer.Complete();
             
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -378,6 +392,7 @@ namespace Cortex.Streams.Performance
         /// </summary>
         public void Stop()
         {
+            _writerCompleted = true;
             _cts.Cancel();
             _channel.Writer.TryComplete();
             _onStop?.Invoke();

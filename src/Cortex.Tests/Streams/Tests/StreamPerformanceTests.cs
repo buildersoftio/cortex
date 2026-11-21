@@ -273,18 +273,19 @@ namespace Cortex.Streams.Tests
         #region Backpressure Strategy Tests
 
         [Fact]
-        public void BackpressureDropNewest_ConfiguresChannelCorrectly()
+        public async Task BackpressureDropNewest_AccountsForEveryItem()
         {
-            // Arrange - This test verifies that the DropNewest strategy is properly configured
-            // The Channel's DropNewest mode silently accepts writes but drops excess items
+            // Arrange - every item is either processed or reported as dropped, never lost silently
+            var dropped = 0;
+            var processedItems = new ConcurrentBag<int>();
             var performanceOptions = new StreamPerformanceOptions
             {
                 EnableBufferedProcessing = true,
                 BufferCapacity = 5,
-                BackpressureStrategy = BackpressureStrategy.DropNewest
+                BackpressureStrategy = BackpressureStrategy.DropNewest,
+                OnItemDropped = (item, reason) => Interlocked.Increment(ref dropped)
             };
 
-            var processedItems = new ConcurrentBag<int>();
             var stream = StreamBuilder<int>.CreateNewStream("DropNewestStream")
                 .WithPerformanceOptions(performanceOptions)
                 .Stream()
@@ -293,21 +294,21 @@ namespace Cortex.Streams.Tests
 
             // Act
             stream.Start();
-            
-            // Emit items - with Channel's DropNewest, writes always succeed but may be dropped
+
+            var accepted = 0;
             for (int i = 0; i < 10; i++)
             {
-                var result = stream.EmitAndForget(i);
-                Assert.True(result); // DropNewest always returns true (item accepted or dropped silently)
+                if (stream.EmitAndForget(i))
+                    accepted++;
             }
 
-            // Wait for processing
-            Thread.Sleep(200);
-            stream.Stop();
+            await stream.StopAsync();
 
-            // Assert - some items were processed (we can't reliably test how many were dropped
-            // due to the nature of Channel's DropNewest which handles this internally)
-            Assert.True(processedItems.Count > 0, "At least some items should be processed");
+            // Assert
+            var stats = stream.GetBufferStatistics();
+            Assert.Equal(accepted, processedItems.Count);
+            Assert.Equal(10 - accepted, dropped);
+            Assert.Equal(10 - accepted, stats.TotalDropped);
         }
 
         [Fact]
@@ -585,6 +586,123 @@ namespace Cortex.Streams.Tests
             // Assert - 9 items should be processed (item 5 skipped)
             Assert.Equal(9, processedItems.Count);
             Assert.DoesNotContain(10, processedItems); // 5 * 2 = 10 should not be there
+        }
+
+        #endregion
+
+        #region Drop Reporting Tests
+
+        /// <summary>
+        /// A buffered stream whose sink blocks on item 1 until <see cref="Release"/> is set,
+        /// so the test controls exactly when the buffer is full.
+        /// </summary>
+        private sealed class BlockedSinkStream : IDisposable
+        {
+            private readonly List<int> _processed = new List<int>();
+            private readonly List<(object Item, DropReason Reason)> _drops = new List<(object, DropReason)>();
+
+            public ManualResetEventSlim FirstStarted { get; } = new ManualResetEventSlim();
+            public ManualResetEventSlim Release { get; } = new ManualResetEventSlim();
+            public IStream<int> Stream { get; }
+
+            public BlockedSinkStream(BackpressureStrategy strategy, int capacity)
+            {
+                Stream = StreamBuilder<int>.CreateNewStream("BlockedSink")
+                    .WithPerformanceOptions(new StreamPerformanceOptions
+                    {
+                        EnableBufferedProcessing = true,
+                        BufferCapacity = capacity,
+                        BackpressureStrategy = strategy,
+                        OnItemDropped = (item, reason) => { lock (_drops) _drops.Add((item, reason)); }
+                    })
+                    .Stream()
+                    .Sink(x =>
+                    {
+                        if (x == 1)
+                        {
+                            FirstStarted.Set();
+                            Release.Wait(TimeSpan.FromSeconds(30));
+                        }
+                        lock (_processed) _processed.Add(x);
+                    })
+                    .Build();
+            }
+
+            public void StartAndBlockOnFirstItem()
+            {
+                Stream.Start();
+                Assert.True(Stream.EmitAndForget(1));
+                Assert.True(FirstStarted.Wait(TimeSpan.FromSeconds(10)), "The sink did not start item 1.");
+            }
+
+            public int[] Processed { get { lock (_processed) return _processed.ToArray(); } }
+            public (object Item, DropReason Reason)[] Drops { get { lock (_drops) return _drops.ToArray(); } }
+
+            public void Dispose()
+            {
+                Release.Set();
+                Stream.Stop();
+            }
+        }
+
+        [Fact]
+        public async Task DropOldest_WhenBufferIsFull_ReportsAndCountsTheEvictedItem()
+        {
+            using var harness = new BlockedSinkStream(BackpressureStrategy.DropOldest, capacity: 2);
+            harness.StartAndBlockOnFirstItem();
+
+            Assert.True(harness.Stream.EmitAndForget(2));
+            Assert.True(harness.Stream.EmitAndForget(3));
+            Assert.True(harness.Stream.EmitAndForget(4)); // buffer full (2, 3): item 2 is evicted
+
+            harness.Release.Set();
+            await harness.Stream.StopAsync();
+
+            Assert.Equal(new[] { 1, 3, 4 }, harness.Processed);
+            var drop = Assert.Single(harness.Drops);
+            Assert.Equal(2, drop.Item);
+            Assert.Equal(DropReason.BufferFullDropOldest, drop.Reason);
+            Assert.Equal(1, harness.Stream.GetBufferStatistics().TotalDropped);
+        }
+
+        [Fact]
+        public async Task DropNewest_WhenBufferIsFull_RejectsTheIncomingItem()
+        {
+            using var harness = new BlockedSinkStream(BackpressureStrategy.DropNewest, capacity: 2);
+            harness.StartAndBlockOnFirstItem();
+
+            Assert.True(harness.Stream.EmitAndForget(2));
+            Assert.True(harness.Stream.EmitAndForget(3));
+            Assert.False(harness.Stream.EmitAndForget(4)); // buffer full (2, 3): item 4 is rejected
+
+            harness.Release.Set();
+            await harness.Stream.StopAsync();
+
+            Assert.Equal(new[] { 1, 2, 3 }, harness.Processed);
+            var drop = Assert.Single(harness.Drops);
+            Assert.Equal(4, drop.Item);
+            Assert.Equal(DropReason.BufferFullDropNewest, drop.Reason);
+            var stats = harness.Stream.GetBufferStatistics();
+            Assert.Equal(1, stats.TotalDropped);
+            Assert.Equal(3, stats.TotalEnqueued);
+        }
+
+        [Fact]
+        public async Task DropNewest_EmitAsync_WhenBufferIsFull_ReportsTheIncomingItem()
+        {
+            using var harness = new BlockedSinkStream(BackpressureStrategy.DropNewest, capacity: 1);
+            harness.StartAndBlockOnFirstItem();
+
+            await harness.Stream.EmitAsync(2);
+            await harness.Stream.EmitAsync(3); // buffer full (2): item 3 is rejected
+
+            harness.Release.Set();
+            await harness.Stream.StopAsync();
+
+            Assert.Equal(new[] { 1, 2 }, harness.Processed);
+            var drop = Assert.Single(harness.Drops);
+            Assert.Equal(3, drop.Item);
+            Assert.Equal(DropReason.BufferFullDropNewest, drop.Reason);
         }
 
         #endregion

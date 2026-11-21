@@ -113,7 +113,7 @@ await stream.StopAsync();
 | `BatchTimeout` | `TimeSpan` | `100 ms` | Longest a consumer waits to fill a batch |
 | `ConcurrencyLevel` | `int` | `1` | Number of parallel consumer tasks |
 | `BlockingTimeout` | `TimeSpan` | `30 s` | How long `Block` waits for space before throwing |
-| `OnItemDropped` | `Action<object, DropReason>` | `null` | Called when an item is rejected because the stream is stopped (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
+| `OnItemDropped` | `Action<object, DropReason>` | `null` | Called for every dropped item: discarded by `DropOldest`/`DropNewest`, or rejected because the stream is stopping |
 
 ### Example: Custom Configuration
 
@@ -166,7 +166,7 @@ var blocking = new StreamPerformanceOptions
 
 ### DropNewest
 
-Makes room by removing the **most recently buffered** item; the new item is buffered. Best when the oldest waiting items must be processed.
+Rejects the **incoming** item; the items already buffered are kept. Best when the oldest waiting items must be processed.
 
 ```csharp
 var dropNewest = new StreamPerformanceOptions
@@ -177,8 +177,8 @@ var dropNewest = new StreamPerformanceOptions
 ```
 
 **Behavior:**
-- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally.
-- The item that was buffered last is discarded without notice.
+- `EmitAsync` and `EmitAndForget` never wait. `EmitAndForget` returns `false` for a rejected item; `EmitAsync` completes normally.
+- The rejected item is reported to `OnItemDropped` with `DropReason.BufferFullDropNewest` and counted in `TotalDropped`.
 
 ### DropOldest
 
@@ -193,8 +193,8 @@ var dropOldest = new StreamPerformanceOptions
 ```
 
 **Behavior:**
-- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally.
-- The oldest buffered item is discarded without notice.
+- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally: the new item is always buffered.
+- The evicted item is reported to `OnItemDropped` with `DropReason.BufferFullDropOldest` and counted in `TotalDropped`.
 
 ### ThrowException
 
@@ -224,9 +224,17 @@ catch (BufferFullException ex)
 }
 ```
 
-### Known Limitation: Drop Callbacks and Counters
+### Dropped Items
 
-With `DropNewest` and `DropOldest` the buffer discards items itself. Those discarded items are **not** reported to `OnItemDropped` and are **not** counted in `BufferStatistics.TotalDropped`. Today the callback and the counter only see items rejected because the stream is stopping. To detect data loss under these strategies, compare `TotalEnqueued` with `TotalProcessed` after a graceful stop (see [Monitor Buffer Health](#4-monitor-buffer-health)).
+Every item the buffer does not process because of a drop is reported once to `OnItemDropped` and counted once in `BufferStatistics.TotalDropped`, with one of these reasons:
+
+| `DropReason` | When |
+|---|---|
+| `BufferFullDropOldest` | `DropOldest` evicted this buffered item to make room |
+| `BufferFullDropNewest` | `DropNewest` rejected this incoming item |
+| `StreamStopped` | The item arrived while the stream was stopping |
+
+`OnItemDropped` runs on the thread that emitted the item, so keep it short and thread-safe.
 
 ---
 
@@ -258,7 +266,8 @@ Fire-and-forget emission. **Requires buffered processing**; throws `InvalidOpera
 ```csharp
 bool accepted = stream.EmitAndForget(item);
 // Returns as soon as the item is buffered.
-// accepted is false only when the stream is stopping; drops under DropNewest/DropOldest still return true.
+// accepted is false when DropNewest rejected the item or the stream is stopping.
+// Under DropOldest the new item is always accepted; an older one may be evicted instead.
 // Throws BufferFullException with ThrowException, and OperationCanceledException when Block times out.
 ```
 
@@ -306,7 +315,7 @@ if (stats != null)
 | `Capacity` | `int` | Maximum buffer capacity |
 | `TotalEnqueued` | `long` | Items buffered since the stream started |
 | `TotalProcessed` | `long` | Items that went through the pipeline without an exception |
-| `TotalDropped` | `long` | Items rejected under `DropNewest`/`DropOldest` because the stream was stopping (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
+| `TotalDropped` | `long` | Items discarded by `DropOldest`/`DropNewest` or rejected because the stream was stopping (see [Dropped Items](#dropped-items)) |
 | `UtilizationPercent` | `double` | Current buffer utilization (0-100) |
 
 ### Health Monitoring Example
@@ -403,7 +412,7 @@ var equivalent = new StreamPerformanceOptions
 };
 ```
 
-**Best for:** stock tickers, sensor data, real-time dashboards. The callback is not called for the items the buffer discards; see [Known Limitation](#known-limitation-drop-callbacks-and-counters).
+**Best for:** stock tickers, sensor data, real-time dashboards. The callback is called once for each item the buffer evicts.
 
 ---
 
