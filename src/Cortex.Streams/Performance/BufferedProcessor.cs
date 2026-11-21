@@ -28,6 +28,11 @@ namespace Cortex.Streams.Performance
         private volatile bool _writerCompleted;
 
         /// <summary>
+        /// Gets whether the processor was stopped or completed; it accepts no more items.
+        /// </summary>
+        public bool IsCompleted => _writerCompleted;
+
+        /// <summary>
         /// Gets the current number of items in the buffer.
         /// </summary>
         public int CurrentBufferCount => _channel.Reader.Count;

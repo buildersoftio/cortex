@@ -105,12 +105,12 @@ Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): report pipeline failures in buffered processing
 
 ### Task 5: Restart buffered streams with a fresh buffer
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Streams/Performance/BufferedProcessor.cs` (modify), `src/Cortex.Tests/Streams/Tests/StreamPerformanceTests.cs` (modify), `docs/wiki/stream-performance.md` (modify)
 Depends on: Task 4
-- [ ] Tests (red first): issue #246 reproduction after `StopAsync` and after `Stop` → sink `[1,2,3]`, `EmitAndForget(2) == true`, no drop callbacks, `RUNNING`; statistics reset for the new run; `Start()` twice while running keeps the same buffer.
-- [ ] Add `IsCompleted` to the processor; `Start()` replaces a completed processor under `_processorLock`; the stop callback captures its processor and only clears `_isStarted` if it is still current.
-- [ ] Document restart in the wiki.
+- [x] Tests (red first): issue #246 reproduction after `StopAsync` and after `Stop` → sink `[1,2,3]`, `EmitAndForget(2) == true`, no drop callbacks, `RUNNING`; statistics reset for the new run; `Start()` twice while running keeps the same buffer.
+- [x] Add `IsCompleted` to the processor; `Start()` replaces a completed processor under `_processorLock`; the stop callback captures its processor and only clears `_isStarted` if it is still current.
+- [x] Document restart in the wiki.
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~StreamPerformanceTests"`
 Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): restart buffered streams with a fresh buffer
@@ -145,4 +145,7 @@ Commit: fix(streams): handle errors when join expiry emits unmatched events
 - 2026-11-21 Cap: the 30 s timeout path has no test — the timeout is not configurable and a 30 s test is too slow; it shares the code path with the cancellation tests.
 - 2026-11-21 Task 4: red — the new tests did not compile before `OnProcessingError`/`TotalFailed` existed (not run separately).
 - 2026-11-21 Task 4: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 26`.
+- 2026-11-21 Task 5: red — `StreamPerformanceTests` → `Failed: 2, Passed: 27` (restart after `StopAsync` and after `Stop`).
+- 2026-11-21 Task 5: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 29`.
+- 2026-11-21 Ruling: only `Start()` replaces a completed processor; emit methods never do — an emit racing a stop must not revive the buffer — cost if wrong: none. The old processor is not disposed on restart, because `Dispose` can block up to 5 s on a slow sink — cost if wrong: one undisposed `CancellationTokenSource` per restart.
 - 2026-11-21 Ruling: user chose callback + counter (#244), clean restart (#246), error handling on the join timer (#245).

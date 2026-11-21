@@ -501,6 +501,8 @@ When the token is cancelled or the 30 seconds pass, the consumers stop after the
 
 `Stop()` does not wait at all: buffered items that were not processed yet are reported as dropped with `DropReason.StreamStopped`.
 
+A stopped stream can be started again. `Start()` then creates a new, empty buffer with new consumers, and `GetBufferStatistics()` counts from zero for the new run. Calling `Start()` on a stream that is already running keeps its buffer.
+
 ### 6. Configure Error Handling
 
 With buffered processing, nobody awaits the pipeline, so an exception that escapes it cannot reach the caller of `EmitAsync` or `EmitAndForget`. The consumer skips the item, counts it in `TotalFailed` and passes it to `OnProcessingError`, then continues with the next item:

@@ -824,5 +824,74 @@ namespace Cortex.Streams.Tests
         }
 
         #endregion
+
+        #region Restart Tests
+
+        [Theory]
+        [InlineData(true)]   // stopped with StopAsync
+        [InlineData(false)]  // stopped with Stop
+        public async Task BufferedStream_StartAfterStop_ProcessesNewItems(bool graceful)
+        {
+            var processed = new List<int>();
+            var drops = new List<DropReason>();
+            var stream = StreamBuilder<int>.CreateNewStream("Restart")
+                .WithPerformanceOptions(new StreamPerformanceOptions
+                {
+                    EnableBufferedProcessing = true,
+                    OnItemDropped = (item, reason) => { lock (drops) drops.Add(reason); }
+                })
+                .Stream()
+                .Sink(x => { lock (processed) processed.Add(x); })
+                .Build();
+
+            stream.Start();
+            Assert.True(stream.EmitAndForget(1));
+            if (graceful)
+            {
+                await stream.StopAsync();
+            }
+            else
+            {
+                Assert.True(SpinWait.SpinUntil(() => { lock (processed) return processed.Count == 1; }, TimeSpan.FromSeconds(5)));
+                stream.Stop();
+            }
+
+            // Act - restart
+            stream.Start();
+
+            Assert.Equal(StreamStatuses.RUNNING, stream.GetStatus());
+            Assert.True(stream.EmitAndForget(2));
+            await stream.EmitAsync(3);
+            await stream.StopAsync();
+
+            // Assert
+            lock (processed) Assert.Equal(new[] { 1, 2, 3 }, processed);
+            lock (drops) Assert.Empty(drops);
+            var stats = stream.GetBufferStatistics();
+            Assert.Equal(2, stats.TotalEnqueued);   // statistics of the new run
+            Assert.Equal(2, stats.TotalProcessed);
+        }
+
+        [Fact]
+        public async Task BufferedStream_StartWhileRunning_KeepsTheBuffer()
+        {
+            var processed = new List<int>();
+            var stream = StreamBuilder<int>.CreateNewStream("StartTwice")
+                .WithPerformanceOptions(new StreamPerformanceOptions { EnableBufferedProcessing = true })
+                .Stream()
+                .Sink(x => { lock (processed) processed.Add(x); })
+                .Build();
+
+            stream.Start();
+            Assert.True(stream.EmitAndForget(1));
+            stream.Start();
+            Assert.True(stream.EmitAndForget(2));
+            await stream.StopAsync();
+
+            lock (processed) Assert.Equal(new[] { 1, 2 }, processed);
+            Assert.Equal(2, stream.GetBufferStatistics().TotalEnqueued);
+        }
+
+        #endregion
     }
 }
