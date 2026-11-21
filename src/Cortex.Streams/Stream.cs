@@ -29,8 +29,8 @@ namespace Cortex.Streams
         private readonly StreamExecutionOptions _executionOptions;
         private readonly StreamPerformanceOptions _performanceOptions;
 
-        // Buffered processor for async processing
-        private BufferedProcessor<TIn> _bufferedProcessor;
+        // Buffered processor for async processing; replaced by Start() after a stop
+        private volatile BufferedProcessor<TIn> _bufferedProcessor;
         private readonly object _processorLock = new object();
 
         // Serialises runtime branch changes so a name check and its add happen together
@@ -79,6 +79,11 @@ namespace Cortex.Streams
                 {
                     errorHandlingEnabled.SetErrorHandling(_executionOptions);
                 }
+
+                if (op is IStreamStopAware stopAware)
+                {
+                    stopAware.SetStopAction(Stop);
+                }
             }
         }
 
@@ -121,24 +126,40 @@ namespace Cortex.Streams
             }
         }
 
-        private void EnsureBufferedProcessorInitialized()
+        /// <param name="replaceCompleted">
+        /// True only from <see cref="Start"/>: a processor completed by a previous stop is replaced by a new one
+        /// (new buffer, consumers and statistics). Emit methods never revive a stopped processor.
+        /// </param>
+        private void EnsureBufferedProcessorInitialized(bool replaceCompleted = false)
         {
-            if (_bufferedProcessor != null || !_performanceOptions.EnableBufferedProcessing)
+            if (!_performanceOptions.EnableBufferedProcessing)
+                return;
+
+            var current = _bufferedProcessor;
+            if (current != null && !(replaceCompleted && current.IsCompleted))
                 return;
 
             lock (_processorLock)
             {
-                if (_bufferedProcessor != null)
+                current = _bufferedProcessor;
+                if (current != null && !(replaceCompleted && current.IsCompleted))
                     return;
 
-                _bufferedProcessor = new BufferedProcessor<TIn>(
+                BufferedProcessor<TIn> processor = null;
+                processor = new BufferedProcessor<TIn>(
                     _performanceOptions,
-                    ProcessItem,
-                    () => _isStarted = false);
+                    value => ProcessItem(value, processor),
+                    () =>
+                    {
+                        // A processor of an earlier run must not stop the current one
+                        if (ReferenceEquals(_bufferedProcessor, processor))
+                            _isStarted = false;
+                    });
+                _bufferedProcessor = processor;
             }
         }
 
-        private void ProcessItem(TIn value)
+        private void ProcessItem(TIn value, BufferedProcessor<TIn> processor)
         {
             try
             {
@@ -146,7 +167,9 @@ namespace Cortex.Streams
             }
             catch (StreamStoppedException)
             {
-                Stop();
+                // An item still in flight from an earlier run must not stop a restarted stream
+                if (ReferenceEquals(_bufferedProcessor, processor))
+                    Stop();
             }
         }
 
@@ -158,10 +181,10 @@ namespace Cortex.Streams
         {
             _isStarted = true;
 
-            // Initialize buffered processor if enabled
+            // Initialize buffered processor if enabled, or replace the one a previous stop completed
             if (_performanceOptions.EnableBufferedProcessing)
             {
-                EnsureBufferedProcessorInitialized();
+                EnsureBufferedProcessorInitialized(replaceCompleted: true);
             }
         }
 
@@ -183,9 +206,13 @@ namespace Cortex.Streams
 
         /// <summary>
         /// Stops the stream processing asynchronously, waiting for any buffered items to be processed.
+        /// The wait ends early when <paramref name="cancellationToken"/> is cancelled or after 30 seconds;
+        /// the consumers then stop after their current item and the items still buffered are reported
+        /// to <see cref="StreamPerformanceOptions.OnItemDropped"/> with <see cref="DropReason.StreamStopped"/>.
         /// </summary>
         /// <param name="cancellationToken">A cancellation token that can be used to cancel the graceful shutdown.</param>
         /// <returns>A task that represents the asynchronous stop operation.</returns>
+        /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before the buffer drained.</exception>
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
             _isStarted = false;
@@ -368,7 +395,8 @@ namespace Cortex.Streams
                 Capacity = _performanceOptions.BufferCapacity,
                 TotalEnqueued = _bufferedProcessor.ItemsEnqueued,
                 TotalProcessed = _bufferedProcessor.ItemsProcessed,
-                TotalDropped = _bufferedProcessor.ItemsDropped
+                TotalDropped = _bufferedProcessor.ItemsDropped,
+                TotalFailed = _bufferedProcessor.ItemsFailed
             };
         }
 

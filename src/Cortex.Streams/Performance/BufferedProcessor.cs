@@ -23,7 +23,14 @@ namespace Cortex.Streams.Performance
         private long _itemsEnqueued;
         private long _itemsProcessed;
         private long _itemsDropped;
+        private long _itemsFailed;
         private bool _isDisposed;
+        private volatile bool _writerCompleted;
+
+        /// <summary>
+        /// Gets whether the processor was stopped or completed; it accepts no more items.
+        /// </summary>
+        public bool IsCompleted => _writerCompleted;
 
         /// <summary>
         /// Gets the current number of items in the buffer.
@@ -41,9 +48,14 @@ namespace Cortex.Streams.Performance
         public long ItemsProcessed => Interlocked.Read(ref _itemsProcessed);
 
         /// <summary>
-        /// Gets the total number of items dropped due to backpressure since the processor started.
+        /// Gets the total number of items dropped (by backpressure or because the processor was stopping) since the processor started.
         /// </summary>
         public long ItemsDropped => Interlocked.Read(ref _itemsDropped);
+
+        /// <summary>
+        /// Gets the total number of items whose processing threw an unhandled exception since the processor started.
+        /// </summary>
+        public long ItemsFailed => Interlocked.Read(ref _itemsFailed);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BufferedProcessor{T}"/> class.
@@ -61,21 +73,23 @@ namespace Cortex.Streams.Performance
             _onStop = onStop;
             _cts = new CancellationTokenSource();
 
-            // Configure channel based on backpressure strategy
+            // Configure channel based on backpressure strategy.
+            // DropNewest uses Wait mode: EnqueueWithDrop rejects the incoming item itself when TryWrite fails,
+            // because the channel's own DropNewest mode would evict the newest buffered item instead.
             var channelOptions = new BoundedChannelOptions(_options.BufferCapacity)
             {
-                FullMode = _options.BackpressureStrategy switch
-                {
-                    BackpressureStrategy.DropOldest => BoundedChannelFullMode.DropOldest,
-                    BackpressureStrategy.DropNewest => BoundedChannelFullMode.DropNewest,
-                    _ => BoundedChannelFullMode.Wait
-                },
+                FullMode = _options.BackpressureStrategy == BackpressureStrategy.DropOldest
+                    ? BoundedChannelFullMode.DropOldest
+                    : BoundedChannelFullMode.Wait,
                 SingleReader = _options.ConcurrencyLevel == 1,
                 SingleWriter = false,
-                AllowSynchronousContinuations = true
+                // Never run consumer code inline on the emitting or stopping thread
+                AllowSynchronousContinuations = false
             };
 
-            _channel = Channel.CreateBounded<T>(channelOptions);
+            _channel = _options.BackpressureStrategy == BackpressureStrategy.DropOldest
+                ? Channel.CreateBounded<T>(channelOptions, evicted => ReportDrop(evicted, DropReason.BufferFullDropOldest))
+                : Channel.CreateBounded<T>(channelOptions);
 
             // Start consumer tasks
             _consumerTasks = new Task[_options.ConcurrencyLevel];
@@ -99,7 +113,7 @@ namespace Cortex.Streams.Performance
         {
             if (_isDisposed)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
 
@@ -130,7 +144,7 @@ namespace Cortex.Streams.Performance
         {
             if (_isDisposed)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
 
@@ -195,7 +209,7 @@ namespace Cortex.Streams.Performance
             }
             catch (ChannelClosedException)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
         }
@@ -222,7 +236,7 @@ namespace Cortex.Streams.Performance
             }
             catch (ChannelClosedException)
             {
-                _options.OnItemDropped?.Invoke(item, DropReason.StreamStopped);
+                ReportDrop(item, DropReason.StreamStopped);
                 return false;
             }
         }
@@ -235,42 +249,58 @@ namespace Cortex.Streams.Performance
                 return true;
             }
 
+            if (_writerCompleted)
+            {
+                ReportDrop(item, DropReason.StreamStopped);
+                return false;
+            }
+
             throw new BufferFullException(_options.BufferCapacity, item);
         }
 
         private bool EnqueueWithDrop(T item)
         {
-            // Channel handles dropping internally with DropOldest/DropNewest modes
+            // DropOldest: the channel evicts the oldest item itself and reports it through ReportDrop.
+            // DropNewest: the channel is in Wait mode, so TryWrite fails when the buffer is full.
             if (_channel.Writer.TryWrite(item))
             {
                 Interlocked.Increment(ref _itemsEnqueued);
                 return true;
             }
 
-            // If TryWrite fails even with drop modes, it means channel is closed
-            Interlocked.Increment(ref _itemsDropped);
-            var reason = _options.BackpressureStrategy == BackpressureStrategy.DropNewest
-                ? DropReason.BufferFullDropNewest
-                : DropReason.BufferFullDropOldest;
-            _options.OnItemDropped?.Invoke(item, reason);
+            var reason = _writerCompleted || _options.BackpressureStrategy == BackpressureStrategy.DropOldest
+                ? DropReason.StreamStopped
+                : DropReason.BufferFullDropNewest;
+            ReportDrop(item, reason);
             return false;
+        }
+
+        private void ReportDrop(T item, DropReason reason)
+        {
+            Interlocked.Increment(ref _itemsDropped);
+            try
+            {
+                _options.OnItemDropped?.Invoke(item, reason);
+            }
+            catch
+            {
+                // A failing callback must not break an emit, a consumer or a stop
+            }
         }
 
         private async Task RunSingleItemConsumerAsync(CancellationToken cancellationToken)
         {
+            var reader = _channel.Reader;
+
             try
             {
-                await foreach (var item in _channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                while (await reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    try
+                    // Check for cancellation before taking an item, so a stopped consumer leaves
+                    // the remaining items in the buffer to be reported as dropped
+                    while (!cancellationToken.IsCancellationRequested && reader.TryRead(out var item))
                     {
-                        _processAction(item);
-                        Interlocked.Increment(ref _itemsProcessed);
-                    }
-                    catch
-                    {
-                        // Error handling is done within the process action (via StreamExecutionOptions)
-                        // We continue processing to maintain throughput
+                        ProcessOne(item);
                     }
                 }
             }
@@ -321,18 +351,19 @@ namespace Cortex.Streams.Performance
                         // Batch timeout - process what we have
                     }
 
-                    // Process the batch
-                    foreach (var item in batch)
+                    // Process the batch; items not started before a stop are reported as dropped
+                    for (int i = 0; i < batch.Count; i++)
                     {
-                        try
+                        if (cancellationToken.IsCancellationRequested)
                         {
-                            _processAction(item);
-                            Interlocked.Increment(ref _itemsProcessed);
+                            for (int j = i; j < batch.Count; j++)
+                            {
+                                ReportDrop(batch[j], DropReason.StreamStopped);
+                            }
+                            return;
                         }
-                        catch
-                        {
-                            // Error handling is done within the process action
-                        }
+
+                        ProcessOne(batch[i]);
                     }
 
                     // If channel is completed and we processed the last batch, exit
@@ -344,7 +375,11 @@ namespace Cortex.Streams.Performance
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Normal shutdown
+                // Stopped while collecting a batch: the items already taken from the buffer were not processed
+                foreach (var item in batch)
+                {
+                    ReportDrop(item, DropReason.StreamStopped);
+                }
             }
             catch (ChannelClosedException)
             {
@@ -352,35 +387,85 @@ namespace Cortex.Streams.Performance
             }
         }
 
-        /// <summary>
-        /// Signals that no more items will be added and waits for processing to complete.
-        /// </summary>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        public async Task CompleteAsync(CancellationToken cancellationToken = default)
+        private void ProcessOne(T item)
         {
-            _channel.Writer.Complete();
-            
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(30)); // Default graceful shutdown timeout
-            
             try
             {
-                await Task.WhenAll(_consumerTasks).ConfigureAwait(false);
+                _processAction(item);
+                Interlocked.Increment(ref _itemsProcessed);
             }
-            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            catch (Exception ex)
             {
-                // Timeout during graceful shutdown
+                // The stream's error handling (StreamExecutionOptions) did not handle this exception:
+                // count and report it, then continue with the next item
+                Interlocked.Increment(ref _itemsFailed);
+                try
+                {
+                    _options.OnProcessingError?.Invoke(item, ex);
+                }
+                catch
+                {
+                    // A failing callback must not stop the consumer
+                }
             }
         }
 
         /// <summary>
+        /// Signals that no more items will be added and waits for the buffer to drain,
+        /// at most until <paramref name="cancellationToken"/> is cancelled or <see cref="GracefulShutdownTimeout"/> passes.
+        /// In both cases the consumers stop after their current item and the items still buffered are reported as dropped.
+        /// </summary>
+        /// <param name="cancellationToken">Cancels the wait for the buffer to drain.</param>
+        /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before the buffer drained.</exception>
+        public async Task CompleteAsync(CancellationToken cancellationToken = default)
+        {
+            _writerCompleted = true;
+            _channel.Writer.TryComplete();
+
+            var consumers = Task.WhenAll(_consumerTasks);
+            var waitEnded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            using (timeoutCts.Token.Register(() => waitEnded.TrySetResult(true)))
+            {
+                timeoutCts.CancelAfter(GracefulShutdownTimeout);
+
+                if (await Task.WhenAny(consumers, waitEnded.Task).ConfigureAwait(false) == consumers)
+                {
+                    return;
+                }
+            }
+
+            // Cancelled or timed out: stop the consumers after their current item and give up the rest
+            _cts.Cancel();
+            DropRemainingItems();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        /// <summary>
+        /// How long <see cref="CompleteAsync"/> waits for the buffer to drain.
+        /// </summary>
+        internal static readonly TimeSpan GracefulShutdownTimeout = TimeSpan.FromSeconds(30);
+
+        /// <summary>
         /// Stops processing immediately without waiting for the buffer to drain.
+        /// Items still buffered are reported as dropped with <see cref="DropReason.StreamStopped"/>.
         /// </summary>
         public void Stop()
         {
+            _writerCompleted = true;
             _cts.Cancel();
             _channel.Writer.TryComplete();
+            DropRemainingItems();
             _onStop?.Invoke();
+        }
+
+        private void DropRemainingItems()
+        {
+            while (_channel.Reader.TryRead(out var item))
+            {
+                ReportDrop(item, DropReason.StreamStopped);
+            }
         }
 
         /// <summary>

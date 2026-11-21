@@ -37,7 +37,7 @@ When an event arrives on one side, it is buffered and matched against every **un
 - A result for a match is passed downstream on the thread that delivered the second event: `Emit` for left events, `ProcessRight` for right events.
 - Matched events stay buffered until they expire, so later events can still match them.
 
-Unmatched events are handled by a cleanup timer that runs every `CleanupInterval` (default 30 seconds). An event is removed once it is older than `WindowSize + GracePeriod`; for left, right and outer joins an unmatched one is then emitted with `default` (`null` for classes and records) for the missing side. These results are passed downstream **on the timer thread**.
+Unmatched events are handled by a cleanup timer that runs every `CleanupInterval` (default 30 seconds). An event is removed once it is older than `WindowSize + GracePeriod`; for left, right and outer joins an unmatched one is then emitted with `default` (`null` for classes and records) for the missing side. These results are passed downstream **on the timer thread**, each through the stream's error handling (`WithErrorHandling`): `Skip` drops that result, `Retry` retries it, and `Stop` stops the stream. An exception that error handling does not handle is written to `System.Diagnostics.Trace` and the next unmatched event continues; it never escapes the timer.
 
 ## Join Types
 
@@ -302,7 +302,7 @@ public class ClickAttribution
 
 An impression is recorded once per click when its clicks arrive, or once as not clicked when it expires without a click. A matched impression is never reported again as unmatched.
 
-An outer join would also report clicks without an impression, with `impression` set to `null`; the join function above would then throw on `impression.CampaignId`, on the cleanup timer thread. Use an outer join only with a join function that handles both sides being `null`, as in the next example.
+An outer join would also report clicks without an impression, with `impression` set to `null`; the join function above would then throw on `impression.CampaignId`, on the cleanup timer thread, and those clicks would be lost (see [Best Practices](#best-practices)). Use an outer join only with a join function that handles both sides being `null`, as in the next example.
 
 ---
 
@@ -601,7 +601,7 @@ app.MapPost("/webhook", (WebhookEvent webhookEvent) =>
        left?.Value,
        right?.Value)
    ```
-   An exception in the join function for an unmatched event happens on the cleanup timer thread, where no caller can catch it; an unhandled exception on a timer thread terminates the process.
+   An exception in the join function, or downstream, for an unmatched event happens on the cleanup timer thread, where no caller can catch it. The stream's error handling applies to it (`Skip`, `Retry`, `Stop`, `OnError`); without error handling the result is lost and the exception is only written to `System.Diagnostics.Trace`. `ForceCleanup()` runs the same cleanup on the calling thread and throws such exceptions to its caller.
 
 7. **Keep sinks thread-safe.** Results arrive from the thread that calls `Emit`, the threads that call `ProcessRight` and the cleanup timer.
 

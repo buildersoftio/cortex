@@ -651,5 +651,152 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         #endregion
+
+        #region Expiry Error Handling Tests
+
+        private static readonly DateTime LongAgo = DateTime.UtcNow.AddMinutes(-10);
+
+        private static StreamJoinConfiguration ExpiringLeftJoin(TimeSpan cleanupInterval) => new StreamJoinConfiguration
+        {
+            WindowSize = TimeSpan.FromMilliseconds(50),
+            JoinType = StreamJoinType.Left,
+            CleanupInterval = cleanupInterval,
+            GracePeriod = TimeSpan.Zero
+        };
+
+        private StreamStreamJoinOperator<int, int, int, string> CreateExpiringJoin(
+            Func<int, int, string> joinFunction, TimeSpan cleanupInterval)
+        {
+            var joinOperator = new StreamStreamJoinOperator<int, int, int, string>(
+                left => left,
+                right => right,
+                _ => LongAgo,
+                _ => LongAgo,
+                joinFunction,
+                ExpiringLeftJoin(cleanupInterval));
+            _disposables.Add(joinOperator);
+            return joinOperator;
+        }
+
+        [Fact]
+        public void ForceCleanup_WithSkipStrategy_SkipsAFailingUnmatchedResultAndEmitsTheRest()
+        {
+            var results = new List<string>();
+            var joinOperator = CreateExpiringJoin(
+                (left, right) => left == 1 ? throw new InvalidOperationException("bad") : $"L{left}",
+                TimeSpan.FromHours(1));
+            joinOperator.SetErrorHandling(new StreamExecutionOptions { ErrorHandlingStrategy = ErrorHandlingStrategy.Skip });
+            joinOperator.SetNext(new SinkOperator<string>(x => results.Add(x)));
+
+            joinOperator.ProcessLeft(1);
+            joinOperator.ProcessLeft(2);
+            joinOperator.ForceCleanup();
+
+            Assert.Equal(new[] { "L2" }, results);
+            Assert.Equal(0, joinOperator.GetLeftBufferCount());
+        }
+
+        [Fact]
+        public void ForceCleanup_RightJoin_WithSkipStrategy_SkipsAFailingDownstreamResult()
+        {
+            var results = new List<string>();
+            var joinOperator = new StreamStreamJoinOperator<int, int, int, string>(
+                left => left,
+                right => right,
+                _ => LongAgo,
+                _ => LongAgo,
+                (left, right) => $"R{right}",
+                new StreamJoinConfiguration
+                {
+                    WindowSize = TimeSpan.FromMilliseconds(50),
+                    JoinType = StreamJoinType.Right,
+                    CleanupInterval = TimeSpan.FromHours(1),
+                    GracePeriod = TimeSpan.Zero
+                });
+            _disposables.Add(joinOperator);
+            joinOperator.SetErrorHandling(new StreamExecutionOptions { ErrorHandlingStrategy = ErrorHandlingStrategy.Skip });
+            joinOperator.SetNext(new SinkOperator<string>(x =>
+            {
+                if (x == "R1") throw new InvalidOperationException("sink failed");
+                results.Add(x);
+            }));
+
+            joinOperator.ProcessRight(1);
+            joinOperator.ProcessRight(2);
+            joinOperator.ForceCleanup();
+
+            Assert.Equal(new[] { "R2" }, results);
+            Assert.Equal(0, joinOperator.GetRightBufferCount());
+        }
+
+        [Fact]
+        public void ForceCleanup_WithoutErrorHandling_ThrowsToTheCaller()
+        {
+            var joinOperator = CreateExpiringJoin(
+                (left, right) => throw new InvalidOperationException("bad"),
+                TimeSpan.FromHours(1));
+            joinOperator.SetNext(new SinkOperator<string>(x => { }));
+
+            joinOperator.ProcessLeft(1);
+
+            Assert.Throws<InvalidOperationException>(() => joinOperator.ForceCleanup());
+        }
+
+        [Fact]
+        public void ForceCleanup_EmitsUnmatchedResultsOutsideTheBufferLock()
+        {
+            var lockWasFree = false;
+            StreamStreamJoinOperator<int, int, int, string> joinOperator = null!;
+            joinOperator = CreateExpiringJoin((left, right) => $"L{left}", TimeSpan.FromHours(1));
+            joinOperator.SetNext(new SinkOperator<string>(x =>
+            {
+                // Another thread needs the buffer lock; it can only get it if cleanup released it
+                lockWasFree = Task.Run(() => joinOperator.GetLeftBufferCount()).Wait(TimeSpan.FromSeconds(2));
+            }));
+
+            joinOperator.ProcessLeft(1);
+            joinOperator.ForceCleanup();
+
+            Assert.True(lockWasFree);
+        }
+
+        [Fact]
+        public void CleanupTimer_UnhandledJoinException_DoesNotStopLaterResults()
+        {
+            var results = new List<string>();
+            var joinOperator = CreateExpiringJoin(
+                (left, right) => left == 1 ? throw new InvalidOperationException("bad") : $"L{left}",
+                TimeSpan.FromMilliseconds(50));
+            joinOperator.SetNext(new SinkOperator<string>(x => { lock (results) results.Add(x); }));
+
+            joinOperator.ProcessLeft(1);
+            joinOperator.ProcessLeft(2);
+
+            // The exception for item 1 stays on the timer: the process keeps running and item 2 is emitted
+            Assert.True(SpinWait.SpinUntil(() => { lock (results) return results.Contains("L2"); }, TimeSpan.FromSeconds(5)));
+            lock (results) Assert.Equal(new[] { "L2" }, results);
+        }
+
+        [Fact]
+        public void CleanupTimer_WithStopStrategy_StopsTheStream()
+        {
+            var joinOperator = CreateExpiringJoin(
+                (left, right) => throw new InvalidOperationException("bad"),
+                TimeSpan.FromMilliseconds(50));
+
+            var stream = StreamBuilder<int>.CreateNewStream("JoinExpiryStop")
+                .WithErrorHandling(new StreamExecutionOptions { ErrorHandlingStrategy = ErrorHandlingStrategy.Stop })
+                .Stream()
+                .JoinStream(joinOperator)
+                .Sink(x => { })
+                .Build();
+
+            stream.Start();
+            stream.Emit(1);
+
+            Assert.True(SpinWait.SpinUntil(() => stream.GetStatus() == StreamStatuses.NOT_RUNNING, TimeSpan.FromSeconds(5)));
+        }
+
+        #endregion
     }
 }
