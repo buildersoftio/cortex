@@ -20,10 +20,10 @@ Request: "Within the version v3.2 now we would like to implement the bug issue w
 - Known pre-existing test failures in Cortex.Streams (SourceOperatorErrorHandlingTests, window operators), recorded in docs/plans/2026-11-20-mediator-scheduling.md.
 - Assumption: branch name `v3/bug/247` follows the repo's `v3/bug/<id>` / `v3/feature/<id>` convention.
 ## Approach
-Smallest version moves that clear each advisory without a major bump: OpenTelemetry family 1.11.2 → 1.15.3 (aligned), MongoDB.Driver 3.3.0 → 3.14.1, Microsoft.Data.SqlClient 6.0.1 → 6.1.8 (fixes Pkcs and, through its netstandard2.0 assets, NU1701 on net7.0), and a direct SQLitePCLRaw.bundle_e_sqlite3 2.1.14 reference next to Microsoft.Data.Sqlite 9.0.3. One task per package family so each can be reverted alone.
+Smallest version moves that clear each advisory without a major bump: OpenTelemetry family 1.11.2 → 1.15.3 (aligned), MongoDB.Driver 3.3.0 → 3.14.1, Microsoft.Data.SqlClient 6.0.1 → 6.1.8 (fixes Pkcs; NU1701 goes away by dropping net7.0 from Cortex.States.MSSqlServer), and a direct SQLitePCLRaw.bundle_e_sqlite3 2.1.14 reference next to Microsoft.Data.Sqlite 9.0.3. One task per package family so each can be reverted alone.
 - Rejected: OpenTelemetry 1.21.0 — drops net8.0/net9.0 targets and drags Microsoft.Extensions.* 11.0.0 into net8/net9 consumers.
 - Rejected: Microsoft.Data.SqlClient 7.1.2 — major bump; issue part 2 wants majors in separate PRs.
-- Rejected: dropping net7.0 from Cortex.States.MSSqlServer — removes a target consumers may use; 6.1.8 fixes NU1701 without it.
+- Dropping net7.0 from Cortex.States.MSSqlServer: first rejected, then chosen during Task 3 (see Ruling in Progress) — 6.1.8's netstandard2.0 build used by net7.0 is a stub.
 - Rejected: direct System.Security.Cryptography.Pkcs / SharpCompress / Snappier pins — the parent upgrades already pull patched versions.
 - Rejected: Microsoft.Data.Sqlite 11.0.0 — major bump.
 ## Out of scope
@@ -54,13 +54,15 @@ Run: `dotnet build src/Cortex.States.MongoDb -c Release -nologo && dotnet build 
 Expected: exit 0, "0 Error(s)" twice, "has no vulnerable packages" twice
 Commit: fix(mongodb): bump MongoDB.Driver to 3.14.1 for Snappier and SharpCompress advisories
 ### Task 3: Bump Microsoft.Data.SqlClient to 6.1.8
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.States.MSSqlServer/Cortex.States.MSSqlServer.csproj` (modify), `src/Cortex.Streams.MSSqlServer/Cortex.Streams.MSSqlServer.csproj` (modify)
 Depends on: none
-- [ ] Microsoft.Data.SqlClient 6.1.8 in both projects; Pkcs resolves 8.0.2 / 9.0.21; net7.0 restores without NU1701
+- [x] Microsoft.Data.SqlClient 6.1.8 in both projects; Pkcs resolves 8.0.2 / 9.0.21
+- [x] Cortex.Streams.MSSqlServer: Microsoft.Extensions.Logging.Abstractions 9.0.3 → 9.0.21 (needed by SqlClient 6.1.8 on net9.0)
+- [x] Cortex.States.MSSqlServer targets net9.0;net8.0 (net7.0 dropped), so no NU1701
 Run: `dotnet build src/Cortex.States.MSSqlServer -c Release -nologo && dotnet build src/Cortex.Streams.MSSqlServer -c Release -nologo && dotnet list src/Cortex.States.MSSqlServer package --vulnerable --include-transitive && dotnet list src/Cortex.Streams.MSSqlServer package --vulnerable --include-transitive`
 Expected: exit 0, "0 Error(s)", no "NU1701" in the output, "has no vulnerable packages" twice
-Commit: fix(mssql): bump Microsoft.Data.SqlClient to 6.1.8 for Pkcs advisories and net7.0 assets
+Commit: fix(mssql): bump Microsoft.Data.SqlClient to 6.1.8 and drop net7.0
 ### Task 4: Pin a patched SQLitePCLRaw bundle
 - [ ] Done
 Files: `src/Cortex.States.SQLite/Cortex.States.SQLite.csproj` (modify), `src/Cortex.Tests/Cortex.Tests.csproj` (modify)
@@ -79,10 +81,14 @@ Expected: exit 0, no NU1901-NU1904 lines
 Commit: build: audit transitive NuGet packages on restore
 ## Risks
 - MongoDB.Driver 3.3 → 3.14 is eleven minor versions; only compile-checked, no Mongo integration tests exist.
-- SqlClient 6.1.x on net7.0 uses its netstandard2.0 assets; compile-checked only, not run against a SQL Server.
+- Cortex.States.MSSqlServer no longer ships a net7.0 build; net7.0 consumers keep the previous package version.
 - Neither SQL Server, MongoDB nor OpenTelemetry projects are covered by Cortex.Tests.
 ## Progress
 - 2026-11-21 Ruling: Task 5 warnings only, no WarningsAsErrors — user's Audit answer — cost if wrong: one line to add later
 - 2026-11-21 Baseline: `dotnet build Cortex.sln -c Release -nologo` on 71768f40 → "615 Warning(s)", "0 Error(s)"
 - 2026-11-21 Task 1: complete — `dotnet build src/Cortex.Telemetry.OpenTelemetry -c Release` + `dotnet list … --vulnerable` → 0 Error(s), no vulnerable packages
 - 2026-11-21 Task 2: complete — both MongoDb builds + `dotnet list … --vulnerable` → 0 Error(s), no vulnerable packages
+- 2026-11-21 Ruling: drop net7.0 from Cortex.States.MSSqlServer (user chose it via info.request) — SqlClient 6.1.8 resolves lib/netstandard2.0/Microsoft.Data.SqlClient.dll for net7.0 (79,768 bytes, no runtimes/ builds; the net8.0 win build is 2,176,960 bytes), a stub — cost if wrong: net7.0 users of the next release lose this package
+- 2026-11-21 Task 3: repair 1/3 — Cortex.Streams.MSSqlServer build: "error NU1605: Detected package downgrade: Microsoft.Extensions.Logging.Abstractions from 9.0.21 to 9.0.3" (SqlClient 6.1.8 → Caching.Memory 9.0.21 on net9.0) → direct reference bumped to 9.0.21
+- 2026-11-21 Ruling: Logging.Abstractions 9.0.3 → 9.0.21 in Cortex.Streams.MSSqlServer — patch bump on the same 9.0 line, forced by SqlClient 6.1.8 — cost if wrong: none expected
+- 2026-11-21 Task 3: complete — both MSSqlServer builds, forced restore without NU1701, `dotnet list … --vulnerable` → no vulnerable packages
