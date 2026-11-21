@@ -1,5 +1,5 @@
 # Plan: Fix the 6 known NuGet vulnerabilities and the SqlClient NU1701 warning (#247, part 1)
-Status: in-progress
+Status: done
 Date: 2026-11-21 · Agent: lead-developer · Size: medium · Base: v3.2/release@71768f40 · Branch: v3/bug/247
 Approved: 2026-11-21 via info.request
 Consent: solo
@@ -94,3 +94,5 @@ Commit: build: audit transitive NuGet packages on restore
 - 2026-11-21 Task 3: complete — both MSSqlServer builds, forced restore without NU1701, `dotnet list … --vulnerable` → no vulnerable packages
 - 2026-11-21 Task 4: complete — Cortex.States.SQLite build, `dotnet list … --vulnerable` for it and Cortex.Tests, scheduling tests → no vulnerable packages, Failed: 0
 - 2026-11-21 Task 5: complete — `dotnet restore Cortex.sln --force` → exit 0, no NU1901-NU1904 or NU1701 lines
+- 2026-11-21 Verification: `dotnet list Cortex.sln package --vulnerable --include-transitive` → 35 projects "has no vulnerable packages", none vulnerable; `dotnet build Cortex.sln -c Release` → "596 Warning(s)", "0 Error(s)" (baseline 615), 0 new unique warnings, NU1701 and NU1902 gone; `dotnet test src/Cortex.Tests` → "Failed: 3, Passed: 991, Skipped: 6" (rerun: 4 failed), all in the pre-existing SourceOperatorErrorHandlingTests (2) and Session/Tumbling window operator tests
+- 2026-11-21 Review: 0 findings, 0 confirmed, 0 fixed, 0 deferred (solo; lenses correctness, spec, tests/silent failures, security)
