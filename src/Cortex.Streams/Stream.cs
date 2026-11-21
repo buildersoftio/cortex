@@ -4,6 +4,7 @@ using Cortex.Streams.Abstractions;
 using Cortex.Streams.ErrorHandling;
 using Cortex.Streams.Operators;
 using Cortex.Streams.Performance;
+using Cortex.Streams.Watermarks;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
@@ -36,6 +37,11 @@ namespace Cortex.Streams
         // Serialises runtime branch changes so a name check and its add happen together
         private readonly object _branchMutationLock = new object();
 
+        // Watermark operators in the graph and the operators they have switched to event time
+        private readonly object _eventTimeLock = new object();
+        private readonly HashSet<IWatermarkAware> _eventTimeOperators = new HashSet<IWatermarkAware>();
+        private volatile IWatermarkGenerator[] _watermarkGenerators = new IWatermarkGenerator[0];
+
         /// <param name="branchOperators">
         /// Branches declared by the builder. Not stored: branches are read from the operator graph,
         /// which also holds branches declared before a type-changing operator and branches added at runtime.
@@ -56,6 +62,9 @@ namespace Cortex.Streams
 
             // Initialize telemetry in operators
             InitializeOperators(_operatorChain);
+
+            // Switch operators downstream of WithWatermarks to event time
+            WireWatermarks();
         }
 
         /// <summary>
@@ -108,21 +117,128 @@ namespace Cortex.Streams
 
             result.Add(op);
 
-            if (op is IHasNextOperators hasNextOperators)
+            foreach (var nextOp in GetSuccessors(op))
             {
-                foreach (var nextOp in hasNextOperators.GetNextOperators())
+                CollectOperators(nextOp, result, visited, stopAtMerge);
+            }
+        }
+
+        private static IEnumerable<IOperator> GetSuccessors(IOperator op)
+        {
+            if (op is IHasNextOperators hasNextOperators)
+                return hasNextOperators.GetNextOperators();
+
+            var field = op.GetType().GetField("_nextOperator",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var next = field?.GetValue(op) as IOperator;
+            return next == null ? Enumerable.Empty<IOperator>() : new[] { next };
+        }
+
+        /// <summary>
+        /// Returns the operators reachable from <paramref name="root"/> in topological order (reverse post-order),
+        /// so every operator comes after all operators that feed it. <paramref name="root"/> itself is excluded.
+        /// </summary>
+        private static List<IOperator> TopologicalOrder(IOperator root)
+        {
+            var postOrder = new List<IOperator>();
+            var visited = new HashSet<IOperator>();
+
+            void Visit(IOperator op)
+            {
+                if (op == null || !visited.Add(op))
+                    return;
+
+                foreach (var next in GetSuccessors(op))
                 {
-                    CollectOperators(nextOp, result, visited, stopAtMerge);
+                    Visit(next);
+                }
+                postOrder.Add(op);
+            }
+
+            Visit(root);
+            postOrder.Reverse();
+            postOrder.Remove(root);
+            return postOrder;
+        }
+
+        /// <summary>
+        /// Gives every watermark operator the event-time operators downstream of it, in pipeline order, and switches
+        /// operators it has not seen before to event time. Runs at construction and after every runtime branch change.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">A path assigns watermarks twice, or an operator is downstream of two watermark operators.</exception>
+        private void WireWatermarks()
+        {
+            lock (_eventTimeLock)
+            {
+                var generators = CollectOperators(_operatorChain).OfType<IWatermarkGenerator>().ToArray();
+                var owners = new Dictionary<IWatermarkAware, IWatermarkGenerator>();
+
+                foreach (var generator in generators)
+                {
+                    var downstream = TopologicalOrder((IOperator)generator);
+                    if (downstream.Any(op => op is IWatermarkGenerator))
+                        throw new InvalidOperationException(
+                            $"Stream '{_name}' assigns watermarks more than once on the same path. " +
+                            "Call WithWatermarks once, before the first window or join.");
+
+                    var subscribers = downstream.OfType<IWatermarkAware>().ToArray();
+                    foreach (var subscriber in subscribers)
+                    {
+                        if (owners.TryGetValue(subscriber, out var owner) && owner != generator)
+                            throw new InvalidOperationException(
+                                $"Stream '{_name}' has an operator downstream of two watermark operators; " +
+                                "an operator can follow only one WithWatermarks.");
+
+                        owners[subscriber] = generator;
+                        EnableEventTime(subscriber, generator);
+                    }
+
+                    generator.SetSubscribers(subscribers);
+                }
+
+                // Forget operators no longer in the graph, such as removed branches
+                _eventTimeOperators.IntersectWith(owners.Keys);
+                _watermarkGenerators = generators;
+            }
+        }
+
+        /// <summary>
+        /// Switches the event-time operators of a branch that is about to be added at <paramref name="attachPoint"/>,
+        /// so its first item is already handled in event time. The branch is wired to the watermark after it is added.
+        /// </summary>
+        private void PrepareBranchForEventTime(IOperator attachPoint, IOperator branchRoot)
+        {
+            lock (_eventTimeLock)
+            {
+                var branchOperators = CollectOperators(branchRoot);
+                if (branchOperators.Any(op => op is IWatermarkGenerator))
+                    throw new InvalidOperationException(
+                        $"A branch added at runtime to stream '{_name}' cannot assign watermarks.");
+
+                var generator = _watermarkGenerators
+                    .FirstOrDefault(g => CollectOperators((IOperator)g).Contains(attachPoint));
+                if (generator == null)
+                    return;
+
+                foreach (var aware in branchOperators.OfType<IWatermarkAware>())
+                {
+                    EnableEventTime(aware, generator);
                 }
             }
-            else
+        }
+
+        // Called under _eventTimeLock
+        private void EnableEventTime(IWatermarkAware operatorToEnable, IWatermarkGenerator generator)
+        {
+            if (!_eventTimeOperators.Add(operatorToEnable))
+                return;
+
+            operatorToEnable.EnableEventTime(generator.Context);
+
+            var current = generator.CurrentWatermark;
+            if (current > DateTime.MinValue)
             {
-                var field = op.GetType().GetField("_nextOperator",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (field != null)
-                {
-                    CollectOperators(field.GetValue(op) as IOperator, result, visited, stopAtMerge);
-                }
+                operatorToEnable.OnWatermark(current);
             }
         }
 
@@ -181,6 +297,11 @@ namespace Cortex.Streams
         {
             _isStarted = true;
 
+            foreach (var generator in _watermarkGenerators)
+            {
+                generator.Resume();
+            }
+
             // Initialize buffered processor if enabled, or replace the one a previous stop completed
             if (_performanceOptions.EnableBufferedProcessing)
             {
@@ -194,6 +315,7 @@ namespace Cortex.Streams
         public void Stop()
         {
             _isStarted = false;
+            PauseWatermarks();
 
             if (_operatorChain is SourceOperatorAdapter<TCurrent> sourceAdapter)
             {
@@ -216,6 +338,7 @@ namespace Cortex.Streams
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
             _isStarted = false;
+            PauseWatermarks();
 
             if (_operatorChain is SourceOperatorAdapter<TCurrent> sourceAdapter)
             {
@@ -226,6 +349,14 @@ namespace Cortex.Streams
             if (_bufferedProcessor != null)
             {
                 await _bufferedProcessor.CompleteAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private void PauseWatermarks()
+        {
+            foreach (var generator in _watermarkGenerators)
+            {
+                generator.Pause();
             }
         }
 
@@ -440,12 +571,15 @@ namespace Cortex.Streams
 
             // Configure the whole branch before any item can reach it
             InitializeOperators(branchOperator);
+            PrepareBranchForEventTime(fork, branchOperator);
 
             lock (_branchMutationLock)
             {
                 if (GetBranches().ContainsKey(name) || !fork.TryAddBranch(name, branchOperator))
                     throw new ArgumentException($"A branch named '{name}' already exists in stream '{_name}'.", nameof(name));
             }
+
+            WireWatermarks();
         }
 
         /// <inheritdoc />
@@ -463,6 +597,11 @@ namespace Cortex.Streams
                     if (removed != null)
                         removedBranches.Add(removed);
                 }
+            }
+
+            if (removedBranches.Count > 0)
+            {
+                WireWatermarks();
             }
 
             // Release the removed branches' own resources, such as window timers
@@ -561,6 +700,11 @@ namespace Cortex.Streams
             _isDisposed = true;
             Stop();
             _bufferedProcessor?.Dispose();
+
+            foreach (var generator in _watermarkGenerators.OfType<IDisposable>())
+            {
+                generator.Dispose();
+            }
         }
     }
 }

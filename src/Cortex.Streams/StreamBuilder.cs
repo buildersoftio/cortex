@@ -5,6 +5,7 @@ using Cortex.Streams.Operators;
 using Cortex.Streams.Operators.Joins;
 using Cortex.Streams.Operators.Windows;
 using Cortex.Streams.Performance;
+using Cortex.Streams.Watermarks;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
@@ -500,6 +501,11 @@ namespace Cortex.Streams
             }
 
             return this; // Returns the current builder for method chaining
+        }
+
+        public IStreamBuilder<TIn, TCurrent> WithWatermarks(Func<TCurrent, DateTime> timestampSelector, WatermarkStrategy strategy)
+        {
+            return SetNext(new WatermarkOperator<TCurrent>(timestampSelector, strategy));
         }
 
         public IStreamBuilder<TIn, TNext> FlatMap<TNext>(Func<TCurrent, IEnumerable<TNext>> flatMapFunction)
