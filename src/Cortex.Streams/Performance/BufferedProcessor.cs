@@ -23,6 +23,7 @@ namespace Cortex.Streams.Performance
         private long _itemsEnqueued;
         private long _itemsProcessed;
         private long _itemsDropped;
+        private long _itemsFailed;
         private bool _isDisposed;
         private volatile bool _writerCompleted;
 
@@ -45,6 +46,11 @@ namespace Cortex.Streams.Performance
         /// Gets the total number of items dropped (by backpressure or because the processor was stopping) since the processor started.
         /// </summary>
         public long ItemsDropped => Interlocked.Read(ref _itemsDropped);
+
+        /// <summary>
+        /// Gets the total number of items whose processing threw an unhandled exception since the processor started.
+        /// </summary>
+        public long ItemsFailed => Interlocked.Read(ref _itemsFailed);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BufferedProcessor{T}"/> class.
@@ -372,10 +378,19 @@ namespace Cortex.Streams.Performance
                 _processAction(item);
                 Interlocked.Increment(ref _itemsProcessed);
             }
-            catch
+            catch (Exception ex)
             {
-                // Error handling is done within the process action (via StreamExecutionOptions)
-                // We continue processing to maintain throughput
+                // The stream's error handling (StreamExecutionOptions) did not handle this exception:
+                // count and report it, then continue with the next item
+                Interlocked.Increment(ref _itemsFailed);
+                try
+                {
+                    _options.OnProcessingError?.Invoke(item, ex);
+                }
+                catch
+                {
+                    // A failing callback must not stop the consumer
+                }
             }
         }
 

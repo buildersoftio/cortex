@@ -65,6 +65,14 @@ namespace Cortex.Streams.Performance
         public Action<object, DropReason> OnItemDropped { get; set; }
 
         /// <summary>
+        /// Callback invoked when an exception escapes the pipeline while a buffered item is processed,
+        /// that is, when the stream's error handling did not handle it.
+        /// The item is skipped and counted in <see cref="BufferStatistics.TotalFailed"/>, and the consumer
+        /// continues with the next item. Exceptions thrown by this callback are ignored.
+        /// </summary>
+        public Action<object, Exception> OnProcessingError { get; set; }
+
+        /// <summary>
         /// Default performance options with buffered processing disabled.
         /// This maintains backward compatibility with existing code.
         /// </summary>

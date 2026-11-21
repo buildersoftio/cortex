@@ -157,6 +157,13 @@ namespace Cortex.Streams
         public long TotalDropped { get; set; }
 
         /// <summary>
+        /// Total number of buffered items whose processing threw an exception that the stream's
+        /// error handling did not handle, since the stream started. Each one is also reported to
+        /// <see cref="StreamPerformanceOptions.OnProcessingError"/>.
+        /// </summary>
+        public long TotalFailed { get; set; }
+
+        /// <summary>
         /// Current buffer utilization as a percentage (0-100).
         /// </summary>
         public double UtilizationPercent

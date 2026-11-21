@@ -372,7 +372,8 @@ namespace Cortex.Streams
                 Capacity = _performanceOptions.BufferCapacity,
                 TotalEnqueued = _bufferedProcessor.ItemsEnqueued,
                 TotalProcessed = _bufferedProcessor.ItemsProcessed,
-                TotalDropped = _bufferedProcessor.ItemsDropped
+                TotalDropped = _bufferedProcessor.ItemsDropped,
+                TotalFailed = _bufferedProcessor.ItemsFailed
             };
         }
 

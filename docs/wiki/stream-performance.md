@@ -114,6 +114,7 @@ await stream.StopAsync();
 | `ConcurrencyLevel` | `int` | `1` | Number of parallel consumer tasks |
 | `BlockingTimeout` | `TimeSpan` | `30 s` | How long `Block` waits for space before throwing |
 | `OnItemDropped` | `Action<object, DropReason>` | `null` | Called for every dropped item: discarded by `DropOldest`/`DropNewest`, or rejected because the stream is stopping |
+| `OnProcessingError` | `Action<object, Exception>` | `null` | Called on the consumer when an exception escapes the pipeline for a buffered item (see [Configure Error Handling](#6-configure-error-handling)) |
 
 ### Example: Custom Configuration
 
@@ -304,6 +305,7 @@ if (stats != null)
     Console.WriteLine($"Total Enqueued: {stats.TotalEnqueued}");
     Console.WriteLine($"Total Processed: {stats.TotalProcessed}");
     Console.WriteLine($"Total Dropped: {stats.TotalDropped}");
+    Console.WriteLine($"Total Failed: {stats.TotalFailed}");
 }
 ```
 
@@ -316,6 +318,7 @@ if (stats != null)
 | `TotalEnqueued` | `long` | Items buffered since the stream started |
 | `TotalProcessed` | `long` | Items that went through the pipeline without an exception |
 | `TotalDropped` | `long` | Items discarded by `DropOldest`/`DropNewest` or rejected because the stream was stopping (see [Dropped Items](#dropped-items)) |
+| `TotalFailed` | `long` | Items whose processing threw an exception that error handling did not handle |
 | `UtilizationPercent` | `double` | Current buffer utilization (0-100) |
 
 ### Health Monitoring Example
@@ -462,10 +465,10 @@ if (stats.UtilizationPercent > 90)
     // Add consumers or reduce the input rate
 }
 
-// After a graceful stop, every buffered item was either processed or lost
+// After a stop, every emitted item was processed, dropped or failed
 await stream.StopAsync();
 var final = stream.GetBufferStatistics();
-var lost = final.TotalEnqueued - final.TotalProcessed;   // Discarded by the buffer or failed in the pipeline
+Console.WriteLine($"Dropped: {final.TotalDropped}, failed: {final.TotalFailed}");
 ```
 
 ### 5. Graceful Shutdown
@@ -500,7 +503,17 @@ When the token is cancelled or the 30 seconds pass, the consumers stop after the
 
 ### 6. Configure Error Handling
 
-With buffered processing, an exception that escapes the pipeline is caught by the consumer task and the item is skipped, without a log or a callback. Configure `WithErrorHandling` (for example `Retry` or an `OnError` callback that logs) so that failures are visible.
+With buffered processing, nobody awaits the pipeline, so an exception that escapes it cannot reach the caller of `EmitAsync` or `EmitAndForget`. The consumer skips the item, counts it in `TotalFailed` and passes it to `OnProcessingError`, then continues with the next item:
+
+```csharp
+var options = new StreamPerformanceOptions
+{
+    EnableBufferedProcessing = true,
+    OnProcessingError = (item, ex) => logger.LogError(ex, "Failed to process {Item}", item)
+};
+```
+
+`logger` stands for your `ILogger`. To retry or skip failures per operator, configure `WithErrorHandling` as well; `OnProcessingError` only sees exceptions that error handling let through (for example with the default strategy, or after `Rethrow`).
 
 ### 7. Thread Safety with Parallel Consumers
 

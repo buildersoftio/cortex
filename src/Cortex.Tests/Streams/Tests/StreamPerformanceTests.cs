@@ -763,5 +763,66 @@ namespace Cortex.Streams.Tests
         }
 
         #endregion
+
+        #region Processing Failure Tests
+
+        [Theory]
+        [InlineData(1)]   // single-item consumer
+        [InlineData(10)]  // batch consumer
+        public async Task BufferedProcessing_PipelineException_IsReportedAndCounted(int batchSize)
+        {
+            var seen = new List<int>();
+            var failures = new List<(object Item, Exception Error)>();
+            var stream = StreamBuilder<int>.CreateNewStream("Failures")
+                .WithPerformanceOptions(new StreamPerformanceOptions
+                {
+                    EnableBufferedProcessing = true,
+                    BatchSize = batchSize,
+                    BatchTimeout = TimeSpan.FromMilliseconds(20),
+                    OnProcessingError = (item, ex) => { lock (failures) failures.Add((item, ex)); }
+                })
+                .Stream()
+                .Map(x => x == 2 ? throw new InvalidOperationException("bad") : x)
+                .Sink(x => { lock (seen) seen.Add(x); })
+                .Build();
+
+            stream.Start();
+            await stream.EmitBatchAsync(new[] { 1, 2, 3 });
+            await stream.StopAsync();
+
+            Assert.Equal(new[] { 1, 3 }, seen);
+            var failure = Assert.Single(failures);
+            Assert.Equal(2, failure.Item);
+            Assert.IsType<InvalidOperationException>(failure.Error);
+            var stats = stream.GetBufferStatistics();
+            Assert.Equal(3, stats.TotalEnqueued);
+            Assert.Equal(2, stats.TotalProcessed);
+            Assert.Equal(1, stats.TotalFailed);
+        }
+
+        [Fact]
+        public async Task BufferedProcessing_ThrowingErrorCallback_DoesNotStopTheConsumer()
+        {
+            var seen = new List<int>();
+            var stream = StreamBuilder<int>.CreateNewStream("ThrowingCallback")
+                .WithPerformanceOptions(new StreamPerformanceOptions
+                {
+                    EnableBufferedProcessing = true,
+                    OnProcessingError = (item, ex) => throw new InvalidOperationException("callback failed")
+                })
+                .Stream()
+                .Map(x => x == 2 ? throw new InvalidOperationException("bad") : x)
+                .Sink(x => { lock (seen) seen.Add(x); })
+                .Build();
+
+            stream.Start();
+            await stream.EmitBatchAsync(new[] { 1, 2, 3 });
+            await stream.StopAsync();
+
+            Assert.Equal(new[] { 1, 3 }, seen);
+            Assert.Equal(1, stream.GetBufferStatistics().TotalFailed);
+        }
+
+        #endregion
     }
 }

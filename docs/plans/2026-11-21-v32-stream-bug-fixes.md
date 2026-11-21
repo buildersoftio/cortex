@@ -94,12 +94,12 @@ Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): honour cancellation and timeout in StopAsync
 
 ### Task 4: Report pipeline failures in buffered processing
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Performance/BufferedProcessor.cs` (modify), `src/Cortex.Streams/Performance/StreamPerformanceOptions.cs` (modify), `src/Cortex.Streams/Abstractions/IStream.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Tests/Streams/Tests/StreamPerformanceTests.cs` (modify), `docs/wiki/stream-performance.md` (modify)
 Depends on: Task 3
-- [ ] Tests (red first, single and batch consumers): Map throws on 2 → sink `[1,3]`, `OnProcessingError` called once with item 2 and the exception, `TotalFailed == 1`, `TotalProcessed == 2`; a throwing callback does not stop item 3.
-- [ ] Add `OnProcessingError`, `BufferStatistics.TotalFailed`, a shared `ProcessOne(item)` used by both consumers.
-- [ ] Update the wiki (best practice 6, options table, statistics table).
+- [x] Tests (red first, single and batch consumers): Map throws on 2 → sink `[1,3]`, `OnProcessingError` called once with item 2 and the exception, `TotalFailed == 1`, `TotalProcessed == 2`; a throwing callback does not stop item 3.
+- [x] Add `OnProcessingError`, `BufferStatistics.TotalFailed`, a shared `ProcessOne(item)` used by both consumers.
+- [x] Update the wiki (best practice 6, options table, statistics table).
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~StreamPerformanceTests"`
 Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): report pipeline failures in buffered processing
@@ -143,4 +143,6 @@ Commit: fix(streams): handle errors when join expiry emits unmatched events
 - 2026-11-21 Task 3: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 23`.
 - 2026-11-21 Ruling: when `StopAsync` gives up (token or timeout) and when `Stop()` runs, items still buffered are reported as `StreamStopped` drops, and consumers check for cancellation before taking the next item (replacing `ReadAllAsync`, which kept yielding buffered items after cancellation) — completes #241's "every drop is reported" — cost if wrong: `Stop()` now calls `OnItemDropped` for undrained items where it was silent.
 - 2026-11-21 Cap: the 30 s timeout path has no test — the timeout is not configurable and a 30 s test is too slow; it shares the code path with the cancellation tests.
+- 2026-11-21 Task 4: red — the new tests did not compile before `OnProcessingError`/`TotalFailed` existed (not run separately).
+- 2026-11-21 Task 4: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 26`.
 - 2026-11-21 Ruling: user chose callback + counter (#244), clean restart (#246), error handling on the join timer (#245).
