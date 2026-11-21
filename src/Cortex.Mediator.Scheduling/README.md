@@ -24,7 +24,7 @@ Built as part of the [Cortex Data Framework](https://github.com/buildersoftio/co
 dotnet add package Cortex.Mediator.Scheduling
 ```
 
-The package targets .NET 8, 9 and 10.
+The package targets .NET 8, 9, 10 and 11.
 
 ### Setup
 
