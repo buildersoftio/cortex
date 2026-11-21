@@ -32,21 +32,26 @@ namespace Cortex.Streams.Tests
 
             var now = DateTime.UtcNow;
 
-            // Act - emit items within the same session
-            windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
-            windowOperator.Process(new InputData { Key = "A", Value = 2, EventTime = now.AddSeconds(1) });
+            try
+            {
+                // Act - emit items within the same session
+                windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
+                windowOperator.Process(new InputData { Key = "A", Value = 2, EventTime = now.AddSeconds(1) });
 
-            // Wait for session to expire
-            Thread.Sleep(3000);
+                // Wait for the session to expire (bounded)
+                Assert.True(WaitForCount(emittedResults, 1, TimeSpan.FromSeconds(10)), "The session was not emitted.");
 
-            // Assert
-            Assert.Single(emittedResults);
-            Assert.Equal("A", emittedResults[0].Key);
-            Assert.Equal(2, emittedResults[0].Items.Count);
-            Assert.Equal(3, emittedResults[0].Items.Sum(x => x.Value));
-
-            // Cleanup
-            windowOperator.Dispose();
+                // Assert
+                var results = Snapshot(emittedResults);
+                Assert.Single(results);
+                Assert.Equal("A", results[0].Key);
+                Assert.Equal(2, results[0].Items.Count);
+                Assert.Equal(3, results[0].Items.Sum(x => x.Value));
+            }
+            finally
+            {
+                windowOperator.Dispose();
+            }
         }
 
         [Fact]
@@ -125,25 +130,43 @@ namespace Cortex.Streams.Tests
 
             var now = DateTime.UtcNow;
 
-            // Act - first session
-            windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
+            try
+            {
+                // Act - first session
+                windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
 
-            // Wait for first session to expire
-            Thread.Sleep(2000);
+                // Wait for the first session to expire (bounded)
+                Assert.True(WaitForCount(emittedResults, 1, TimeSpan.FromSeconds(10)), "The first session was not emitted.");
 
-            // Second session - this triggers the closure of the first session when processed
-            windowOperator.Process(new InputData { Key = "A", Value = 5, EventTime = now.AddSeconds(3) });
+                // Second session, after the inactivity gap
+                windowOperator.Process(new InputData { Key = "A", Value = 5, EventTime = now.AddSeconds(3) });
 
-            // Wait for second session to expire
-            Thread.Sleep(2000);
+                // Wait for the second session to expire (bounded)
+                Assert.True(WaitForCount(emittedResults, 2, TimeSpan.FromSeconds(10)), "The second session was not emitted.");
 
-            // Assert
-            Assert.Equal(2, emittedResults.Count);
-            Assert.Equal(1, emittedResults[0].Items.Sum(x => x.Value));
-            Assert.Equal(5, emittedResults[1].Items.Sum(x => x.Value));
+                // Assert
+                var results = Snapshot(emittedResults);
+                Assert.Equal(2, results.Count);
+                Assert.Equal(1, results[0].Items.Sum(x => x.Value));
+                Assert.Equal(5, results[1].Items.Sum(x => x.Value));
+            }
+            finally
+            {
+                windowOperator.Dispose();
+            }
+        }
 
-            // Cleanup
-            windowOperator.Dispose();
+        private static bool WaitForCount<T>(List<T> items, int count, TimeSpan timeout)
+        {
+            return SpinWait.SpinUntil(() => { lock (items) { return items.Count >= count; } }, timeout);
+        }
+
+        private static List<T> Snapshot<T>(List<T> items)
+        {
+            lock (items)
+            {
+                return items.ToList();
+            }
         }
 
         [Fact]

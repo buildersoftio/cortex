@@ -162,12 +162,15 @@ namespace Cortex.Streams.Tests
             sourceOperator.EmitItem(3);
             sourceOperator.EmitItem(4);
 
+            // Assert - the error on item 2 did not stop the source
+            Assert.True(sourceOperator.IsRunning);
+            Assert.False(sourceOperator.WasStoppedExplicitly);
+
             stream.Stop();
 
-            // Assert
             Assert.Equal(new[] { 10, 30, 40 }, processedItems);
             Assert.Equal(4, sourceOperator.EmitCount); // All items were emitted
-            Assert.False(sourceOperator.WasStoppedExplicitly || !sourceOperator.IsRunning == false); // Source was stopped by stream.Stop(), not by error
+            Assert.True(sourceOperator.WasStoppedExplicitly); // Stopped by stream.Stop()
         }
 
         [Fact]
@@ -324,6 +327,40 @@ namespace Cortex.Streams.Tests
             // Assert - Source should be stopped after max retries exceeded
             Assert.True(sourceOperator.WasStoppedExplicitly);
             Assert.Equal(2, attemptCount);
+        }
+
+        [Fact]
+        public void SourceOperator_WithCustomErrorHandler_IsNotCalledAgainForDownstreamStop()
+        {
+            // Arrange
+            var handlerCalls = new List<Exception>();
+            var sourceOperator = new SynchronousTestSourceOperator<int>();
+            var executionOptions = new StreamExecutionOptions
+            {
+                OnError = ctx =>
+                {
+                    handlerCalls.Add(ctx.Exception);
+                    return ErrorHandlingDecision.Stop;
+                }
+            };
+
+            var stream = StreamBuilder<int>
+                .CreateNewStream("SourceStopNotRedecidedTest")
+                .WithErrorHandling(executionOptions)
+                .Stream(sourceOperator)
+                .Map<int>(x => throw new InvalidOperationException("Map failed"))
+                .Sink(x => { })
+                .Build();
+
+            stream.Start();
+
+            // Act
+            sourceOperator.EmitItem(1);
+
+            // Assert - the stop decided in Map is final; the source adapter does not ask again
+            var call = Assert.Single(handlerCalls);
+            Assert.IsType<InvalidOperationException>(call);
+            Assert.True(sourceOperator.WasStoppedExplicitly);
         }
 
         #endregion
