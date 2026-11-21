@@ -72,7 +72,8 @@ namespace Cortex.Streams.Performance
                 },
                 SingleReader = _options.ConcurrencyLevel == 1,
                 SingleWriter = false,
-                AllowSynchronousContinuations = true
+                // Keep consumers off the writer's thread, so EmitAndForget never runs the sink inline (seen on .NET 11).
+                AllowSynchronousContinuations = false
             };
 
             _channel = Channel.CreateBounded<T>(channelOptions);
