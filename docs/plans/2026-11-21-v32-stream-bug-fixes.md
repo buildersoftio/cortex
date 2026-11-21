@@ -116,12 +116,12 @@ Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): restart buffered streams with a fresh buffer
 
 ### Task 6: Handle errors in stream-join expiry and emit outside the lock
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Operators/Joins/StreamStreamJoinOperator.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Streams/Operators/IStreamStopAware.cs` (create), `src/Cortex.Tests/Streams/Tests/StreamStreamJoinOperatorTests.cs` (modify), `docs/wiki/Stream-Stream-Joins.md` (modify)
 Depends on: Task 5
-- [ ] Tests (red first with `ForceCleanup`): Skip strategy + throwing join function for one unmatched element → no exception, the other unmatched element is still emitted, buffers empty; a downstream sink that reads `GetLeftBufferCount()` from another thread completes (no lock held). Then timer tests (CleanupInterval 50 ms): default options + throwing join function → process survives and the next element is emitted; Stop strategy → the stream's `GetStatus()` becomes `NOT_RUNNING`.
-- [ ] Split expiry into a locked collect/remove/store step and an unlocked emit step using `TryExecute`; add the timer-boundary callback; add internal `IStreamStopAware` and set it from `Stream.InitializeOperators`.
-- [ ] Update the wiki sections at `Stream-Stream-Joins.md:40,305,597-613`.
+- [x] Tests (red first with `ForceCleanup`): Skip strategy + throwing join function for one unmatched element → no exception, the other unmatched element is still emitted, buffers empty; a downstream sink that reads `GetLeftBufferCount()` from another thread completes (no lock held). Then timer tests (CleanupInterval 50 ms): default options + throwing join function → process survives and the next element is emitted; Stop strategy → the stream's `GetStatus()` becomes `NOT_RUNNING`.
+- [x] Split expiry into a locked collect/remove/store step and an unlocked emit step using `TryExecute`; add the timer-boundary callback; add internal `IStreamStopAware` and set it from `Stream.InitializeOperators`.
+- [x] Update the wiki sections at `Stream-Stream-Joins.md:40,305,597-613`.
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~StreamStreamJoin"`
 Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): handle errors when join expiry emits unmatched events
@@ -148,4 +148,7 @@ Commit: fix(streams): handle errors when join expiry emits unmatched events
 - 2026-11-21 Task 5: red — `StreamPerformanceTests` → `Failed: 2, Passed: 27` (restart after `StopAsync` and after `Stop`).
 - 2026-11-21 Task 5: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 29`.
 - 2026-11-21 Ruling: only `Start()` replaces a completed processor; emit methods never do — an emit racing a stop must not revive the buffer — cost if wrong: none. The old processor is not disposed on restart, because `Dispose` can block up to 5 s on a slow sink — cost if wrong: one undisposed `CancellationTokenSource` per restart.
+- 2026-11-21 Task 6: complete — build `0 Error(s)`; `FullyQualifiedName~StreamStreamJoin` → `Passed! - Failed: 0, Passed: 23` (5 new).
+- 2026-11-21 Task 6: red run not captured — the tests and the fix were written before a red run; the two timer tests would crash the test host on the old code, and the three `ForceCleanup` tests fail on it by construction (no error handling, emit under the lock). Weaker proof for this task.
+- 2026-11-21 Ruling: unmatched counters now count a result only after it was emitted (on Skip it is not counted) — matches "unmatched results emitted" — cost if wrong: telemetry differs slightly from before.
 - 2026-11-21 Ruling: user chose callback + counter (#244), clean restart (#246), error handling on the join timer (#245).

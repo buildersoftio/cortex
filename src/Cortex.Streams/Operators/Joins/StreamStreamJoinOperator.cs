@@ -21,7 +21,7 @@ namespace Cortex.Streams.Operators
     /// <typeparam name="TRight">Type of elements from the right stream.</typeparam>
     /// <typeparam name="TKey">Type of the key used for matching.</typeparam>
     /// <typeparam name="TResult">Type of the result produced by the join.</typeparam>
-    public class StreamStreamJoinOperator<TLeft, TRight, TKey, TResult> : IOperator, IStatefulOperator, ITelemetryEnabled, IErrorHandlingEnabled, IDisposable
+    public class StreamStreamJoinOperator<TLeft, TRight, TKey, TResult> : IOperator, IStatefulOperator, ITelemetryEnabled, IErrorHandlingEnabled, IStreamStopAware, IDisposable
     {
         private readonly Func<TLeft, TKey> _leftKeySelector;
         private readonly Func<TRight, TKey> _rightKeySelector;
@@ -58,6 +58,9 @@ namespace Cortex.Streams.Operators
 
         // Error handling
         private StreamExecutionOptions _executionOptions = StreamExecutionOptions.Default;
+
+        // Set by the owning stream: stops it when error handling decides to stop on the cleanup timer
+        private Action _stopStream;
 
         /// <summary>
         /// Represents an element buffered for windowed joining.
@@ -114,7 +117,7 @@ namespace Cortex.Streams.Operators
 
             // Start cleanup timer
             _cleanupTimer = new Timer(
-                CleanupExpiredElements,
+                OnCleanupTimer,
                 null,
                 _configuration.CleanupInterval,
                 _configuration.CleanupInterval);
@@ -314,14 +317,39 @@ namespace Cortex.Streams.Operators
         }
 
         /// <summary>
-        /// Cleans up expired elements from buffers and emits unmatched results for left/outer joins.
+        /// Timer callback. Nothing may escape it: an unhandled exception on a timer thread terminates the process.
         /// </summary>
-        private void CleanupExpiredElements(object state)
+        private void OnCleanupTimer(object state)
+        {
+            try
+            {
+                CleanupExpiredElements(fromTimer: true);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError(
+                    $"StreamStreamJoinOperator<{typeof(TLeft).Name},{typeof(TRight).Name}>: cleanup failed: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Cleans up expired elements from buffers and emits unmatched results for left/right/outer joins.
+        /// Expired elements are removed under the buffer lock; unmatched results are emitted after it is released,
+        /// each through the stream's error handling.
+        /// </summary>
+        /// <param name="fromTimer">
+        /// True on the cleanup timer, where no caller can catch an exception: a stop decision stops the owning stream,
+        /// and any other unhandled exception is traced and the next element continues.
+        /// False for <see cref="ForceCleanup"/>, which throws to its caller.
+        /// </param>
+        private void CleanupExpiredElements(bool fromTimer)
         {
             if (_disposed) return;
 
             var now = DateTime.UtcNow;
             var expiredThreshold = now.Subtract(_configuration.GracePeriod);
+            var unmatchedLeft = new List<TLeft>();
+            var unmatchedRight = new List<TRight>();
 
             lock (_bufferLock)
             {
@@ -340,14 +368,12 @@ namespace Cortex.Streams.Operators
                         leftList.Remove(expired);
                         IncrementExpired();
 
-                        // For left/outer joins, emit unmatched left elements
+                        // For left/outer joins, emit unmatched left elements (after the lock is released)
                         if (!expired.Matched &&
                             (_configuration.JoinType == StreamJoinType.Left ||
                              _configuration.JoinType == StreamJoinType.Outer))
                         {
-                            var result = _joinFunction(expired.Element, default);
-                            IncrementLeftUnmatched();
-                            _nextOperator?.Process(result);
+                            unmatchedLeft.Add(expired.Element);
                         }
                     }
 
@@ -382,14 +408,12 @@ namespace Cortex.Streams.Operators
                         rightList.Remove(expired);
                         IncrementExpired();
 
-                        // For right/outer joins, emit unmatched right elements
+                        // For right/outer joins, emit unmatched right elements (after the lock is released)
                         if (!expired.Matched &&
                             (_configuration.JoinType == StreamJoinType.Right ||
                              _configuration.JoinType == StreamJoinType.Outer))
                         {
-                            var result = _joinFunction(default, expired.Element);
-                            IncrementRightUnmatched();
-                            _nextOperator?.Process(result);
+                            unmatchedRight.Add(expired.Element);
                         }
                     }
 
@@ -409,14 +433,77 @@ namespace Cortex.Streams.Operators
                     }
                 }
             }
+
+            foreach (var left in unmatchedLeft)
+            {
+                if (!EmitUnmatched(left, default, isLeft: true, fromTimer))
+                    return;
+            }
+
+            foreach (var right in unmatchedRight)
+            {
+                if (!EmitUnmatched(default, right, isLeft: false, fromTimer))
+                    return;
+            }
+        }
+
+        /// <summary>
+        /// Emits one unmatched result through the stream's error handling.
+        /// </summary>
+        /// <returns>False when the stream was stopped and no further results should be emitted.</returns>
+        private bool EmitUnmatched(TLeft left, TRight right, bool isLeft, bool fromTimer)
+        {
+            var operatorName = isLeft
+                ? $"StreamStreamJoinOperator<{typeof(TLeft).Name},{typeof(TRight).Name}>.ExpireLeft"
+                : $"StreamStreamJoinOperator<{typeof(TLeft).Name},{typeof(TRight).Name}>.ExpireRight";
+            var rawInput = isLeft ? (object)left : right;
+
+            try
+            {
+                var emitted = ErrorHandlingHelper.TryExecute(
+                    _executionOptions,
+                    operatorName,
+                    rawInput,
+                    () =>
+                    {
+                        var result = _joinFunction(left, right);
+                        _nextOperator?.Process(result);
+                        return result;
+                    });
+
+                if (emitted)
+                {
+                    if (isLeft) IncrementLeftUnmatched();
+                    else IncrementRightUnmatched();
+                }
+
+                return true;
+            }
+            catch (StreamStoppedException) when (fromTimer)
+            {
+                // Same as a stop decision on the emit path: stop the stream instead of throwing on the timer thread
+                _stopStream?.Invoke();
+                return false;
+            }
+            catch (Exception ex) when (fromTimer)
+            {
+                Trace.TraceError($"{operatorName}: unhandled exception while emitting an unmatched result: {ex}");
+                return true;
+            }
         }
 
         /// <summary>
         /// Forces cleanup of expired elements (useful for testing).
+        /// Unlike the cleanup timer, exceptions that the stream's error handling does not handle are thrown to the caller.
         /// </summary>
         public void ForceCleanup()
         {
-            CleanupExpiredElements(null);
+            CleanupExpiredElements(fromTimer: false);
+        }
+
+        void IStreamStopAware.SetStopAction(Action stopStream)
+        {
+            _stopStream = stopStream;
         }
 
         /// <summary>

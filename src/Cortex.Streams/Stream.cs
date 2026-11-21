@@ -79,6 +79,11 @@ namespace Cortex.Streams
                 {
                     errorHandlingEnabled.SetErrorHandling(_executionOptions);
                 }
+
+                if (op is IStreamStopAware stopAware)
+                {
+                    stopAware.SetStopAction(Stop);
+                }
             }
         }
 
