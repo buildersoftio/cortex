@@ -113,7 +113,8 @@ await stream.StopAsync();
 | `BatchTimeout` | `TimeSpan` | `100 ms` | Longest a consumer waits to fill a batch |
 | `ConcurrencyLevel` | `int` | `1` | Number of parallel consumer tasks |
 | `BlockingTimeout` | `TimeSpan` | `30 s` | How long `Block` waits for space before throwing |
-| `OnItemDropped` | `Action<object, DropReason>` | `null` | Called when an item is rejected because the stream is stopped (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
+| `OnItemDropped` | `Action<object, DropReason>` | `null` | Called for every dropped item: discarded by `DropOldest`/`DropNewest`, or rejected because the stream is stopping |
+| `OnProcessingError` | `Action<object, Exception>` | `null` | Called on the consumer when an exception escapes the pipeline for a buffered item (see [Configure Error Handling](#6-configure-error-handling)) |
 
 ### Example: Custom Configuration
 
@@ -166,7 +167,7 @@ var blocking = new StreamPerformanceOptions
 
 ### DropNewest
 
-Makes room by removing the **most recently buffered** item; the new item is buffered. Best when the oldest waiting items must be processed.
+Rejects the **incoming** item; the items already buffered are kept. Best when the oldest waiting items must be processed.
 
 ```csharp
 var dropNewest = new StreamPerformanceOptions
@@ -177,8 +178,8 @@ var dropNewest = new StreamPerformanceOptions
 ```
 
 **Behavior:**
-- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally.
-- The item that was buffered last is discarded without notice.
+- `EmitAsync` and `EmitAndForget` never wait. `EmitAndForget` returns `false` for a rejected item; `EmitAsync` completes normally.
+- The rejected item is reported to `OnItemDropped` with `DropReason.BufferFullDropNewest` and counted in `TotalDropped`.
 
 ### DropOldest
 
@@ -193,8 +194,8 @@ var dropOldest = new StreamPerformanceOptions
 ```
 
 **Behavior:**
-- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally.
-- The oldest buffered item is discarded without notice.
+- `EmitAsync` and `EmitAndForget` never wait and return `true` / complete normally: the new item is always buffered.
+- The evicted item is reported to `OnItemDropped` with `DropReason.BufferFullDropOldest` and counted in `TotalDropped`.
 
 ### ThrowException
 
@@ -224,9 +225,17 @@ catch (BufferFullException ex)
 }
 ```
 
-### Known Limitation: Drop Callbacks and Counters
+### Dropped Items
 
-With `DropNewest` and `DropOldest` the buffer discards items itself. Those discarded items are **not** reported to `OnItemDropped` and are **not** counted in `BufferStatistics.TotalDropped`. Today the callback and the counter only see items rejected because the stream is stopping. To detect data loss under these strategies, compare `TotalEnqueued` with `TotalProcessed` after a graceful stop (see [Monitor Buffer Health](#4-monitor-buffer-health)).
+Every item the buffer does not process because of a drop is reported once to `OnItemDropped` and counted once in `BufferStatistics.TotalDropped`, with one of these reasons:
+
+| `DropReason` | When |
+|---|---|
+| `BufferFullDropOldest` | `DropOldest` evicted this buffered item to make room |
+| `BufferFullDropNewest` | `DropNewest` rejected this incoming item |
+| `StreamStopped` | The item arrived while the stream was stopping, or was still buffered when `Stop()` ran or `StopAsync` gave up waiting (see [Graceful Shutdown](#5-graceful-shutdown)) |
+
+`OnItemDropped` runs on the thread that emitted or stopped the stream, or on a consumer, so keep it short and thread-safe.
 
 ---
 
@@ -258,7 +267,8 @@ Fire-and-forget emission. **Requires buffered processing**; throws `InvalidOpera
 ```csharp
 bool accepted = stream.EmitAndForget(item);
 // Returns as soon as the item is buffered.
-// accepted is false only when the stream is stopping; drops under DropNewest/DropOldest still return true.
+// accepted is false when DropNewest rejected the item or the stream is stopping.
+// Under DropOldest the new item is always accepted; an older one may be evicted instead.
 // Throws BufferFullException with ThrowException, and OperationCanceledException when Block times out.
 ```
 
@@ -295,6 +305,7 @@ if (stats != null)
     Console.WriteLine($"Total Enqueued: {stats.TotalEnqueued}");
     Console.WriteLine($"Total Processed: {stats.TotalProcessed}");
     Console.WriteLine($"Total Dropped: {stats.TotalDropped}");
+    Console.WriteLine($"Total Failed: {stats.TotalFailed}");
 }
 ```
 
@@ -306,7 +317,8 @@ if (stats != null)
 | `Capacity` | `int` | Maximum buffer capacity |
 | `TotalEnqueued` | `long` | Items buffered since the stream started |
 | `TotalProcessed` | `long` | Items that went through the pipeline without an exception |
-| `TotalDropped` | `long` | Items rejected under `DropNewest`/`DropOldest` because the stream was stopping (see [Known Limitation](#known-limitation-drop-callbacks-and-counters)) |
+| `TotalDropped` | `long` | Items discarded by `DropOldest`/`DropNewest` or rejected because the stream was stopping (see [Dropped Items](#dropped-items)) |
+| `TotalFailed` | `long` | Items whose processing threw an exception that error handling did not handle |
 | `UtilizationPercent` | `double` | Current buffer utilization (0-100) |
 
 ### Health Monitoring Example
@@ -403,7 +415,7 @@ var equivalent = new StreamPerformanceOptions
 };
 ```
 
-**Best for:** stock tickers, sensor data, real-time dashboards. The callback is not called for the items the buffer discards; see [Known Limitation](#known-limitation-drop-callbacks-and-counters).
+**Best for:** stock tickers, sensor data, real-time dashboards. The callback is called once for each item the buffer evicts.
 
 ---
 
@@ -453,10 +465,10 @@ if (stats.UtilizationPercent > 90)
     // Add consumers or reduce the input rate
 }
 
-// After a graceful stop, every buffered item was either processed or lost
+// After a stop, every emitted item was processed, dropped or failed
 await stream.StopAsync();
 var final = stream.GetBufferStatistics();
-var lost = final.TotalEnqueued - final.TotalProcessed;   // Discarded by the buffer or failed in the pipeline
+Console.WriteLine($"Dropped: {final.TotalDropped}, failed: {final.TotalFailed}");
 ```
 
 ### 5. Graceful Shutdown
@@ -464,18 +476,46 @@ var lost = final.TotalEnqueued - final.TotalProcessed;   // Discarded by the buf
 Use `StopAsync` so buffered items are processed:
 
 ```csharp
-// Bad: buffered items that were not processed yet are lost
+// Bad: buffered items that were not processed yet are dropped
 stream.Stop();
 
 // Good: waits until the buffer is drained
 await stream.StopAsync();
 ```
 
-`StopAsync` waits until the consumers have processed every buffered item. Its cancellation token does not shorten that wait today, so a sink that hangs keeps `StopAsync` from completing; give your sinks their own timeouts.
+`StopAsync` waits until the consumers have processed every buffered item, for at most 30 seconds. Pass a cancellation token to wait less:
+
+```csharp
+using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+try
+{
+    await stream.StopAsync(cts.Token);
+}
+catch (OperationCanceledException)
+{
+    // The buffer did not drain in time
+}
+```
+
+When the token is cancelled or the 30 seconds pass, the consumers stop after the item they are processing, and the items still in the buffer are reported to `OnItemDropped` with `DropReason.StreamStopped`. A cancelled token makes `StopAsync` throw `OperationCanceledException`; the timeout does not throw. A sink that is still running is not interrupted: it finishes in the background, so give your sinks their own timeouts.
+
+`Stop()` does not wait at all: buffered items that were not processed yet are reported as dropped with `DropReason.StreamStopped`.
+
+A stopped stream can be started again. `Start()` then creates a new, empty buffer with new consumers, and `GetBufferStatistics()` counts from zero for the new run. Calling `Start()` on a stream that is already running keeps its buffer.
 
 ### 6. Configure Error Handling
 
-With buffered processing, an exception that escapes the pipeline is caught by the consumer task and the item is skipped, without a log or a callback. Configure `WithErrorHandling` (for example `Retry` or an `OnError` callback that logs) so that failures are visible.
+With buffered processing, nobody awaits the pipeline, so an exception that escapes it cannot reach the caller of `EmitAsync` or `EmitAndForget`. The consumer skips the item, counts it in `TotalFailed` and passes it to `OnProcessingError`, then continues with the next item:
+
+```csharp
+var options = new StreamPerformanceOptions
+{
+    EnableBufferedProcessing = true,
+    OnProcessingError = (item, ex) => logger.LogError(ex, "Failed to process {Item}", item)
+};
+```
+
+`logger` stands for your `ILogger`. To retry or skip failures per operator, configure `WithErrorHandling` as well; `OnProcessingError` only sees exceptions that error handling let through (for example with the default strategy, or after `Rethrow`).
 
 ### 7. Thread Safety with Parallel Consumers
 

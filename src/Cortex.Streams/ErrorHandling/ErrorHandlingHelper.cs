@@ -32,6 +32,11 @@ namespace Cortex.Streams.ErrorHandling
                     action();
                     return true;
                 }
+                catch (StreamStoppedException)
+                {
+                    // A downstream operator already decided to stop the stream; never retry or re-decide it.
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     attempt++;
@@ -85,6 +90,11 @@ namespace Cortex.Streams.ErrorHandling
                 {
                     action((TInput)rawInput);
                     return true;
+                }
+                catch (StreamStoppedException)
+                {
+                    // A downstream operator already decided to stop the stream; never retry or re-decide it.
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -142,6 +152,11 @@ namespace Cortex.Streams.ErrorHandling
                 {
                     output = action(typedInput);
                     return true;
+                }
+                catch (StreamStoppedException)
+                {
+                    // A downstream operator already decided to stop the stream; never retry or re-decide it.
+                    throw;
                 }
                 catch (Exception ex)
                 {

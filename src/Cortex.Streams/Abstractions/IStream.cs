@@ -22,9 +22,13 @@ namespace Cortex.Streams
 
         /// <summary>
         /// Stops the stream processing asynchronously, waiting for any buffered items to be processed.
+        /// The wait ends early when <paramref name="cancellationToken"/> is cancelled or after 30 seconds;
+        /// the consumers then stop after their current item and the items still buffered are reported as dropped
+        /// with <see cref="DropReason.StreamStopped"/>.
         /// </summary>
         /// <param name="cancellationToken">A cancellation token that can be used to cancel the graceful shutdown.</param>
         /// <returns>A task that represents the asynchronous stop operation.</returns>
+        /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before the buffer drained.</exception>
         Task StopAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -145,9 +149,19 @@ namespace Cortex.Streams
         public long TotalProcessed { get; set; }
 
         /// <summary>
-        /// Total number of items dropped due to backpressure since the stream started.
+        /// Total number of items dropped since the stream started: items discarded by
+        /// <see cref="BackpressureStrategy.DropOldest"/> or <see cref="BackpressureStrategy.DropNewest"/>,
+        /// and items rejected because the stream was stopping. Each one is also reported to
+        /// <see cref="StreamPerformanceOptions.OnItemDropped"/>.
         /// </summary>
         public long TotalDropped { get; set; }
+
+        /// <summary>
+        /// Total number of buffered items whose processing threw an exception that the stream's
+        /// error handling did not handle, since the stream started. Each one is also reported to
+        /// <see cref="StreamPerformanceOptions.OnProcessingError"/>.
+        /// </summary>
+        public long TotalFailed { get; set; }
 
         /// <summary>
         /// Current buffer utilization as a percentage (0-100).
