@@ -278,7 +278,14 @@ namespace Cortex.Streams.Performance
         private void ReportDrop(T item, DropReason reason)
         {
             Interlocked.Increment(ref _itemsDropped);
-            _options.OnItemDropped?.Invoke(item, reason);
+            try
+            {
+                _options.OnItemDropped?.Invoke(item, reason);
+            }
+            catch
+            {
+                // A failing callback must not break an emit, a consumer or a stop
+            }
         }
 
         private async Task RunSingleItemConsumerAsync(CancellationToken cancellationToken)
@@ -368,7 +375,11 @@ namespace Cortex.Streams.Performance
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Normal shutdown
+                // Stopped while collecting a batch: the items already taken from the buffer were not processed
+                foreach (var item in batch)
+                {
+                    ReportDrop(item, DropReason.StreamStopped);
+                }
             }
             catch (ChannelClosedException)
             {

@@ -697,6 +697,39 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void ForceCleanup_RightJoin_WithSkipStrategy_SkipsAFailingDownstreamResult()
+        {
+            var results = new List<string>();
+            var joinOperator = new StreamStreamJoinOperator<int, int, int, string>(
+                left => left,
+                right => right,
+                _ => LongAgo,
+                _ => LongAgo,
+                (left, right) => $"R{right}",
+                new StreamJoinConfiguration
+                {
+                    WindowSize = TimeSpan.FromMilliseconds(50),
+                    JoinType = StreamJoinType.Right,
+                    CleanupInterval = TimeSpan.FromHours(1),
+                    GracePeriod = TimeSpan.Zero
+                });
+            _disposables.Add(joinOperator);
+            joinOperator.SetErrorHandling(new StreamExecutionOptions { ErrorHandlingStrategy = ErrorHandlingStrategy.Skip });
+            joinOperator.SetNext(new SinkOperator<string>(x =>
+            {
+                if (x == "R1") throw new InvalidOperationException("sink failed");
+                results.Add(x);
+            }));
+
+            joinOperator.ProcessRight(1);
+            joinOperator.ProcessRight(2);
+            joinOperator.ForceCleanup();
+
+            Assert.Equal(new[] { "R2" }, results);
+            Assert.Equal(0, joinOperator.GetRightBufferCount());
+        }
+
+        [Fact]
         public void ForceCleanup_WithoutErrorHandling_ThrowsToTheCaller()
         {
             var joinOperator = CreateExpiringJoin(

@@ -148,7 +148,7 @@ namespace Cortex.Streams
                 BufferedProcessor<TIn> processor = null;
                 processor = new BufferedProcessor<TIn>(
                     _performanceOptions,
-                    ProcessItem,
+                    value => ProcessItem(value, processor),
                     () =>
                     {
                         // A processor of an earlier run must not stop the current one
@@ -159,7 +159,7 @@ namespace Cortex.Streams
             }
         }
 
-        private void ProcessItem(TIn value)
+        private void ProcessItem(TIn value, BufferedProcessor<TIn> processor)
         {
             try
             {
@@ -167,7 +167,9 @@ namespace Cortex.Streams
             }
             catch (StreamStoppedException)
             {
-                Stop();
+                // An item still in flight from an earlier run must not stop a restarted stream
+                if (ReferenceEquals(_bufferedProcessor, processor))
+                    Stop();
             }
         }
 

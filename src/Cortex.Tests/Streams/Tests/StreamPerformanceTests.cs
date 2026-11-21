@@ -804,11 +804,16 @@ namespace Cortex.Streams.Tests
         public async Task BufferedProcessing_ThrowingErrorCallback_DoesNotStopTheConsumer()
         {
             var seen = new List<int>();
+            var callbackItems = new List<object>();
             var stream = StreamBuilder<int>.CreateNewStream("ThrowingCallback")
                 .WithPerformanceOptions(new StreamPerformanceOptions
                 {
                     EnableBufferedProcessing = true,
-                    OnProcessingError = (item, ex) => throw new InvalidOperationException("callback failed")
+                    OnProcessingError = (item, ex) =>
+                    {
+                        lock (callbackItems) callbackItems.Add(item);
+                        throw new InvalidOperationException("callback failed");
+                    }
                 })
                 .Stream()
                 .Map(x => x == 2 ? throw new InvalidOperationException("bad") : x)
@@ -820,7 +825,43 @@ namespace Cortex.Streams.Tests
             await stream.StopAsync();
 
             Assert.Equal(new[] { 1, 3 }, seen);
+            lock (callbackItems) Assert.Equal(new object[] { 2 }, callbackItems);
             Assert.Equal(1, stream.GetBufferStatistics().TotalFailed);
+        }
+
+        [Fact]
+        public void BatchConsumer_StoppedWhileCollectingABatch_ReportsTheCollectedItems()
+        {
+            var processed = new List<int>();
+            var drops = new List<(object Item, DropReason Reason)>();
+            var stream = StreamBuilder<int>.CreateNewStream("PartialBatch")
+                .WithPerformanceOptions(new StreamPerformanceOptions
+                {
+                    EnableBufferedProcessing = true,
+                    BatchSize = 10,
+                    BatchTimeout = TimeSpan.FromSeconds(30), // the consumer keeps waiting for a full batch
+                    OnItemDropped = (item, reason) => { lock (drops) drops.Add((item, reason)); }
+                })
+                .Stream()
+                .Sink(x => { lock (processed) processed.Add(x); })
+                .Build();
+
+            stream.Start();
+            Assert.True(stream.EmitAndForget(1));
+            Assert.True(stream.EmitAndForget(2));
+            // Both items have left the buffer and sit in the consumer's incomplete batch
+            Assert.True(SpinWait.SpinUntil(() => stream.GetBufferStatistics().CurrentCount == 0, TimeSpan.FromSeconds(5)));
+
+            stream.Stop();
+
+            Assert.True(SpinWait.SpinUntil(() => { lock (drops) return drops.Count == 2; }, TimeSpan.FromSeconds(5)));
+            lock (drops)
+            {
+                Assert.Equal(new object[] { 1, 2 }, drops.Select(d => d.Item).ToArray());
+                Assert.All(drops, d => Assert.Equal(DropReason.StreamStopped, d.Reason));
+            }
+            lock (processed) Assert.Empty(processed);
+            Assert.Equal(2, stream.GetBufferStatistics().TotalDropped);
         }
 
         #endregion
@@ -890,6 +931,51 @@ namespace Cortex.Streams.Tests
 
             lock (processed) Assert.Equal(new[] { 1, 2 }, processed);
             Assert.Equal(2, stream.GetBufferStatistics().TotalEnqueued);
+        }
+
+        [Fact]
+        public async Task BufferedStream_StopDecisionFromAnEarlierRun_DoesNotStopTheRestartedStream()
+        {
+            var oldItemStarted = new ManualResetEventSlim();
+            var releaseOldItem = new ManualResetEventSlim();
+            var oldItemFinished = new ManualResetEventSlim();
+            var processed = new List<int>();
+            var stream = StreamBuilder<int>.CreateNewStream("RestartInFlight")
+                .WithErrorHandling(new Cortex.Streams.ErrorHandling.StreamExecutionOptions
+                {
+                    ErrorHandlingStrategy = Cortex.Streams.ErrorHandling.ErrorHandlingStrategy.Stop
+                })
+                .WithPerformanceOptions(new StreamPerformanceOptions { EnableBufferedProcessing = true })
+                .Stream()
+                .Map(x =>
+                {
+                    if (x == 1)
+                    {
+                        oldItemStarted.Set();
+                        releaseOldItem.Wait(TimeSpan.FromSeconds(30));
+                        oldItemFinished.Set();
+                        throw new InvalidOperationException("fails after the restart");
+                    }
+                    return x;
+                })
+                .Sink(x => { lock (processed) processed.Add(x); })
+                .Build();
+
+            stream.Start();
+            Assert.True(stream.EmitAndForget(1));
+            Assert.True(oldItemStarted.Wait(TimeSpan.FromSeconds(10)));
+            stream.Stop();
+            stream.Start();
+
+            // The old item now fails with a Stop decision, after the restart
+            releaseOldItem.Set();
+            Assert.True(oldItemFinished.Wait(TimeSpan.FromSeconds(10)));
+            await Task.Delay(200); // let the old consumer finish handling the stop decision
+
+            Assert.Equal(StreamStatuses.RUNNING, stream.GetStatus());
+            await stream.EmitAsync(2);
+            await stream.StopAsync();
+            lock (processed) Assert.Equal(new[] { 2 }, processed);
         }
 
         #endregion
