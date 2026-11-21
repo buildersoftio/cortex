@@ -72,10 +72,10 @@ Run: `dotnet build src/Cortex.States.SQLite -c Release -nologo && dotnet list sr
 Expected: exit 0, "has no vulnerable packages" twice, scheduling tests "Failed: 0"
 Commit: fix(sqlite): pin SQLitePCLRaw.bundle_e_sqlite3 2.1.14 for CVE-2025-6965
 ### Task 5: Enable NuGet audit for transitive packages (approved: warnings only)
-- [ ] Done
+- [x] Done
 Files: `Directory.Build.props` (create)
 Depends on: Task 1, Task 2, Task 3, Task 4
-- [ ] `NuGetAudit` true and `NuGetAuditMode` all for every project
+- [x] `NuGetAudit` true and `NuGetAuditMode` all for every project
 Run: `dotnet restore Cortex.sln`
 Expected: exit 0, no NU1901-NU1904 lines
 Commit: build: audit transitive NuGet packages on restore
@@ -93,3 +93,4 @@ Commit: build: audit transitive NuGet packages on restore
 - 2026-11-21 Ruling: Logging.Abstractions 9.0.3 → 9.0.21 in Cortex.Streams.MSSqlServer — patch bump on the same 9.0 line, forced by SqlClient 6.1.8 — cost if wrong: none expected
 - 2026-11-21 Task 3: complete — both MSSqlServer builds, forced restore without NU1701, `dotnet list … --vulnerable` → no vulnerable packages
 - 2026-11-21 Task 4: complete — Cortex.States.SQLite build, `dotnet list … --vulnerable` for it and Cortex.Tests, scheduling tests → no vulnerable packages, Failed: 0
+- 2026-11-21 Task 5: complete — `dotnet restore Cortex.sln --force` → exit 0, no NU1901-NU1904 or NU1701 lines
