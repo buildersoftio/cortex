@@ -169,6 +169,19 @@ decimalValue: 99.99";
         }
 
         [Fact]
+        public void Deserialize_Decimal_KeepsTheDigitsWrittenInYaml()
+        {
+            // Arrange: 16 significant digits, more than double-to-decimal rounding keeps
+            var yaml = "decimalValue: 1234567.123456789";
+
+            // Act
+            var obj = YamlDeserializer.Deserialize<AllPrimitiveTypes>(yaml);
+
+            // Assert
+            Assert.Equal(1234567.123456789m, obj.DecimalValue);
+        }
+
+        [Fact]
         public void Deserialize_BooleanValues_HandlesVariousFormats()
         {
             // Arrange

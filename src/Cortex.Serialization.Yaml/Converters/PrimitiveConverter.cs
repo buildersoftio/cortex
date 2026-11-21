@@ -20,7 +20,15 @@ namespace Cortex.Serialization.Yaml.Converters
             if (targetType == typeof(double))
                 return Convert.ToDouble(yamlNode, System.Globalization.CultureInfo.InvariantCulture);
             if (targetType == typeof(decimal))
+            {
+                // The parser reads numbers as double. Convert.ToDecimal(double) rounds to 15 digits
+                // before .NET 11 and is exact from .NET 11 on (99.99 -> 99.9899999...), so go through
+                // the shortest round-trip text, which matches what was written in the YAML.
+                if (yamlNode is double number)
+                    return decimal.Parse(number.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                        System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture);
                 return Convert.ToDecimal(yamlNode, System.Globalization.CultureInfo.InvariantCulture);
+            }
             if (targetType == typeof(Guid))
                 return Guid.Parse(yamlNode.ToString()!);
             if (targetType == typeof(DateTime))

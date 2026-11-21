@@ -1,0 +1,8 @@
+<Project>
+
+	<PropertyGroup>
+		<NuGetAudit>true</NuGetAudit>
+		<NuGetAuditMode>all</NuGetAuditMode>
+	</PropertyGroup>
+
+</Project>
