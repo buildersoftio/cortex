@@ -232,9 +232,9 @@ Every item the buffer does not process because of a drop is reported once to `On
 |---|---|
 | `BufferFullDropOldest` | `DropOldest` evicted this buffered item to make room |
 | `BufferFullDropNewest` | `DropNewest` rejected this incoming item |
-| `StreamStopped` | The item arrived while the stream was stopping |
+| `StreamStopped` | The item arrived while the stream was stopping, or was still buffered when `Stop()` ran or `StopAsync` gave up waiting (see [Graceful Shutdown](#5-graceful-shutdown)) |
 
-`OnItemDropped` runs on the thread that emitted the item, so keep it short and thread-safe.
+`OnItemDropped` runs on the thread that emitted or stopped the stream, or on a consumer, so keep it short and thread-safe.
 
 ---
 
@@ -473,14 +473,30 @@ var lost = final.TotalEnqueued - final.TotalProcessed;   // Discarded by the buf
 Use `StopAsync` so buffered items are processed:
 
 ```csharp
-// Bad: buffered items that were not processed yet are lost
+// Bad: buffered items that were not processed yet are dropped
 stream.Stop();
 
 // Good: waits until the buffer is drained
 await stream.StopAsync();
 ```
 
-`StopAsync` waits until the consumers have processed every buffered item. Its cancellation token does not shorten that wait today, so a sink that hangs keeps `StopAsync` from completing; give your sinks their own timeouts.
+`StopAsync` waits until the consumers have processed every buffered item, for at most 30 seconds. Pass a cancellation token to wait less:
+
+```csharp
+using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+try
+{
+    await stream.StopAsync(cts.Token);
+}
+catch (OperationCanceledException)
+{
+    // The buffer did not drain in time
+}
+```
+
+When the token is cancelled or the 30 seconds pass, the consumers stop after the item they are processing, and the items still in the buffer are reported to `OnItemDropped` with `DropReason.StreamStopped`. A cancelled token makes `StopAsync` throw `OperationCanceledException`; the timeout does not throw. A sink that is still running is not interrupted: it finishes in the background, so give your sinks their own timeouts.
+
+`Stop()` does not wait at all: buffered items that were not processed yet are reported as dropped with `DropReason.StreamStopped`.
 
 ### 6. Configure Error Handling
 

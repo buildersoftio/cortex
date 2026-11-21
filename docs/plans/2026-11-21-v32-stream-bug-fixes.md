@@ -83,12 +83,12 @@ Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): report buffer drops and drop incoming items on DropNewest
 
 ### Task 3: Make StopAsync honour its token and the shutdown timeout
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Performance/BufferedProcessor.cs` (modify), `src/Cortex.Streams/Stream.cs` (modify), `src/Cortex.Streams/Abstractions/IStream.cs` (modify), `src/Cortex.Tests/Streams/Tests/StreamPerformanceTests.cs` (modify), `docs/wiki/stream-performance.md` (modify)
 Depends on: Task 2
-- [ ] Tests (red first): blocked sink + already-cancelled token → `StopAsync` throws `OperationCanceledException` within 2 s while the sink is still blocked; a token cancelled after 200 ms → same; repeated `StopAsync` does not throw.
-- [ ] Race `Task.WhenAll(consumers)` against `Task.Delay(Infinite, timeoutCts.Token)`; on cancel or timeout cancel `_cts`; throw for the caller's token, return on timeout; use `TryComplete`; set `AllowSynchronousContinuations = false`.
-- [ ] Update the `StopAsync` XML docs and the wiki "Graceful Shutdown" section.
+- [x] Tests (red first): blocked sink + already-cancelled token → `StopAsync` throws `OperationCanceledException` within 2 s while the sink is still blocked; a token cancelled after 200 ms → same; repeated `StopAsync` does not throw.
+- [x] Race `Task.WhenAll(consumers)` against `Task.Delay(Infinite, timeoutCts.Token)`; on cancel or timeout cancel `_cts`; throw for the caller's token, return on timeout; use `TryComplete`; set `AllowSynchronousContinuations = false`.
+- [x] Update the `StopAsync` XML docs and the wiki "Graceful Shutdown" section.
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~StreamPerformanceTests"`
 Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: fix(streams): honour cancellation and timeout in StopAsync
@@ -139,4 +139,8 @@ Commit: fix(streams): handle errors when join expiry emits unmatched events
 - 2026-11-21 Task 2: red — `StreamPerformanceTests` → `Failed: 4, Passed: 16` (the 3 new drop tests + the rewritten DropNewest test).
 - 2026-11-21 Task 2: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 20`.
 - 2026-11-21 Ruling: no public-API test for closed-channel writes — `Emit*` throw before reaching the buffer once `_isStarted` is false, so a closed write needs a stop/emit race; the counting is a one-line `ReportDrop` call on each path — cost if wrong: an uncounted stopped drop goes unnoticed. Also: `ThrowException` on a closed buffer now reports `StreamStopped` and returns `false` instead of a misleading `BufferFullException`.
+- 2026-11-21 Task 3: red — `StreamPerformanceTests` → `Failed: 3, Passed: 20` (both cancellation tests, double `StopAsync`).
+- 2026-11-21 Task 3: complete — build `0 Error(s)`; `StreamPerformanceTests` → `Passed! - Failed: 0, Passed: 23`.
+- 2026-11-21 Ruling: when `StopAsync` gives up (token or timeout) and when `Stop()` runs, items still buffered are reported as `StreamStopped` drops, and consumers check for cancellation before taking the next item (replacing `ReadAllAsync`, which kept yielding buffered items after cancellation) — completes #241's "every drop is reported" — cost if wrong: `Stop()` now calls `OnItemDropped` for undrained items where it was silent.
+- 2026-11-21 Cap: the 30 s timeout path has no test — the timeout is not configurable and a 30 s test is too slow; it shares the code path with the cancellation tests.
 - 2026-11-21 Ruling: user chose callback + counter (#244), clean restart (#246), error handling on the join timer (#245).

@@ -72,7 +72,8 @@ namespace Cortex.Streams.Performance
                     : BoundedChannelFullMode.Wait,
                 SingleReader = _options.ConcurrencyLevel == 1,
                 SingleWriter = false,
-                AllowSynchronousContinuations = true
+                // Never run consumer code inline on the emitting or stopping thread
+                AllowSynchronousContinuations = false
             };
 
             _channel = _options.BackpressureStrategy == BackpressureStrategy.DropOldest
@@ -271,19 +272,17 @@ namespace Cortex.Streams.Performance
 
         private async Task RunSingleItemConsumerAsync(CancellationToken cancellationToken)
         {
+            var reader = _channel.Reader;
+
             try
             {
-                await foreach (var item in _channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                while (await reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    try
+                    // Check for cancellation before taking an item, so a stopped consumer leaves
+                    // the remaining items in the buffer to be reported as dropped
+                    while (!cancellationToken.IsCancellationRequested && reader.TryRead(out var item))
                     {
-                        _processAction(item);
-                        Interlocked.Increment(ref _itemsProcessed);
-                    }
-                    catch
-                    {
-                        // Error handling is done within the process action (via StreamExecutionOptions)
-                        // We continue processing to maintain throughput
+                        ProcessOne(item);
                     }
                 }
             }
@@ -334,18 +333,19 @@ namespace Cortex.Streams.Performance
                         // Batch timeout - process what we have
                     }
 
-                    // Process the batch
-                    foreach (var item in batch)
+                    // Process the batch; items not started before a stop are reported as dropped
+                    for (int i = 0; i < batch.Count; i++)
                     {
-                        try
+                        if (cancellationToken.IsCancellationRequested)
                         {
-                            _processAction(item);
-                            Interlocked.Increment(ref _itemsProcessed);
+                            for (int j = i; j < batch.Count; j++)
+                            {
+                                ReportDrop(batch[j], DropReason.StreamStopped);
+                            }
+                            return;
                         }
-                        catch
-                        {
-                            // Error handling is done within the process action
-                        }
+
+                        ProcessOne(batch[i]);
                     }
 
                     // If channel is completed and we processed the last batch, exit
@@ -365,37 +365,76 @@ namespace Cortex.Streams.Performance
             }
         }
 
-        /// <summary>
-        /// Signals that no more items will be added and waits for processing to complete.
-        /// </summary>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        public async Task CompleteAsync(CancellationToken cancellationToken = default)
+        private void ProcessOne(T item)
         {
-            _writerCompleted = true;
-            _channel.Writer.Complete();
-            
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(30)); // Default graceful shutdown timeout
-            
             try
             {
-                await Task.WhenAll(_consumerTasks).ConfigureAwait(false);
+                _processAction(item);
+                Interlocked.Increment(ref _itemsProcessed);
             }
-            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            catch
             {
-                // Timeout during graceful shutdown
+                // Error handling is done within the process action (via StreamExecutionOptions)
+                // We continue processing to maintain throughput
             }
         }
 
         /// <summary>
+        /// Signals that no more items will be added and waits for the buffer to drain,
+        /// at most until <paramref name="cancellationToken"/> is cancelled or <see cref="GracefulShutdownTimeout"/> passes.
+        /// In both cases the consumers stop after their current item and the items still buffered are reported as dropped.
+        /// </summary>
+        /// <param name="cancellationToken">Cancels the wait for the buffer to drain.</param>
+        /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before the buffer drained.</exception>
+        public async Task CompleteAsync(CancellationToken cancellationToken = default)
+        {
+            _writerCompleted = true;
+            _channel.Writer.TryComplete();
+
+            var consumers = Task.WhenAll(_consumerTasks);
+            var waitEnded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            using (timeoutCts.Token.Register(() => waitEnded.TrySetResult(true)))
+            {
+                timeoutCts.CancelAfter(GracefulShutdownTimeout);
+
+                if (await Task.WhenAny(consumers, waitEnded.Task).ConfigureAwait(false) == consumers)
+                {
+                    return;
+                }
+            }
+
+            // Cancelled or timed out: stop the consumers after their current item and give up the rest
+            _cts.Cancel();
+            DropRemainingItems();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        /// <summary>
+        /// How long <see cref="CompleteAsync"/> waits for the buffer to drain.
+        /// </summary>
+        internal static readonly TimeSpan GracefulShutdownTimeout = TimeSpan.FromSeconds(30);
+
+        /// <summary>
         /// Stops processing immediately without waiting for the buffer to drain.
+        /// Items still buffered are reported as dropped with <see cref="DropReason.StreamStopped"/>.
         /// </summary>
         public void Stop()
         {
             _writerCompleted = true;
             _cts.Cancel();
             _channel.Writer.TryComplete();
+            DropRemainingItems();
             _onStop?.Invoke();
+        }
+
+        private void DropRemainingItems()
+        {
+            while (_channel.Reader.TryRead(out var item))
+            {
+                ReportDrop(item, DropReason.StreamStopped);
+            }
         }
 
         /// <summary>

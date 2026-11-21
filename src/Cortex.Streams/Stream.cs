@@ -183,9 +183,13 @@ namespace Cortex.Streams
 
         /// <summary>
         /// Stops the stream processing asynchronously, waiting for any buffered items to be processed.
+        /// The wait ends early when <paramref name="cancellationToken"/> is cancelled or after 30 seconds;
+        /// the consumers then stop after their current item and the items still buffered are reported
+        /// to <see cref="StreamPerformanceOptions.OnItemDropped"/> with <see cref="DropReason.StreamStopped"/>.
         /// </summary>
         /// <param name="cancellationToken">A cancellation token that can be used to cancel the graceful shutdown.</param>
         /// <returns>A task that represents the asynchronous stop operation.</returns>
+        /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before the buffer drained.</exception>
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
             _isStarted = false;

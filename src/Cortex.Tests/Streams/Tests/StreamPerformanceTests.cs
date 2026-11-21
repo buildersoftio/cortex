@@ -706,5 +706,62 @@ namespace Cortex.Streams.Tests
         }
 
         #endregion
+
+        #region Shutdown Tests
+
+        [Fact]
+        public async Task StopAsync_WithCancelledToken_CompletesWhileTheSinkIsBlocked()
+        {
+            using var harness = new BlockedSinkStream(BackpressureStrategy.Block, capacity: 10);
+            harness.StartAndBlockOnFirstItem();
+            Assert.True(harness.Stream.EmitAndForget(2));
+
+            var stopping = harness.Stream.StopAsync(new CancellationToken(canceled: true));
+            var finished = await Task.WhenAny(stopping, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            Assert.Same(stopping, finished);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stopping);
+            Assert.False(harness.Release.IsSet); // the sink is still blocked on item 1
+
+            // The undrained item is reported as dropped, and not processed after release
+            var drop = Assert.Single(harness.Drops);
+            Assert.Equal(2, drop.Item);
+            Assert.Equal(DropReason.StreamStopped, drop.Reason);
+
+            harness.Release.Set();
+            Assert.True(SpinWait.SpinUntil(() => harness.Processed.Length == 1, TimeSpan.FromSeconds(5)));
+            await Task.Delay(200);
+            Assert.Equal(new[] { 1 }, harness.Processed);
+        }
+
+        [Fact]
+        public async Task StopAsync_TokenCancelledDuringTheWait_Completes()
+        {
+            using var harness = new BlockedSinkStream(BackpressureStrategy.Block, capacity: 10);
+            harness.StartAndBlockOnFirstItem();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            var stopping = harness.Stream.StopAsync(cts.Token);
+            var finished = await Task.WhenAny(stopping, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            Assert.Same(stopping, finished);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stopping);
+            Assert.False(harness.Release.IsSet);
+        }
+
+        [Fact]
+        public async Task StopAsync_CalledTwice_DoesNotThrow()
+        {
+            using var harness = new BlockedSinkStream(BackpressureStrategy.Block, capacity: 10);
+            harness.StartAndBlockOnFirstItem();
+            harness.Release.Set();
+
+            await harness.Stream.StopAsync();
+            await harness.Stream.StopAsync();
+
+            Assert.Equal(new[] { 1 }, harness.Processed);
+        }
+
+        #endregion
     }
 }
