@@ -1,5 +1,5 @@
 # Plan: Event-time watermarks for Cortex.Streams (#197)
-Status: in-progress
+Status: done
 Date: 2026-11-21 · Agent: lead-developer · Size: large · Base: v3.2/release@1c6fc24b · Branch: v3/feature/197
 Approved: 2026-11-21 via info.request
 Consent: Full team (2026-11-21)
@@ -52,12 +52,12 @@ A coordinated checkpoint/restore of window and join buffers (no framework exists
 |---|---|---|---|---|---|---|
 | 1 | Understand | researcher × 4 | read-only | windows; operator chain; joins/checkpoints; tests + Flink/Kafka | claims cited, key lines re-read | done |
 | 2 | Design | software-architect × 3 | read-only | minimal; clean; pragmatic | rubric of 14 | done |
-| 3 | Implement | lead inline | write | Tasks 1-9 (shared contract, coupled files) | verify-and-commit per task | pending |
-| 4 | Review | code-reviewer × 4 (stand-ins if refused) | read-only | correctness; spec; tests and silent failures; simplify | THRESHOLD 80 | pending |
-| 5 | Refute | code-reviewer × 3 | read-only | reachability; impact; defenses | ≥2 of 3 | pending |
-| 6 | Fix | lead inline | write | confirmed findings | red then green | pending |
-| 7 | Re-review | code-reviewer × 1 | read-only | fix commits | ALL_ADDRESSED | pending |
-| 8 | Critic | code-reviewer × 1 | read-only | completeness vs request and #197 | COMPLETE | pending |
+| 3 | Implement | lead inline | write | Tasks 1-9 (shared contract, coupled files) | verify-and-commit per task | done |
+| 4 | Review | code-reviewer refused; reviewer stand-in × 2 (correctness, spec) + qa-engineer × 1 (gaps); simplify inline | read-only | correctness; spec; tests and silent failures; simplify | THRESHOLD 80 | done |
+| 5 | Refute | lead inline | read-only | each finding traced in the code, most proven by a red test | confirmed | done (no refuter agents: refused / stand-in cap) |
+| 6 | Fix | lead inline | write | 19 confirmed findings in 4 commits | red then green | done |
+| 7 | Re-review | reviewer stand-in × 1, round 2 inline | read-only | fix commits | ALL_ADDRESSED | done |
+| 8 | Critic | reviewer stand-in × 1 | read-only | completeness vs request and #197 | COMPLETE | done |
 
 ## Tasks
 ### Task 1: Add watermark core, WithWatermarks and stream wiring
@@ -155,7 +155,7 @@ Commit: docs(streams): document event time and watermarks
 - With several buffered consumers, items reach operators out of order; the out-of-orderness bound must cover it. Documented.
 - Processing-time and early-trigger intervals become event-time intervals under watermarks — a semantic change only for streams that opt in. Documented.
 - Window emission still happens under the operator lock (as today); `OnLateEvent` runs on the processing thread.
-- The bench is noisy on a busy machine; median of 7 and a pure-tracking pipeline keep it stable.
+- The bench is noisy on a busy machine; median of 9 alternating runs keeps the windowed gate stable (the informational idle-timeout number varied between runs).
 
 ## Progress
 - 2026-11-21 Task 1: red — `dotnet test ... --filter "FullyQualifiedName~WatermarkTests"` → CS1061 'WithWatermarks' not found, CS0246 'WatermarkOperator<>' not found
@@ -201,8 +201,9 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-22 Ruling: findings not fixed — Minor/deferred: weak count-only assertions in the pre-existing `AdvancedWindowingTests` discarding/retraction tests; 300 ms negative timer checks and bounded waits (timing-dependent by nature); the join's two `goto` labels (style); no concurrent-emitter test (ordering contract documented as "bound must cover reordering").
 - 2026-11-22 Re-review round 1 (stand-in): F1-F4, F6, F8-F13 ADDRESSED; NOT_ADDRESSED — a second throwing subscriber still escaped the loop, and the advanced session operator did not cap `WindowConfiguration.AllowedLateness`; new (POSSIBLE ~65, confirmed by a test): a trigger purging before the window end marked the window final, so later items were not evaluated. All three red (`Failed: 3`) then fixed.
 - 2026-11-22 Cap: re-review round 2 done inline — each round-1 item has a red-then-green test; no agent re-ran it. Remaining POSSIBLE items not fixed: `_passedTicks` is a non-atomic max (under concurrent emitters the "before the advance" watermark can read slightly older, i.e. more permissive), a throwing `Save` replaces a captured subscriber exception, a watermark-only restore (no max-timestamp key) does not idle.
+- 2026-11-22 Review: 22 findings (stand-ins + QA), 19 confirmed, 19 fixed in 4 commits (382e8c3, 733b42b, 06a839e, 6a248f4), 3 POSSIBLE and 4 Minor deferred (listed above); critic: COMPLETE.
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.
 - 2026-11-21 Ruling: implementation inline, no developer agents — every task shares the new contract and its files — cost if wrong: none beyond tokens.
-- 2026-11-21 Ruling: the bench gates on pure watermark-tracking overhead (Map → Filter → Sink); the windowed comparison is informational — event-time windows emit results the processing-time run doesn't, so their timings aren't comparable — cost if wrong: the window path's overhead is reported, not gated.
+- 2026-11-21 Ruling (superseded 2026-11-22 by the user's "Perf gate" answer: the windowed pipeline is gated at 10%, the trivial pipeline is informational): the bench gates on pure watermark-tracking overhead (Map → Filter → Sink).
