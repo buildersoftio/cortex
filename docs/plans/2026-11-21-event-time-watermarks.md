@@ -111,11 +111,11 @@ Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time advanced session windows
 
 ### Task 6: Event-time mode for stream-stream joins
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Operators/Joins/StreamStreamJoinOperator.cs` (modify), `src/Cortex.Tests/Streams/Tests/EventTimeJoinTests.cs` (create)
 Depends on: Task 1
-- [ ] Tests first: replayed old events still match when `|tL - tR| < WindowSize` and don't match outside it; nothing expires until both sides have advanced (min); with an idle timeout an idle right side stops holding the left back; unmatched left/outer results are emitted at `ts + WindowSize + GracePeriod <= W`; a late element is reported and not buffered; processing-time joins unchanged.
-- [ ] Implement right-side tracking from `ProcessRight` timestamps with the stream's strategy, combined watermark, watermark-driven cleanup, and a timer used only for idle checks in event-time mode.
+- [x] Tests first: replayed old events still match when `|tL - tR| < WindowSize` and don't match outside it; nothing expires until both sides have advanced (min); with an idle timeout an idle right side stops holding the left back; unmatched left/outer results are emitted at `ts + WindowSize + GracePeriod <= W`; a late element is reported and not buffered; processing-time joins unchanged.
+- [x] Implement right-side tracking from `ProcessRight` timestamps with the stream's strategy, combined watermark, watermark-driven cleanup, and a timer used only for idle checks in event-time mode.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~EventTimeJoinTests|FullyQualifiedName~StreamStreamJoinOperatorTests"`
 Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time stream-stream joins
@@ -179,7 +179,10 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Task 4: repair 2/3 — the Task 5 gate caught `CountTrigger_FiresMultipleTimesInAccumulatingMode` failing again (Expected 4, Actual 2): the current window can end just after `UtcNow`, so the wall-clock timer purged it mid-test → both count-trigger tests now start at the next window boundary.
 - 2026-11-21 Task 4: repair 3/3 — the next gate caught `DiscardingMode_EmitsOnlyNewItemsSinceLastFiring` (Expected 2, Actual 1), same shape → it and `AccumulatingAndRetractingMode_EmitsRetractions` get the same next-boundary start. Cap: other `UtcNow`-based tests in `AdvancedWindowingTests.cs` (processing-time, early, OR and session triggers) are left as they are; if they flake, they are reported as pre-existing, not chased.
 - 2026-11-21 Cap: `ProcessingTimeTrigger_FiresAtInterval` and `EarlyTrigger_EmitsPartialResultsBeforeWindowCloses` still fail about 1 run in 10 — baseline on v3.2/release@1c6fc24b (temporary worktree, 10 runs of `AdvancedWindowingTests`): `ProcessingTimeTrigger_FiresAtInterval` and `AccumulatingAndRetractingMode_EmitsRetractions` each failed once, so the wall-clock interval flakes predate this branch; left unfixed after 3 repairs, reported.
-- 2026-11-21 Task 5: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeAdvancedWindowTests|FullyQualifiedName~AdvancedWindowingTests"` → Passed! - Failed: 0, Passed: 22
+- 2026-11-21 Task 5: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeAdvancedWindowTests|FullyQualifiedName~AdvancedWindowingTests"` → Passed! - Failed: 0, Passed: 22 (second run; the first hit the baseline flake `ProcessingTimeTrigger_FiresAtInterval`)
+- 2026-11-21 Task 6: red — `dotnet test ... --filter "FullyQualifiedName~EventTimeJoinTests"` → Failed: 5, Passed: 0
+- 2026-11-21 Ruling: in event time the join's cleanup runs on the caller's thread when the combined watermark reaches the earliest expiry (exceptions reach the emitting caller, as on the arrival path), and the cleanup timer only adds idle detection at `CleanupInterval` — keeps results deterministic and ordered with the watermark — cost if wrong: an idle right side is noticed only at the next cleanup tick (default 30 s).
+- 2026-11-21 Task 6: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeJoinTests|FullyQualifiedName~StreamStreamJoinOperatorTests"` → Passed! - Failed: 0, Passed: 29
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.
