@@ -68,11 +68,11 @@ Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): register closed command pipeline behaviors (#250)
 
 ### Task 2: Register each handler, processor and behavior once (#251)
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator/DependencyInjection/ServiceCollectionExtensions.cs` (modify), `src/Cortex.Tests/Mediator/Tests/MediatorRegistrationTests.cs` (modify)
 Depends on: Task 1
-- [ ] Add `TwoMarkersInSameAssembly_NotificationHandlerRunsOnce` and `AddCortexMediatorCalledTwice_HandlersAndBehaviorsRunOnce`; run them red (handler runs twice).
-- [ ] `Distinct()` the assemblies in `RegisterHandlers` and `RegisterProcessors`; use `services.TryAddEnumerable(new ServiceDescriptor(...))` in `ScanAndRegister` and for every behavior registration in `RegisterPipelineBehaviors`.
+- [x] Add `TwoMarkersInSameAssembly_NotificationHandlerRunsOnce` and `AddCortexMediatorCalledTwice_HandlersAndBehaviorsRunOnce`; run them red (handler runs twice).
+- [x] `Distinct()` the assemblies in `RegisterHandlers` and `RegisterProcessors`; use `services.TryAddEnumerable(new ServiceDescriptor(...))` in `ScanAndRegister` and for every behavior registration in `RegisterPipelineBehaviors`.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -f net11.0 --filter "FullyQualifiedName~MediatorRegistrationTests|FullyQualifiedName~HandlerLifetimeTests|FullyQualifiedName~PipelineBehaviorOrderingTests|FullyQualifiedName~ProcessorIntegrationTests|FullyQualifiedName~NotificationBehaviorIntegrationTests|FullyQualifiedName~QueryBehaviorIntegrationTests"`
 Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): register handlers and behaviors once per assembly (#251)
@@ -148,4 +148,6 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 ## Progress
 - 2026-11-22 Task 1: red — the two new tests failed on 1bd8088 ("Failed: 2, Passed: 0").
 - 2026-11-22 Ruling: one private `RegisterBehavior` helper now registers all five behavior kinds (query and notification logic moved into it unchanged) — Task 2 needs one place to switch to `TryAddEnumerable` — cost if wrong: none, same registrations.
-- 2026-11-22 Task 1: complete — see the commit's test run.
+- 2026-11-22 Task 1: complete — 5 test classes → "Failed: 0, Passed: 36" (commit 135f0b0).
+- 2026-11-22 Task 2: red — with the 1bd8088 version of ServiceCollectionExtensions.cs swapped in temporarily, the two new tests failed ("Failed: 2, Passed: 2"); fixed version restored.
+- 2026-11-22 Task 2: complete — all Mediator tests on net11.0, see the commit's run.

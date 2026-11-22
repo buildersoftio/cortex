@@ -1,6 +1,7 @@
 using Cortex.Mediator;
 using Cortex.Mediator.Commands;
 using Cortex.Mediator.DependencyInjection;
+using Cortex.Mediator.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Cortex.Tests.Mediator.Tests
@@ -68,10 +69,99 @@ namespace Cortex.Tests.Mediator.Tests
         }
     }
 
+    public class RegistrationCallCounter
+    {
+        private int _handlerCalls;
+        private int _behaviorCalls;
+
+        public int HandlerCalls => _handlerCalls;
+        public int BehaviorCalls => _behaviorCalls;
+
+        public void HandlerCalled() => Interlocked.Increment(ref _handlerCalls);
+        public void BehaviorCalled() => Interlocked.Increment(ref _behaviorCalls);
+    }
+
+    public class RegistrationTestNotification : INotification
+    {
+    }
+
+    public class RegistrationTestNotificationHandler : INotificationHandler<RegistrationTestNotification>
+    {
+        private readonly RegistrationCallCounter _counter;
+
+        public RegistrationTestNotificationHandler(RegistrationCallCounter counter) => _counter = counter;
+
+        public Task Handle(RegistrationTestNotification notification, CancellationToken cancellationToken)
+        {
+            _counter.HandlerCalled();
+            return Task.CompletedTask;
+        }
+    }
+
+    public class CountingNotificationBehavior<TNotification> : INotificationPipelineBehavior<TNotification>
+        where TNotification : INotification
+    {
+        private readonly RegistrationCallCounter _counter;
+
+        public CountingNotificationBehavior(RegistrationCallCounter counter) => _counter = counter;
+
+        public Task Handle(TNotification notification, NotificationHandlerDelegate next, CancellationToken cancellationToken)
+        {
+            _counter.BehaviorCalled();
+            return next();
+        }
+    }
+
+    // Second marker type in the same assembly as RegistrationTestCommand.
+    public class RegistrationSecondMarker
+    {
+    }
+
     #endregion
 
     public class MediatorRegistrationTests
     {
+        [Fact]
+        public async Task TwoMarkersInSameAssembly_NotificationHandlerRunsOnce()
+        {
+            var counter = new RegistrationCallCounter();
+            var services = new ServiceCollection();
+            services.AddSingleton(counter);
+            services.AddCortexMediator(new[] { typeof(RegistrationTestCommand), typeof(RegistrationSecondMarker) });
+
+            var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+            await mediator.PublishAsync(new RegistrationTestNotification());
+
+            Assert.Equal(1, counter.HandlerCalls);
+        }
+
+        [Fact]
+        public async Task AddCortexMediatorCalledTwice_HandlersAndBehaviorsRunOnce()
+        {
+            var counter = new RegistrationCallCounter();
+            var services = new ServiceCollection();
+            services.AddSingleton(counter);
+            for (var i = 0; i < 2; i++)
+            {
+                services.AddCortexMediator(new[] { typeof(RegistrationTestCommand) }, options =>
+                {
+                    options.AddOpenNotificationPipelineBehavior(typeof(CountingNotificationBehavior<>));
+                });
+            }
+
+            var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+            await mediator.PublishAsync(new RegistrationTestNotification());
+
+            Assert.Equal(1, counter.HandlerCalls);
+            Assert.Equal(1, counter.BehaviorCalls);
+        }
+
         [Fact]
         public async Task ClosedCommandBehavior_IsRegisteredAndRunsOnlyForItsCommand()
         {

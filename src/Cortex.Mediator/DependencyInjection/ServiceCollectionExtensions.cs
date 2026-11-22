@@ -5,6 +5,7 @@ using Cortex.Mediator.Queries;
 using Cortex.Mediator.Streaming;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,7 +41,7 @@ namespace Cortex.Mediator.DependencyInjection
             IEnumerable<Type> assemblyMarkerTypes,
             MediatorOptions options)
         {
-            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
+            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).Distinct().ToArray();
             var lifetime = options.HandlerLifetime;
 
             ScanAndRegister(services, assemblies, typeof(ICommandHandler<,>), options.OnlyPublicClasses, lifetime);
@@ -61,7 +62,7 @@ namespace Cortex.Mediator.DependencyInjection
             IEnumerable<Type> assemblyMarkerTypes,
             MediatorOptions options)
         {
-            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
+            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).Distinct().ToArray();
 
             // Register pre-processors
             ScanAndRegister(services, assemblies, typeof(IRequestPreProcessor<>), options.OnlyPublicClasses, ServiceLifetime.Transient);
@@ -103,9 +104,11 @@ namespace Cortex.Mediator.DependencyInjection
                         .Where(i => i.IsGenericType &&
                                     i.GetGenericTypeDefinition() == openGenericInterface);
 
+                    // TryAddEnumerable: a type found again (another marker in the same assembly,
+                    // or a second AddCortexMediator call) is not registered twice.
                     foreach (var serviceType in matchingInterfaces)
                     {
-                        services.Add(new ServiceDescriptor(serviceType, type, lifetime));
+                        services.TryAddEnumerable(new ServiceDescriptor(serviceType, type, lifetime));
                     }
                 }
             }
@@ -149,13 +152,14 @@ namespace Cortex.Mediator.DependencyInjection
 
         /// <summary>
         /// Registers an open generic behavior against the open generic interface, and a closed behavior
-        /// against each closed form of that interface it implements.
+        /// against each closed form of that interface it implements. A behavior that is already registered
+        /// for a service type is not registered again, so it never runs twice in one pipeline.
         /// </summary>
         private static void RegisterBehavior(IServiceCollection services, Type openGenericInterface, Type behaviorType)
         {
             if (behaviorType.IsGenericTypeDefinition)
             {
-                services.AddTransient(openGenericInterface, behaviorType);
+                services.TryAddEnumerable(ServiceDescriptor.Transient(openGenericInterface, behaviorType));
                 return;
             }
 
@@ -164,7 +168,7 @@ namespace Cortex.Mediator.DependencyInjection
 
             foreach (var iface in implementedInterfaces)
             {
-                services.AddTransient(iface, behaviorType);
+                services.TryAddEnumerable(ServiceDescriptor.Transient(iface, behaviorType));
             }
         }
     }
