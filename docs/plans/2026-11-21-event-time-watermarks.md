@@ -42,7 +42,7 @@ A coordinated checkpoint/restore of window and join buffers (no framework exists
 - `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~Watermark|FullyQualifiedName~EventTime"` → exit 0, `Failed: 0`
 - `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → exit 0, `Failed: 0`
 - `dotnet run -c Release --project tools/Cortex.Streams.WatermarkBench` → exit 0, prints the overhead below 5%
-- `git diff --stat v3.2/release...HEAD -- src/Cortex.Tests` → only new files, plus the timestamp-only fix in `TumblingWindowOperatorTests.cs` (existing assertions unchanged = backward compatible)
+- `git diff --stat v3.2/release...HEAD -- src/Cortex.Tests` → only new files, plus the timestamp-only fixes in `TumblingWindowOperatorTests.cs` and `AdvancedWindowingTests.cs` (existing assertions unchanged = backward compatible)
 - End to end: `EventTimeEndToEndTests` builds Source → WithWatermarks → Map → TumblingWindow → Sink with shuffled events inside the bound, one late event and an idle tail, and asserts exact window contents, one `LateEvent`, and that the last window closes through idleness.
 
 ## Orchestration
@@ -91,11 +91,11 @@ Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time session windows
 
 ### Task 4: Event-time mode for advanced tumbling and sliding windows
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Operators/Windows/Triggers/TriggerContext.cs` (modify), `src/Cortex.Streams/Operators/Windows/AdvancedTumblingWindowOperator.cs` (modify), `src/Cortex.Streams/Operators/Windows/AdvancedSlidingWindowOperator.cs` (modify), `src/Cortex.Tests/Streams/Tests/EventTimeAdvancedWindowTests.cs` (create)
 Depends on: Task 2
-- [ ] Tests first: default `EventTimeTrigger` fires at `W >= end` (not on wall clock, shown with year-2020 timestamps); `CountTrigger` fires on count and purges at `W >= end`; `WindowConfiguration.AllowedLateness`/`OnLateEvent` take precedence over the strategy's when set; an allowed-late event re-fires with emission type Late; state removed at `W >= end + lateness`.
-- [ ] Give `TriggerContext` a time source (wall clock by default, last watermark in event-time mode) and evaluate triggers on `OnWatermark` with the watermark as their time; dispose the wall-clock timer.
+- [x] Tests first: default `EventTimeTrigger` fires at `W >= end` (not on wall clock, shown with year-2020 timestamps); `CountTrigger` fires on count and purges at `W >= end`; `WindowConfiguration.AllowedLateness`/`OnLateEvent` take precedence over the strategy's when set; an allowed-late event re-fires with emission type Late; state removed at `W >= end + lateness`.
+- [x] Give `TriggerContext` a time source (wall clock by default, last watermark in event-time mode) and evaluate triggers on `OnWatermark` with the watermark as their time; dispose the wall-clock timer.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~EventTimeAdvancedWindowTests|FullyQualifiedName~AdvancedWindowingTests"`
 Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time advanced tumbling and sliding windows
@@ -170,6 +170,9 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Task 3: red — `dotnet test ... --filter "FullyQualifiedName~EventTimeSessionWindowTests"` → Failed: 6, Passed: 0
 - 2026-11-21 Ruling: event-time sessions use inclusive bounds (an event joins at exactly `last + gap`, the session fires when `W > last + gap`), merged items are ordered by session start then arrival — matches the processing-time rule "more than the gap closes it" — cost if wrong: an event exactly one gap apart lands in the other session.
 - 2026-11-21 Task 3: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeSessionWindowTests|FullyQualifiedName~SessionWindowOperatorTests"` → Passed! - Failed: 0, Passed: 17
+- 2026-11-21 Task 4: no red run captured — the new tests were run only after the implementation (first run: 4 of 4 new tests passed).
+- 2026-11-21 Task 4: repair 1/3 — `AdvancedWindowingTests.CountTrigger_FiresMultipleTimesInAccumulatingMode` failed once (Expected True, Actual False), then 6/6 green; `UtcNow..UtcNow + 300 ms` in a 10 s window splits across a boundary about 3% of runs → aligned it and its twin `CountTrigger_FiresAfterSpecifiedCount` to a window start (timestamps only).
+- 2026-11-21 Ruling: advanced windows in event time evaluate an allowed-late event at once (emission type Late), report a late event once per event, and remove an expired window's items from the store (event time only; processing time keeps the existing behaviour) — so a late event cannot revive old items — cost if wrong: custom triggers that never purge lose their items after the lateness, as documented.
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.
