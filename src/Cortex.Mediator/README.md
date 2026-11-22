@@ -244,11 +244,17 @@ public class FallbackExceptionHandler : IExceptionHandler<ApiResponse>
 ```
 
 ### Notification Exception Suppression
-For notifications, you can suppress exceptions to allow other handlers to continue:
+For notifications, you can log a handler's exception and swallow it instead of rethrowing it:
 ```csharp
-// The ExceptionHandlingNotificationBehavior has a suppressExceptions parameter
-// When true, exceptions are logged but not rethrown
+builder.Services.AddCortexMediator(
+    new[] { typeof(Program) },
+    options => options.AddExceptionHandlingBehaviors(o => o.SuppressNotificationExceptions = true)
+);
+
+// Or, with AddExceptionHandlingBehaviors() already registered:
+builder.Services.Configure<ExceptionHandlingOptions>(o => o.SuppressNotificationExceptions = true);
 ```
+Each handler is wrapped on its own, so with `SequentialNotificationStrategy` the remaining handlers still run after one fails, and with parallel publishing `PublishAsync` completes without an exception. A registered `IExceptionHandler` is still called first.
 
 ## 💾 Caching Behavior for Queries
 The caching behavior provides automatic caching of query results to improve performance.

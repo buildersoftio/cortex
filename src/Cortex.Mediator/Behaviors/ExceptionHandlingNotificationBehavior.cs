@@ -1,5 +1,6 @@
 using Cortex.Mediator.Notifications;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,15 +28,21 @@ namespace Cortex.Mediator.Behaviors
         /// <param name="suppressExceptions">
         /// When true, exceptions are logged but not rethrown, allowing other notification handlers to continue.
         /// When false (default), exceptions are rethrown after handling.
+        /// The container cannot supply this value; configure <see cref="ExceptionHandlingOptions"/> instead.
+        /// </param>
+        /// <param name="options">
+        /// Exception handling options from the container. Exceptions are suppressed when either
+        /// <paramref name="suppressExceptions"/> or <see cref="ExceptionHandlingOptions.SuppressNotificationExceptions"/> is true.
         /// </param>
         public ExceptionHandlingNotificationBehavior(
             ILogger<ExceptionHandlingNotificationBehavior<TNotification>> logger,
             IExceptionHandler? exceptionHandler = null,
-            bool suppressExceptions = false)
+            bool suppressExceptions = false,
+            IOptions<ExceptionHandlingOptions>? options = null)
         {
             _logger = logger;
             _exceptionHandler = exceptionHandler;
-            _suppressExceptions = suppressExceptions;
+            _suppressExceptions = suppressExceptions || (options?.Value?.SuppressNotificationExceptions ?? false);
         }
 
         public async Task Handle(

@@ -18,6 +18,12 @@ namespace Cortex.Mediator.DependencyInjection
         internal List<(Type BehaviorType, int Order)> NotificationBehaviors { get; } = new();
         internal List<(Type BehaviorType, int Order)> StreamQueryBehaviors { get; } = new();
 
+        /// <summary>
+        /// Configuration for <see cref="Behaviors.ExceptionHandlingOptions"/>, applied with services.Configure
+        /// when the pipeline behaviors are registered. Null when nothing was configured.
+        /// </summary>
+        internal Action<Behaviors.ExceptionHandlingOptions> ExceptionHandlingConfiguration { get; set; }
+
         public bool OnlyPublicClasses { get; set; } = true;
 
         /// <summary>

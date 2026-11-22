@@ -129,12 +129,12 @@ Expected: exit 0, "Failed: 0"
 Commit: fix(mediator-validation): await validators with the cancellation token (#256)
 
 ### Task 8: Let notification exception suppression be configured (#257)
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator/Behaviors/ExceptionHandlingOptions.cs` (create), `src/Cortex.Mediator/Behaviors/ExceptionHandlingNotificationBehavior.cs` (modify), `src/Cortex.Mediator/DependencyInjection/MediatorOptions.cs` (modify), `src/Cortex.Mediator/DependencyInjection/MediatorOptionsExtensions.cs` (modify), `src/Cortex.Mediator/DependencyInjection/ServiceCollectionExtensions.cs` (modify), `src/Cortex.Mediator/README.md` (modify), `src/Cortex.Tests/Mediator/Tests/ExceptionHandlingIntegrationTests.cs` (modify)
 Depends on: Task 7
-- [ ] Add `SuppressNotificationExceptions_ConfiguredThroughOptions_LetsOtherHandlersRun` (sequential strategy, first handler throws, `AddExceptionHandlingBehaviors(o => o.SuppressNotificationExceptions = true)`; publish completes and the second handler ran), `SuppressNotificationExceptions_ConfiguredThroughServicesConfigure_LetsOtherHandlersRun`, and `SuppressNotificationExceptions_Default_Rethrows`; run them red (compile failure, the options type does not exist).
-- [ ] Create `ExceptionHandlingOptions` (namespace `Cortex.Mediator.Behaviors`); add the optional trailing `IOptions<ExceptionHandlingOptions> options = null` parameter to the behavior; add the `AddExceptionHandlingBehaviors(this MediatorOptions, Action<ExceptionHandlingOptions>)` overload storing an internal action on `MediatorOptions`; apply it with `services.Configure` in `RegisterPipelineBehaviors`.
-- [ ] Replace the README placeholder at "Notification Exception Suppression" with both configuration forms and a note that suppression only helps other handlers run with a sequential strategy or parallel publishing.
+- [x] Add `SuppressNotificationExceptions_ConfiguredThroughOptions_LetsOtherHandlersRun` (sequential strategy, first handler throws, `AddExceptionHandlingBehaviors(o => o.SuppressNotificationExceptions = true)`; publish completes and the second handler ran), `SuppressNotificationExceptions_ConfiguredThroughServicesConfigure_LetsOtherHandlersRun`, and `SuppressNotificationExceptions_Default_Rethrows`; run them red (compile failure, the options type does not exist).
+- [x] Create `ExceptionHandlingOptions` (namespace `Cortex.Mediator.Behaviors`); add the optional trailing `IOptions<ExceptionHandlingOptions> options = null` parameter to the behavior; add the `AddExceptionHandlingBehaviors(this MediatorOptions, Action<ExceptionHandlingOptions>)` overload storing an internal action on `MediatorOptions`; apply it with `services.Configure` in `RegisterPipelineBehaviors`.
+- [x] Replace the README placeholder at "Notification Exception Suppression" with both configuration forms and a note that suppression only helps other handlers run with a sequential strategy or parallel publishing.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -f net11.0 --filter "FullyQualifiedName~ExceptionHandling"`
 Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): allow notification exception suppression to be configured (#257)
@@ -162,4 +162,6 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Task 6: red — 5 new tests failed ("Failed: 5, Passed: 26"): the parallel strategy alone, the reflection mediator with the parallel strategy and with no strategy, a recording custom strategy (isolates the `Mediator.cs` delegates), and a generated-mediator runtime test with the same recording strategy (isolates the emitter).
 - 2026-11-22 Task 6: complete — notification and generator filter → "Failed: 0, Passed: 76"; smoke → "SMOKE OK: 10 checks passed through GeneratedMediator" (commit a107f73).
 - 2026-11-22 Task 7: red — all 6 new tests failed ("Failed: 6, Passed: 6"); the three "does not block" tests waited their full 5 s.
-- 2026-11-22 Task 7: complete — see the commit's run.
+- 2026-11-22 Task 7: complete — validation filter → "Failed: 0, Passed: 12" (commit e8764ea).
+- 2026-11-22 Task 8: red — the new tests did not compile (CS1501: no `AddExceptionHandlingBehaviors` overload takes 1 argument; CS0246: `ExceptionHandlingOptions` not found).
+- 2026-11-22 Task 8: complete — see the commit's run.

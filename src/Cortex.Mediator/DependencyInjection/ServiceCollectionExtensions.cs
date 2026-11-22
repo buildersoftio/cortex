@@ -1,3 +1,4 @@
+using Cortex.Mediator.Behaviors;
 using Cortex.Mediator.Commands;
 using Cortex.Mediator.Notifications;
 using Cortex.Mediator.Processors;
@@ -116,6 +117,12 @@ namespace Cortex.Mediator.DependencyInjection
 
         public static void RegisterPipelineBehaviors(IServiceCollection services, MediatorOptions options)
         {
+            // Options given to AddExceptionHandlingBehaviors(configure); the behaviors read them through IOptions.
+            if (options.ExceptionHandlingConfiguration != null)
+            {
+                services.Configure<ExceptionHandlingOptions>(options.ExceptionHandlingConfiguration);
+            }
+
             // Sort each behavior list by Order (stable sort preserves registration order for equal values).
             // OrderBy in LINQ is a stable sort.
 
