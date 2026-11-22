@@ -380,7 +380,7 @@ namespace Cortex.Streams.Operators.Windows
             lock (_lock)
             {
                 var lateness = _config.AllowedLateness > TimeSpan.Zero ? _config.AllowedLateness : context.AllowedLateness;
-                _latenessTicks = lateness.Ticks;
+                _latenessTicks = Math.Min(lateness.Ticks, WatermarkStrategy.MaxLateness.Ticks);
                 _eventTime = context;
 
                 // Sessions close by watermark from now on

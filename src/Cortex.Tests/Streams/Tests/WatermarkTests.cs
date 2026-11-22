@@ -440,6 +440,7 @@ namespace Cortex.Tests.Streams.Tests
                 .Stream()
                 .WithWatermarks(e => e.Time, WatermarkStrategy.ForMonotonousTimestamps())
                 .SetNext(new ThrowingOnce())
+                .SetNext(new ThrowingOnce())
                 .SetNext(later)
                 .Sink(_ => { })
                 .Build();

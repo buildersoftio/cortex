@@ -280,9 +280,13 @@ namespace Cortex.Streams.Watermarks
                         {
                             subscriber.OnWatermark(watermark);
                         }
-                        catch (Exception ex) when (failure == null)
+                        catch (Exception ex)
                         {
-                            failure = ExceptionDispatchInfo.Capture(ex);
+                            // The first failure is rethrown after every subscriber had its turn
+                            if (failure == null)
+                                failure = ExceptionDispatchInfo.Capture(ex);
+                            else
+                                Trace.TraceError($"WatermarkOperator<{typeof(T).Name}>: another subscriber failed: {ex}");
                         }
                     }
                 }

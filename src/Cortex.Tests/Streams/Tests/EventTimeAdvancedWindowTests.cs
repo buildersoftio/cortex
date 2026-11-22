@@ -175,6 +175,41 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void TriggerThatPurgesBeforeTheEnd_StillEmitsLaterItems()
+        {
+            var results = new List<WindowResult<string, Ev>>();
+            var trigger = new Cortex.Streams.Operators.Windows.Triggers.CustomTrigger<Ev>(
+                onElement: (e, ts, start, end, context) =>
+                {
+                    if (context.GetState<bool>("fired"))
+                        return Cortex.Streams.Operators.Windows.Triggers.TriggerResult.Continue;
+                    context.SetState("fired", true);
+                    return Cortex.Streams.Operators.Windows.Triggers.TriggerResult.FireAndPurge;
+                });
+            var config = WindowConfiguration<Ev>.Create().WithTrigger(trigger).WithAllowedLateness(TimeSpan.FromSeconds(10)).Build();
+            var stream = AdvancedTumbling(WatermarkStrategy.ForMonotonousTimestamps(), config, results);
+
+            stream.Emit(At(1, 1));    // purged before the window end
+            stream.Emit(At(2, 2));
+            stream.Emit(At(30, 3));
+
+            Assert.Contains(results, r => Values(r).SequenceEqual(new[] { 2 }));
+        }
+
+        [Fact]
+        public void AdvancedSession_UnboundedConfiguredLateness_DoesNotOverflow()
+        {
+            var results = new List<WindowResult<string, Ev>>();
+            var config = WindowConfiguration<Ev>.Create().WithAllowedLateness(TimeSpan.MaxValue).Build();
+            var stream = AdvancedSessions(WatermarkStrategy.ForMonotonousTimestamps(), config, results);
+
+            stream.Emit(At(0, 1));
+            stream.Emit(At(30, 2, "b"));   // session a fires
+
+            Assert.Equal(new[] { 1 }, Values(Assert.Single(results)));
+        }
+
+        [Fact]
         public void AdvancedSession_DoesNotCloseAtExactlyLastPlusGap()
         {
             var results = new List<WindowResult<string, Ev>>();

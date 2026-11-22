@@ -460,7 +460,10 @@ namespace Cortex.Streams.Operators.Windows
             // so a late correction still has the earlier items
             if (result == TriggerResult.FireAndPurge)
             {
-                if (_eventTime != null && _watermarkTicks < windowState.WindowEnd.Ticks + _latenessTicks)
+                // Only a result at or after the window end is final; a trigger may purge earlier, and the window starts over
+                if (_eventTime != null
+                    && _watermarkTicks >= windowState.WindowEnd.Ticks
+                    && _watermarkTicks < windowState.WindowEnd.Ticks + _latenessTicks)
                 {
                     windowState.FinalFired = true;
                 }
