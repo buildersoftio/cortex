@@ -1,5 +1,5 @@
 # Plan: Fix the eight Cortex.Mediator bugs #250-#257
-Status: in-progress
+Status: done
 Date: 2026-11-22 · Agent: lead-developer · Size: large · Base: v3.2/release@1bd8088 · Branch: v3/bug/250-257
 Approved: 2026-11-22 via info.request
 Consent: Review panel (2026-11-22)
@@ -52,10 +52,10 @@ Fix each issue at its cause with the smallest change and a red-then-green test, 
 - Companions: researcher=researcher-2 · software-architect=software-architect-2 · developer=developer-2 · code-reviewer=code-reviewer · security-reviewer=— · qa-engineer=— · debugger=—
 | Wave | Phase | Agents | Access | Briefs | Gate | Status |
 |---|---|---|---|---|---|---|
-| 1 | Review | code-reviewer × 4 (correctness, spec, tests and silent failures, simplify) | read-only, code tools, 25 | READ_FIRST sophon-scratch-review.diff + this plan | FINDINGS at THRESHOLD 80, only the diff | pending |
-| 2 | Refute | code-reviewer × 3 (reachability, impact, defenses) | read-only, code tools, 15 | each Critical and Important finding | ≥2 of 3 CONFIRMED | pending |
-| 3 | Re-review | code-reviewer × 1 | read-only, code tools, 15 | diff of the fix commits | ALL_ADDRESSED | pending |
-| 4 | Critic | code-reviewer × 1, MODE completeness | read-only, code tools, 15 | request, Goal, Verification, commits | COMPLETE | pending |
+| 1 | Review | code-reviewer × 4 (correctness, spec, tests and silent failures, simplify) | read-only, code tools, 25 | READ_FIRST sophon-scratch-review.diff + this plan | FINDINGS at THRESHOLD 80, only the diff | done |
+| 2 | Refute | code-reviewer × 3 (reachability, impact, defenses) | read-only, code tools, 15 | each Critical and Important finding | ≥2 of 3 CONFIRMED | skipped — no Critical or Important finding |
+| 3 | Re-review | code-reviewer × 1 | read-only, code tools, 15 | diff of the fix commits | ALL_ADDRESSED | skipped — nothing to re-review |
+| 4 | Critic | code-reviewer × 1, MODE completeness | read-only, code tools, 15 | request, Goal, Verification, commits | COMPLETE | done |
 ## Tasks
 ### Task 1: Register closed command behaviors against their closed interfaces (#250)
 - [x] Done
@@ -168,3 +168,6 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Release build after Task 8: `dotnet build Cortex.sln -c Release` → "0 Error(s)", "1016 Warning(s)".
 - 2026-11-22 Review wave 1: 4 code-reviewer lenses (correctness, spec, tests, simplify), all APPROVE, SPEC: MET; 0 Critical, 0 Important, 3 Minor.
 - 2026-11-22 Ruling: the Minor test gap (no closed behavior registered twice) is fixed with `AddCortexMediatorCalledTwice_ClosedBehaviorRunsOnce`; with the closed branch temporarily set back to `AddTransient` it failed ("Failed: 1, Passed: 4"), then the line was restored — cheap, and it proves a line #251 relies on — cost if wrong: none.
+- 2026-11-22 Critic: completeness VERDICT COMPLETE; 2 Minor bookkeeping notes (wave statuses, green run for 3b2c607), both closed by this edit and the final run.
+- 2026-11-22 Review: 4 findings, 0 confirmed Critical/Important (none needed refuting), 1 fixed (closed-behavior test, 3b2c607), 3 deferred or disclosed (behavior de-duplication → PR note; redundant `!_validators.Any()` early return → kept, plan chose it; plan bookkeeping → fixed here).
+- 2026-11-22 Final verification: the Mediator filter on net11.0 and net8.0 plus the smoke run, in this commit's command.
