@@ -78,12 +78,12 @@ Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): register handlers and behaviors once per assembly (#251)
 
 ### Task 3: Make InvalidateAll remove cached results (#252)
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator/Caching/CacheInvalidator.cs` (modify), `src/Cortex.Mediator/Behaviors/CachingQueryBehavior.cs` (modify), `src/Cortex.Tests/Mediator/Tests/CachingIntegrationTests.cs` (modify)
 Depends on: Task 2
-- [ ] Add `InvalidateAll_RemovesEveryCachedResultOfThatQueryType` (two cached keys of one type, one of another type; after `InvalidateAll` the first two miss, the other still hits); run it red.
-- [ ] `CacheInvalidator`: replace `_keysByType`/`TrackKey` with a `ConcurrentDictionary<Type, CancellationTokenSource>` and an internal `GetExpirationToken(Type)`; `InvalidateAll` removes and cancels the type's source.
-- [ ] `CachingQueryBehavior`: optional trailing `ICacheInvalidator cacheInvalidator = null` parameter; when it is a `CacheInvalidator`, add its token to `MemoryCacheEntryOptions.ExpirationTokens`.
+- [x] Add `InvalidateAll_RemovesEveryCachedResultOfThatQueryType` (two cached keys of one type, one of another type; after `InvalidateAll` the first two miss, the other still hits); run it red.
+- [x] `CacheInvalidator`: replace `_keysByType`/`TrackKey` with a `ConcurrentDictionary<Type, CancellationTokenSource>` and an internal `GetExpirationToken(Type)`; `InvalidateAll` removes and cancels the type's source.
+- [x] `CachingQueryBehavior`: optional trailing `ICacheInvalidator cacheInvalidator = null` parameter; when it is a `CacheInvalidator`, add its token to `MemoryCacheEntryOptions.ExpirationTokens`.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -f net11.0 --filter "FullyQualifiedName~Caching|FullyQualifiedName~CacheInvalidatorTests"`
 Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): make InvalidateAll remove cached query results (#252)
@@ -150,4 +150,8 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Ruling: one private `RegisterBehavior` helper now registers all five behavior kinds (query and notification logic moved into it unchanged) — Task 2 needs one place to switch to `TryAddEnumerable` — cost if wrong: none, same registrations.
 - 2026-11-22 Task 1: complete — 5 test classes → "Failed: 0, Passed: 36" (commit 135f0b0).
 - 2026-11-22 Task 2: red — with the 1bd8088 version of ServiceCollectionExtensions.cs swapped in temporarily, the two new tests failed ("Failed: 2, Passed: 2"); fixed version restored.
-- 2026-11-22 Task 2: complete — all Mediator tests on net11.0, see the commit's run.
+- 2026-11-22 Task 2: repair 1/3 — the first verify run still failed because restoring the file with `copy` kept its old timestamp and MSBuild skipped the rebuild → touched the file; tests then passed.
+- 2026-11-22 Task 2: complete — `--filter "FullyQualifiedName~Mediator"` → "Failed: 0, Passed: 417" (commit f5b2c32).
+- 2026-11-22 Task 3: red — `InvalidateAll_RemovesEveryCachedResultOfThatQueryType` and `InvalidateAll_ThenNewResults_AreCachedAgain` failed ("Failed: 2, Passed: 6").
+- 2026-11-22 Ruling: the caching behavior takes its invalidation token before running the handler — an `InvalidateAll` during the handler then also expires that result — cost if wrong: one extra cache miss in that race.
+- 2026-11-22 Task 3: complete — see the commit's run.
