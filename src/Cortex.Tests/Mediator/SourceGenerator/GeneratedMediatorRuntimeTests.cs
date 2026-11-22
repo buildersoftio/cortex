@@ -236,6 +236,78 @@ namespace TestApp
     }
 
     [Fact]
+    public async Task Notifications_HandlerThrowsSynchronously_ReachesStrategyAsFaultedTask()
+    {
+        var output = await GeneratorTestHarness.RunScenarioAsync(OptInHeader + SharedTypes + @"
+namespace TestApp
+{
+    public class OrderPlaced : INotification { }
+
+    public class ThrowingHandler : INotificationHandler<OrderPlaced>
+    {
+        public Task Handle(OrderPlaced notification, CancellationToken cancellationToken)
+            => throw new InvalidOperationException(""sync"");
+    }
+
+    public class OkHandler : INotificationHandler<OrderPlaced>
+    {
+        private readonly Log _log;
+        public OkHandler(Log log) => _log = log;
+
+        public Task Handle(OrderPlaced notification, CancellationToken cancellationToken)
+        {
+            lock (_log) _log.Entries.Add(""ok"");
+            return Task.CompletedTask;
+        }
+    }
+
+    // Starts every delegate and records how each failure arrives.
+    public sealed class RecordingStrategy : INotificationPublishStrategy
+    {
+        public static int SyncThrows;
+        public static int Faulted;
+
+        public async Task PublishAsync(IEnumerable<Func<Task>> handlerDelegates, CancellationToken cancellationToken)
+        {
+            var tasks = new List<Task>();
+            foreach (var handler in handlerDelegates)
+            {
+                try { tasks.Add(handler()); }
+                catch { SyncThrows++; }
+            }
+
+            foreach (var task in tasks)
+            {
+                try { await task; }
+                catch { Faulted++; }
+            }
+        }
+    }
+
+    public static class Scenario
+    {
+        public static async Task<string> Run()
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<Log>();
+            services.AddCortexGeneratedMediator(options => options.UseNotificationPublishStrategy<RecordingStrategy>());
+
+            using var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+            await mediator.PublishAsync(new OrderPlaced());
+
+            var entries = provider.GetRequiredService<Log>().Entries;
+            return RecordingStrategy.SyncThrows + ""|"" + RecordingStrategy.Faulted + ""|"" + string.Join("","", entries);
+        }
+    }
+}");
+
+        Assert.Equal("0|1|ok", output);
+    }
+
+    [Fact]
     public async Task PipelineBehaviors_WrapHandlersInConfiguredOrder_ForCommandsAndQueries()
     {
         var output = await GeneratorTestHarness.RunScenarioAsync(OptInHeader + SharedTypes + @"

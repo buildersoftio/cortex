@@ -154,6 +154,97 @@ namespace Cortex.Tests.Mediator.Tests
                 mediator.PublishAsync(new StrategyTestNotification { Message = "Fail" }));
         }
 
+        [Fact]
+        public async Task ParallelStrategy_HandlerThrowsSynchronously_OtherHandlersStillRun()
+        {
+            // Arrange: the throwing handler is registered (and invoked) first
+            var log = new List<string>();
+            var services = new ServiceCollection();
+            services.AddSingleton<IMediator, Cortex.Mediator.Mediator>();
+            services.AddSingleton<INotificationPublishStrategy, ParallelNotificationStrategy>();
+            services.AddTransient<INotificationHandler<StrategyTestNotification>>(sp =>
+                new ThrowingStrategyHandler(log));
+            services.AddTransient<INotificationHandler<StrategyTestNotification>>(sp =>
+                new StrategyTestHandler1(log));
+
+            var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
+
+            // Act
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                mediator.PublishAsync(new StrategyTestNotification { Message = "Fail" }));
+
+            // Assert
+            Assert.Contains("Handler1: Fail", log);
+        }
+
+        [Fact]
+        public async Task ParallelStrategy_DelegateThrowsSynchronously_StartsTheRest()
+        {
+            // Arrange
+            var strategy = new ParallelNotificationStrategy();
+            var secondRan = false;
+            var delegates = new List<Func<Task>>
+            {
+                () => throw new InvalidOperationException("sync"),
+                () => { secondRan = true; return Task.CompletedTask; }
+            };
+
+            // Act
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                strategy.PublishAsync(delegates, CancellationToken.None));
+
+            // Assert
+            Assert.Equal("sync", ex.Message);
+            Assert.True(secondRan);
+        }
+
+        [Fact]
+        public async Task Mediator_WithoutStrategyRegistered_HandlerThrowsSynchronously_OtherHandlersStillRun()
+        {
+            // Arrange - manual DI, fallback path
+            var log = new List<string>();
+            var services = new ServiceCollection();
+            services.AddSingleton<IMediator, Cortex.Mediator.Mediator>();
+            services.AddTransient<INotificationHandler<StrategyTestNotification>>(sp =>
+                new ThrowingStrategyHandler(log));
+            services.AddTransient<INotificationHandler<StrategyTestNotification>>(sp =>
+                new StrategyTestHandler1(log));
+
+            var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
+
+            // Act
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                mediator.PublishAsync(new StrategyTestNotification { Message = "Fail" }));
+
+            // Assert
+            Assert.Contains("Handler1: Fail", log);
+        }
+
+        [Fact]
+        public async Task CustomStrategy_HandlerDelegates_NeverThrowSynchronously()
+        {
+            // Arrange
+            var log = new List<string>();
+            var strategy = new RecordingParallelStrategy();
+            var services = new ServiceCollection();
+            services.AddSingleton<IMediator, Cortex.Mediator.Mediator>();
+            services.AddSingleton<INotificationPublishStrategy>(strategy);
+            services.AddTransient<INotificationHandler<StrategyTestNotification>>(sp =>
+                new ThrowingStrategyHandler(log));
+            services.AddTransient<INotificationHandler<StrategyTestNotification>>(sp =>
+                new StrategyTestHandler1(log));
+
+            var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
+
+            // Act
+            await mediator.PublishAsync(new StrategyTestNotification { Message = "Fail" });
+
+            // Assert: the failure arrives as a faulted task, not as a synchronous throw
+            Assert.Equal(0, strategy.SynchronousThrows);
+            Assert.Equal(1, strategy.FaultedTasks);
+            Assert.Contains("Handler1: Fail", log);
+        }
+
         #endregion
 
         #region SequentialNotificationStrategy Tests
@@ -403,6 +494,45 @@ namespace Cortex.Tests.Mediator.Tests
             _log.Add($"Cancelling: {notification.Message}");
             _cts.Cancel();
             return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Custom strategy that starts every delegate, counts synchronous throws and faulted tasks, and swallows both.
+    /// </summary>
+    internal class RecordingParallelStrategy : INotificationPublishStrategy
+    {
+        public int SynchronousThrows { get; private set; }
+        public int FaultedTasks { get; private set; }
+
+        public async Task PublishAsync(
+            IEnumerable<Func<Task>> handlerDelegates,
+            CancellationToken cancellationToken)
+        {
+            var tasks = new List<Task>();
+            foreach (var handler in handlerDelegates)
+            {
+                try
+                {
+                    tasks.Add(handler());
+                }
+                catch
+                {
+                    SynchronousThrows++;
+                }
+            }
+
+            foreach (var task in tasks)
+            {
+                try
+                {
+                    await task;
+                }
+                catch
+                {
+                    FaultedTasks++;
+                }
+            }
         }
     }
 

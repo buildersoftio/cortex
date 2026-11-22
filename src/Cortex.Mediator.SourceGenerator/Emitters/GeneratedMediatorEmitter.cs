@@ -291,8 +291,13 @@ namespace Cortex.Mediator.SourceGenerator.Emitters
             sb.AppendLine("handlerDelegate = () => currentBehavior.Handle(notification, currentDelegate, cancellationToken);");
             sb.CloseBrace();
             sb.AppendLine();
+            sb.AppendLine("// A synchronous throw becomes a faulted Task, so parallel strategies still start the other handlers.");
             sb.AppendLine("var finalDelegate = handlerDelegate;");
-            sb.AppendLine("handlerDelegates[i] = () => finalDelegate();");
+            sb.AppendLine("handlerDelegates[i] = () =>");
+            sb.OpenBrace();
+            sb.AppendLine("try { return finalDelegate(); }");
+            sb.AppendLine("catch (Exception ex) { return Task.FromException(ex); }");
+            sb.CloseBrace(";");
             sb.CloseBrace();
             sb.AppendLine();
             sb.AppendLine("var strategy = _serviceProvider.GetService<INotificationPublishStrategy>();");

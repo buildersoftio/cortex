@@ -172,8 +172,20 @@ namespace Cortex.Mediator
                     handlerDelegate = () => currentBehavior.Handle(notification, currentDelegate, cancellationToken);
                 }
 
+                // A handler or behavior that throws before returning a Task becomes a faulted Task, so a
+                // strategy that starts all delegates (parallel) still starts the rest.
                 var finalDelegate = handlerDelegate;
-                handlerDelegates[i] = () => finalDelegate();
+                handlerDelegates[i] = () =>
+                {
+                    try
+                    {
+                        return finalDelegate();
+                    }
+                    catch (Exception ex)
+                    {
+                        return Task.FromException(ex);
+                    }
+                };
             }
 
             // Delegate to the publish strategy

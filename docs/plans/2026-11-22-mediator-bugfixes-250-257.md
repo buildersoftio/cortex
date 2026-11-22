@@ -109,11 +109,11 @@ Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): rethrow original exceptions from runtime-typed dispatch (#254)
 
 ### Task 6: Run every handler when one throws synchronously in parallel publishing (#255)
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator/Mediator.cs` (modify), `src/Cortex.Mediator/Notifications/ParallelNotificationStrategy.cs` (modify), `src/Cortex.Mediator.SourceGenerator/Emitters/GeneratedMediatorEmitter.cs` (modify), `src/Cortex.Tests/Mediator/Tests/NotificationPublishStrategyTests.cs` (modify), `src/Cortex.Tests/Mediator/SourceGenerator/GeneratedMediatorRuntimeTests.cs` (modify)
 Depends on: Task 5
-- [ ] Add `Parallel_HandlerThrowsSynchronously_OtherHandlersStillRun` (reflection mediator, default strategy, throwing handler registered first), `Parallel_Strategy_DelegateThrowsSynchronously_StartsTheRest` (strategy alone) and a generated-mediator runtime test with the same scenario; run them red.
-- [ ] In `Mediator.PublishAsync` and the emitted `PublishAsync`, build each final delegate as `() => { try { return finalDelegate(); } catch (Exception ex) { return Task.FromException(ex); } }`; in `ParallelNotificationStrategy`, start each delegate inside the same try/catch before `Task.WhenAll`.
+- [x] Add `Parallel_HandlerThrowsSynchronously_OtherHandlersStillRun` (reflection mediator, default strategy, throwing handler registered first), `Parallel_Strategy_DelegateThrowsSynchronously_StartsTheRest` (strategy alone) and a generated-mediator runtime test with the same scenario; run them red.
+- [x] In `Mediator.PublishAsync` and the emitted `PublishAsync`, build each final delegate as `() => { try { return finalDelegate(); } catch (Exception ex) { return Task.FromException(ex); } }`; in `ParallelNotificationStrategy`, start each delegate inside the same try/catch before `Task.WhenAll`.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -f net11.0 --filter "FullyQualifiedName~NotificationPublishStrategyTests|FullyQualifiedName~NotificationPipelineTests|FullyQualifiedName~GeneratedMediator|FullyQualifiedName~GeneratorDriverTests|FullyQualifiedName~ExceptionHandlingNotificationBehaviorTests"`
 Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): run every handler when one throws synchronously (#255)
@@ -158,4 +158,6 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Task 4: red — 5 new test cases failed, plus `GenerateKey_WithoutProperties_ShouldStillWork`, whose expected key was updated from `"Test:TestQuery"` to the full type name ("Failed: 6, Passed: 7").
 - 2026-11-22 Task 4: complete — cache filter → "Failed: 0, Passed: 33" (commit d9b0c13).
 - 2026-11-22 Task 5: red — both new tests failed ("Failed: 2, Passed: 9").
-- 2026-11-22 Task 5: complete — see the commit's run.
+- 2026-11-22 Task 5: complete — streaming and mediator filter → "Failed: 0, Passed: 39" (commit 9b6add1).
+- 2026-11-22 Task 6: red — 5 new tests failed ("Failed: 5, Passed: 26"): the parallel strategy alone, the reflection mediator with the parallel strategy and with no strategy, a recording custom strategy (isolates the `Mediator.cs` delegates), and a generated-mediator runtime test with the same recording strategy (isolates the emitter).
+- 2026-11-22 Task 6: complete — see the commit's run (smoke project added to it, because the emitter changed).
