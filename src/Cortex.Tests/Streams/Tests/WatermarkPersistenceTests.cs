@@ -80,6 +80,73 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void RestoredWatermark_AdvancesWhenIdle_WithoutNewEvents()
+        {
+            var now = new DateTime(2026, 11, 22, 12, 0, 0, DateTimeKind.Utc);
+            var clockLock = new object();
+            var store = new InMemoryStateStore<string, long>("watermarks");
+            store.Put(WatermarkStrategy.MaxTimestampStateKey, T0.AddSeconds(25).Ticks);
+            store.Put(WatermarkStrategy.WatermarkStateKey, T0.AddSeconds(25).Ticks);
+
+            var strategy = WatermarkStrategy.ForMonotonousTimestamps()
+                .WithStateStore(store)
+                .WithIdleTimeout(TimeSpan.FromMilliseconds(100))
+                .WithClock(() => { lock (clockLock) return now; });
+            var watermarks = new WatermarkOperator<Ev>(e => e.Time, strategy);
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("RestoredIdle")
+                .Stream()
+                .SetNext(watermarks)
+                .Sink(_ => { })
+                .Build();
+            stream.Start();
+
+            // No events in this run: the restored watermark still moves while the source is idle
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                lock (clockLock) now = now.AddSeconds(5);
+                Thread.Sleep(30);
+                return watermarks.CurrentWatermark > T0.AddSeconds(25);
+            }, TimeSpan.FromSeconds(10)));
+            stream.Stop();
+        }
+
+        [Fact]
+        public void Dispose_FlushesAPendingSave()
+        {
+            var now = new DateTime(2026, 11, 22, 12, 0, 0, DateTimeKind.Utc);
+            var store = new InMemoryStateStore<string, long>("watermarks");
+            var strategy = WatermarkStrategy.ForMonotonousTimestamps().WithStateStore(store).WithClock(() => now);
+            var watermarks = new WatermarkOperator<Ev>(e => e.Time, strategy);
+            watermarks.SetNext(new Cortex.Streams.Operators.SinkOperator<Ev>(_ => { }));
+
+            watermarks.Process(At(10, 1));   // saved
+            watermarks.Process(At(12, 2));   // same second: pending
+            Assert.Equal(T0.AddSeconds(10).Ticks, store.Get(WatermarkStrategy.WatermarkStateKey));
+
+            watermarks.Dispose();
+
+            Assert.Equal(T0.AddSeconds(12).Ticks, store.Get(WatermarkStrategy.WatermarkStateKey));
+            Assert.Equal(T0.AddSeconds(12).Ticks, store.Get(WatermarkStrategy.MaxTimestampStateKey));
+        }
+
+        [Fact]
+        public void Restore_WithOnlyTheWatermarkKey_ResumesAtIt()
+        {
+            var store = new InMemoryStateStore<string, long>("watermarks");
+            store.Put(WatermarkStrategy.WatermarkStateKey, T0.AddSeconds(25).Ticks);
+
+            var watermarks = new WatermarkOperator<Ev>(e => e.Time, WatermarkStrategy.ForMonotonousTimestamps().WithStateStore(store));
+            watermarks.SetNext(new Cortex.Streams.Operators.SinkOperator<Ev>(_ => { }));
+            Assert.Equal(T0.AddSeconds(25), watermarks.CurrentWatermark);
+
+            watermarks.Process(At(20, 1));   // older: no change
+            Assert.Equal(T0.AddSeconds(25), watermarks.CurrentWatermark);
+            watermarks.Process(At(30, 2));
+            Assert.Equal(T0.AddSeconds(30), watermarks.CurrentWatermark);
+        }
+
+        [Fact]
         public void Store_IsListedWithTheStreamsStateStores()
         {
             var store = new InMemoryStateStore<string, long>("watermarks");

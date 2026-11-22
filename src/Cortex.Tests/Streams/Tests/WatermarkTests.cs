@@ -29,6 +29,7 @@ namespace Cortex.Tests.Streams.Tests
             }
 
             public List<DateTime> Watermarks { get; } = new List<DateTime>();
+            public List<string> Log => _log;
             public int EnableCount { get; private set; }
             public EventTimeContext Context { get; private set; }
 
@@ -296,8 +297,158 @@ namespace Cortex.Tests.Streams.Tests
 
             stream.Emit(new Ev("a", T0.AddSeconds(1), 1));
 
-            Assert.True(SpinWait.SpinUntil(() => { lock (probe.Watermarks) return probe.Watermarks.Count >= 2; }, TimeSpan.FromSeconds(5)));
+            // Probe writes under the shared log lock
+            Assert.True(SpinWait.SpinUntil(() => { lock (probe.Log) return probe.Watermarks.Count >= 2; }, TimeSpan.FromSeconds(5)));
             stream.Stop();
+            lock (probe.Log)
+            {
+                Assert.Equal(T0.AddSeconds(1), probe.Watermarks[0]);
+                Assert.True(probe.Watermarks[1] > probe.Watermarks[0]);
+            }
+        }
+
+        private static (IStream<Ev> Stream, WatermarkOperator<Ev> Watermarks) BuildIdle(Func<DateTime> clock, Probe probe = null)
+        {
+            var strategy = WatermarkStrategy.BoundedOutOfOrderness(TimeSpan.FromSeconds(5))
+                .WithIdleTimeout(TimeSpan.FromSeconds(10))
+                .WithClock(clock);
+            var watermarks = new WatermarkOperator<Ev>(e => e.Time, strategy);
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("Idle")
+                .Stream()
+                .SetNext(watermarks)
+                .SetNext(probe ?? new Probe("p", new List<string>()))
+                .Sink(_ => { })
+                .Build();
+            stream.Start();
+            return (stream, watermarks);
+        }
+
+        [Fact]
+        public void IdleAdvance_SecondIdlePeriod_ContinuesFromTheWatermark()
+        {
+            var now = new DateTime(2026, 11, 22, 12, 0, 0, DateTimeKind.Utc);
+            var (stream, watermarks) = BuildIdle(() => now);
+
+            stream.Emit(new Ev("a", T0.AddSeconds(60), 1));   // W = 55
+            watermarks.CheckIdle();
+            now = now.AddSeconds(30);
+            watermarks.CheckIdle();                            // idle 20 s: W = 75
+            Assert.Equal(T0.AddSeconds(75), watermarks.CurrentWatermark);
+
+            stream.Emit(new Ev("a", T0.AddSeconds(62), 2));   // older than 75: W stays 75
+            watermarks.CheckIdle();
+            now = now.AddSeconds(15);
+            watermarks.CheckIdle();                            // idle again 5 s: from 75, not from 62 - 5
+            Assert.Equal(T0.AddSeconds(80), watermarks.CurrentWatermark);
+        }
+
+        [Fact]
+        public void IdleAdvance_AfterStopAndStart_ContinuesFromTheWatermark()
+        {
+            var now = new DateTime(2026, 11, 22, 12, 0, 0, DateTimeKind.Utc);
+            var (stream, watermarks) = BuildIdle(() => now);
+
+            stream.Emit(new Ev("a", T0.AddSeconds(60), 1));
+            watermarks.CheckIdle();
+            now = now.AddSeconds(30);
+            watermarks.CheckIdle();                            // W = 75
+
+            stream.Stop();
+            now = now.AddHours(1);
+            stream.Start();
+            now = now.AddSeconds(15);
+            watermarks.CheckIdle();                            // idle 5 s after the restart
+            Assert.Equal(T0.AddSeconds(80), watermarks.CurrentWatermark);
+            stream.Stop();
+        }
+
+        /// <summary>Subscriber that blocks inside OnWatermark until released.</summary>
+        private sealed class BlockingSubscriber : IOperator, IHasNextOperators, IWatermarkAware
+        {
+            private IOperator _nextOperator;
+            public ManualResetEventSlim Entered { get; } = new ManualResetEventSlim();
+            public ManualResetEventSlim Release { get; } = new ManualResetEventSlim();
+
+            public void Process(object input) => _nextOperator?.Process(input);
+            public void SetNext(IOperator nextOperator) => _nextOperator = nextOperator;
+            public IEnumerable<IOperator> GetNextOperators() { if (_nextOperator != null) yield return _nextOperator; }
+            public void EnableEventTime(EventTimeContext context) { }
+
+            public void OnWatermark(DateTime watermark)
+            {
+                Entered.Set();
+                Release.Wait(TimeSpan.FromSeconds(10));
+            }
+        }
+
+        [Fact]
+        public void Stop_DoesNotWaitForAWatermarkNotificationInProgress()
+        {
+            var blocking = new BlockingSubscriber();
+            var strategy = WatermarkStrategy.ForMonotonousTimestamps()
+                .WithStateStore(new Cortex.States.InMemoryStateStore<string, long>("wm"));
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("StopDuringNotify")
+                .Stream()
+                .WithWatermarks(e => e.Time, strategy)
+                .SetNext(blocking)
+                .Sink(_ => { })
+                .Build();
+            stream.Start();
+
+            var emitting = Task.Run(() => stream.Emit(new Ev("a", T0.AddSeconds(1), 1)));
+            Assert.True(blocking.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+            try
+            {
+                // A sink or another thread stopping the stream must not wait for the subscriber
+                Assert.True(Task.Run(() => stream.Stop()).Wait(TimeSpan.FromSeconds(2)));
+            }
+            finally
+            {
+                blocking.Release.Set();
+                emitting.Wait(TimeSpan.FromSeconds(5));
+            }
+        }
+
+        /// <summary>Subscriber whose OnWatermark throws the first time.</summary>
+        private sealed class ThrowingOnce : IOperator, IHasNextOperators, IWatermarkAware
+        {
+            private IOperator _nextOperator;
+            private bool _thrown;
+
+            public void Process(object input) => _nextOperator?.Process(input);
+            public void SetNext(IOperator nextOperator) => _nextOperator = nextOperator;
+            public IEnumerable<IOperator> GetNextOperators() { if (_nextOperator != null) yield return _nextOperator; }
+            public void EnableEventTime(EventTimeContext context) { }
+
+            public void OnWatermark(DateTime watermark)
+            {
+                if (_thrown) return;
+                _thrown = true;
+                throw new InvalidOperationException("subscriber failure");
+            }
+        }
+
+        [Fact]
+        public void ThrowingSubscriber_DoesNotKeepTheWatermarkFromLaterSubscribers()
+        {
+            var later = new Probe("later", new List<string>());
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("ThrowingSubscriber")
+                .Stream()
+                .WithWatermarks(e => e.Time, WatermarkStrategy.ForMonotonousTimestamps())
+                .SetNext(new ThrowingOnce())
+                .SetNext(later)
+                .Sink(_ => { })
+                .Build();
+            stream.Start();
+
+            var thrown = Assert.Throws<InvalidOperationException>(() => stream.Emit(new Ev("a", T0.AddSeconds(3), 1)));
+
+            Assert.Equal("subscriber failure", thrown.Message);
+            Assert.Equal(new[] { T0.AddSeconds(3) }, later.Watermarks);
         }
 
         [Fact]

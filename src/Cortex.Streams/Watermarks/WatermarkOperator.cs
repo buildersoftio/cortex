@@ -6,6 +6,7 @@ using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 
 namespace Cortex.Streams.Watermarks
@@ -57,18 +58,23 @@ namespace Cortex.Streams.Watermarks
         private bool _notifying;
         private long _notifyingFromTicks;
 
+        // The last watermark no subscriber needed, so it was not sent; subscribers have effectively seen it
+        private long _passedTicks;
+
         // Idle detection: events bump _eventCount without a lock (a lost increment still changes it); the idle check
         // notes, under _idleLock, when it last saw the count change
         private readonly object _idleLock = new object();
         private long _eventCount;
         private long _seenEventCount;
         private long _lastEventAtTicks;
+        private long _idleAnchorTicks;
         private Timer _idleTimer;
         private bool _paused;
         private bool _disposed;
         private Action _stopStream;
 
-        // Persistence, guarded by _notifyLock
+        // Persistence, guarded by _saveLock; never held while user code runs, so a stop from a sink cannot deadlock
+        private readonly object _saveLock = new object();
         private readonly IDataStore<string, long> _stateStore;
         private long _savedWatermarkTicks;
         private long _lastSaveAtTicks;
@@ -170,6 +176,7 @@ namespace Cortex.Streams.Watermarks
                 return;
 
             long idleFor;
+            long anchor;
             lock (_idleLock)
             {
                 var now = _clock().Ticks;
@@ -177,17 +184,19 @@ namespace Cortex.Streams.Watermarks
                 if (count != _seenEventCount || _lastEventAtTicks == 0)
                 {
                     _seenEventCount = count;
-                    _lastEventAtTicks = now;
+                    MarkActive(now);
                     return;
                 }
 
                 idleFor = now - _lastEventAtTicks - _idleTimeoutTicks;
+                anchor = _idleAnchorTicks;
             }
 
             if (idleFor <= 0)
                 return;
 
-            var candidate = maxTimestamp - _delayTicks + idleFor;
+            // From the watermark at the last activity, not from the newest event: an earlier idle advance stays
+            var candidate = anchor + idleFor;
             if (candidate > DateTime.MaxValue.Ticks)
                 candidate = DateTime.MaxValue.Ticks;
 
@@ -202,6 +211,13 @@ namespace Cortex.Streams.Watermarks
                 }
                 current = observed;
             }
+        }
+
+        // Called under _idleLock: idleness is measured from now, starting at the current watermark
+        private void MarkActive(long nowTicks)
+        {
+            _lastEventAtTicks = nowTicks;
+            _idleAnchorTicks = ComputeWatermarkTicks();
         }
 
         private void Observe(long timestampTicks)
@@ -232,16 +248,26 @@ namespace Cortex.Streams.Watermarks
         {
             // Skip the lock when no subscriber has anything due and nothing is saved: the common in-order case.
             // Subscribers that skip a watermark read the current one from their context when they need it.
-            if (_stateStore == null && !AnySubscriberDue(ComputeWatermarkTicks()))
-                return;
+            if (_stateStore == null)
+            {
+                var current = ComputeWatermarkTicks();
+                if (!AnySubscriberDue(current))
+                {
+                    if (current > Volatile.Read(ref _passedTicks))
+                        Volatile.Write(ref _passedTicks, current);
+                    return;
+                }
+            }
 
+            ExceptionDispatchInfo failure = null;
             lock (_notifyLock)
             {
                 var watermarkTicks = ComputeWatermarkTicks();
                 if (watermarkTicks <= _notifiedTicks)
                     return;
 
-                Volatile.Write(ref _notifyingFromTicks, _notifiedTicks);
+                // Items an upstream window emits during the loop are judged by the watermark before this advance
+                Volatile.Write(ref _notifyingFromTicks, Math.Max(_notifiedTicks, Volatile.Read(ref _passedTicks)));
                 Volatile.Write(ref _notifying, true);
                 _notifiedTicks = watermarkTicks;
                 try
@@ -249,24 +275,41 @@ namespace Cortex.Streams.Watermarks
                     var watermark = new DateTime(watermarkTicks, DateTimeKind.Utc);
                     foreach (var subscriber in Volatile.Read(ref _subscribers))
                     {
-                        subscriber.OnWatermark(watermark);
+                        // A failing subscriber must not keep the watermark from the ones after it
+                        try
+                        {
+                            subscriber.OnWatermark(watermark);
+                        }
+                        catch (Exception ex) when (failure == null)
+                        {
+                            failure = ExceptionDispatchInfo.Capture(ex);
+                        }
                     }
                 }
                 finally
                 {
                     Volatile.Write(ref _notifying, false);
                 }
-
-                Save(force: false);
             }
+
+            Save(force: false);
+            failure?.Throw();
         }
 
-        // Called under _notifyLock: writes the watermark when it changed, at most once per second unless forced
+        // Writes the watermark when it changed, at most once per second unless forced
         private void Save(bool force)
         {
             if (_stateStore == null)
                 return;
 
+            lock (_saveLock)
+            {
+                SaveLocked(force);
+            }
+        }
+
+        private void SaveLocked(bool force)
+        {
             var watermarkTicks = ComputeWatermarkTicks();
             if (watermarkTicks == _savedWatermarkTicks)
                 return;
@@ -283,10 +326,7 @@ namespace Cortex.Streams.Watermarks
 
         private void Flush()
         {
-            lock (_notifyLock)
-            {
-                Save(force: true);
-            }
+            Save(force: true);
         }
 
         public IEnumerable<IDataStore> GetStateStores()
@@ -387,19 +427,28 @@ namespace Cortex.Streams.Watermarks
         {
             lock (_timerLock)
             {
-                if (!_paused || _disposed)
+                if (_disposed)
                     return;
 
-                _paused = false;
-
-                // Time spent stopped is not idle time
-                lock (_idleLock)
+                if (_paused)
                 {
-                    _lastEventAtTicks = _clock().Ticks;
-                }
+                    _paused = false;
 
-                var period = IdleCheckPeriod();
-                _idleTimer?.Change(period, period);
+                    // Time spent stopped is not idle time
+                    lock (_idleLock)
+                    {
+                        MarkActive(_clock().Ticks);
+                    }
+
+                    var period = IdleCheckPeriod();
+                    _idleTimer?.Change(period, period);
+                }
+            }
+
+            // A restored watermark can go idle before the first event of this run
+            if (_idleTimeoutTicks != 0 && Volatile.Read(ref _maxTimestampTicks) != NoTimestamp)
+            {
+                EnsureIdleTimer();
             }
         }
 

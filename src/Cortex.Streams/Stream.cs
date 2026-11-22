@@ -207,7 +207,8 @@ namespace Cortex.Streams
         /// Switches the event-time operators of a branch that is about to be added at <paramref name="attachPoint"/>,
         /// so its first item is already handled in event time. The branch is wired to the watermark after it is added.
         /// </summary>
-        private void PrepareBranchForEventTime(IOperator attachPoint, IOperator branchRoot)
+        /// <returns>The watermark operator the branch follows, or null when it runs in processing time.</returns>
+        private IWatermarkGenerator PrepareBranchForEventTime(IOperator attachPoint, IOperator branchRoot)
         {
             lock (_eventTimeLock)
             {
@@ -219,12 +220,29 @@ namespace Cortex.Streams
                 var generator = _watermarkGenerators
                     .FirstOrDefault(g => CollectOperators((IOperator)g).Contains(attachPoint));
                 if (generator == null)
-                    return;
+                    return null;
 
                 foreach (var aware in branchOperators.OfType<IWatermarkAware>())
                 {
                     EnableEventTime(aware, generator);
                 }
+                return generator;
+            }
+        }
+
+        /// <summary>
+        /// Sends the current watermark to a branch that was just subscribed: the watermark may have advanced between
+        /// the branch being published and being subscribed, and that notification went to the old subscriber list.
+        /// </summary>
+        private static void CatchUpBranch(IWatermarkGenerator generator, IOperator branchRoot)
+        {
+            var current = generator.CurrentWatermark;
+            if (current == DateTime.MinValue)
+                return;
+
+            foreach (var aware in CollectOperators(branchRoot).OfType<IWatermarkAware>())
+            {
+                aware.OnWatermark(current);
             }
         }
 
@@ -572,7 +590,7 @@ namespace Cortex.Streams
 
             // Configure the whole branch before any item can reach it
             InitializeOperators(branchOperator);
-            PrepareBranchForEventTime(fork, branchOperator);
+            var generator = PrepareBranchForEventTime(fork, branchOperator);
 
             lock (_branchMutationLock)
             {
@@ -581,6 +599,11 @@ namespace Cortex.Streams
             }
 
             WireWatermarks();
+
+            if (generator != null)
+            {
+                CatchUpBranch(generator, branchOperator);
+            }
         }
 
         /// <inheritdoc />

@@ -180,6 +180,31 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void ChainedWindows_UpstreamResultIsJudgedByTheWatermarkBeforeTheAdvance()
+        {
+            var late = new List<LateEvent>();
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("ChainedLate")
+                .Stream()
+                .WithWatermarks(e => e.Time, WatermarkStrategy.ForMonotonousTimestamps().OnLateEvent(late.Add))
+                .TumblingWindow(e => e.Key, e => e.Time, TimeSpan.FromSeconds(10))
+                .Map(r => new Ev("all", r.WindowStart, r.Items.Count))
+                .TumblingWindow(e => e.Key, e => e.Time, TimeSpan.FromSeconds(5))
+                .Sink(results.Add)
+                .Build();
+            stream.Start();
+
+            stream.Emit(At(1, 1));
+            stream.Emit(At(9, 2));    // W = 9, nothing due: not sent
+            stream.Emit(At(12, 3));   // [0,10) fires; its result at 0 belongs to [0,5), which ended before W = 9
+
+            Assert.Empty(results);
+            Assert.Equal(T0, Assert.Single(late).Timestamp);
+            Assert.Equal(T0.AddSeconds(9), late[0].Watermark);
+        }
+
+        [Fact]
         public void RuntimeBranch_RunsInEventTime_AndStopsAfterRemoval()
         {
             var results = new List<WindowResult<string, Ev>>();
