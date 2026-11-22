@@ -78,6 +78,22 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void Tumbling_LateEventIsDetected_EvenWhenNoWatermarkWasSentToTheWindow()
+        {
+            var late = new List<LateEvent>();
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = Tumbling(WatermarkStrategy.ForMonotonousTimestamps().OnLateEvent(late.Add), results);
+
+            stream.Emit(At(100, 1));          // window [100,110): nothing is due until W = 110
+            stream.Emit(At(108, 2));          // W = 108 is not sent to the window
+            stream.Emit(At(5, 3, "b"));       // [0,10) ended long before 108: late
+
+            Assert.Equal(3, ((Ev)Assert.Single(late).Item).Value);
+            Assert.Equal(T0.AddSeconds(108), late[0].Watermark);
+            Assert.Empty(results);
+        }
+
+        [Fact]
         public void Tumbling_AllowedLateness_RefiresWithAllItems_ThenExpires()
         {
             var late = new List<LateEvent>();

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		Overhead check for event-time watermarks (issue #197): runs the same in-order stream with and without
+		WithWatermarks and exits non-zero when the watermark adds 5% or more. Not part of Cortex.sln; run it with
+		dotnet run -c Release on an otherwise idle machine.
+	-->
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>false</IsPackable>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<TieredPGO>true</TieredPGO>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Cortex.Streams\Cortex.Streams.csproj" />
+	</ItemGroup>
+
+</Project>

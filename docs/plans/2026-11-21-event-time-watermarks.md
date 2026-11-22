@@ -41,7 +41,7 @@ A coordinated checkpoint/restore of window and join buffers (no framework exists
 - `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release` → exit 0, `0 Error(s)` on all five targets
 - `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~Watermark|FullyQualifiedName~EventTime"` → exit 0, `Failed: 0`
 - `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → exit 0, `Failed: 0`
-- `dotnet run -c Release --project tools/Cortex.Streams.WatermarkBench` → exit 0, prints the overhead below 5%
+- `dotnet run -c Release --project tools/Cortex.Streams.WatermarkBench` → exit 0, windowed-pipeline overhead below 10% (user ruling 2026-11-22; the trivial-pipeline number is printed for information)
 - `git diff --stat v3.2/release...HEAD -- src/Cortex.Tests` → only new files, plus the timestamp-only fixes in `TumblingWindowOperatorTests.cs` and `AdvancedWindowingTests.cs` (existing assertions unchanged = backward compatible)
 - End to end: `EventTimeEndToEndTests` builds Source → WithWatermarks → Map → TumblingWindow → Sink with shuffled events inside the bound, one late event and an idle tail, and asserts exact window contents, one `LateEvent`, and that the last window closes through idleness.
 
@@ -131,13 +131,13 @@ Expected: exit 0, `Failed: 0`
 Commit: feat(streams): persist watermarks in a state store
 
 ### Task 8: End-to-end test and overhead bench
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Tests/Streams/Tests/EventTimeEndToEndTests.cs` (create), `tools/Cortex.Streams.WatermarkBench/Cortex.Streams.WatermarkBench.csproj` (create), `tools/Cortex.Streams.WatermarkBench/Program.cs` (create)
 Depends on: Tasks 2-7
-- [ ] Write the end-to-end test from Verification.
-- [ ] Bench: 2M in-order items through Map → Filter → Sink with and without `WithWatermarks`, warm-up, median of 7 runs each; print both medians and the overhead; exit 1 if overhead ≥ 5%. Also print (not gate) a TumblingWindow processing-time vs event-time comparison.
+- [x] Write the end-to-end test from Verification.
+- [x] Bench (revised by user ruling 2026-11-22): 2M in-order items through a never-closing TumblingWindow in processing time vs event time, warm-up, median of 9 alternating runs; exit 1 if overhead ≥ 10%. Map → Filter → Sink with and without `WithWatermarks` (and with an idle timeout) printed for information.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~EventTimeEndToEndTests" && dotnet run -c Release --project tools/Cortex.Streams.WatermarkBench`
-Expected: exit 0, `Failed: 0`, bench prints overhead < 5%
+Expected: exit 0, `Failed: 0`, bench prints PASS (windowed overhead < 10%)
 Commit: test(streams): add event-time end-to-end test and watermark bench
 
 ### Task 9: Document event time and watermarks
@@ -186,6 +186,12 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Task 7: red — `dotnet test ... --filter "FullyQualifiedName~WatermarkPersistenceTests"` → CS0117 'WatermarkStrategy' does not contain 'WatermarkStateKey' / 'MaxTimestampStateKey'
 - 2026-11-21 Ruling: saved under fixed keys `watermark` and `max-timestamp` (public constants on `WatermarkStrategy`), one store per `WithWatermarks`; the "nothing written without a store" case has no test (nothing to observe) — keeps the store contract simple — cost if wrong: sharing one store across streams overwrites each other's watermark (documented on `StateStore`).
 - 2026-11-21 Task 7: complete — `dotnet test ... --filter "FullyQualifiedName~WatermarkPersistenceTests|FullyQualifiedName~WatermarkTests"` → Passed! - Failed: 0, Passed: 16
+- 2026-11-22 Task 8: bench first run FAIL — Map → Filter → Sink +43.9% (16.6 ns/item): two compare-and-swaps and a lock per in-order item, plus a clock read per item with an idle timeout (+118%).
+- 2026-11-22 Ruling: hot-path rework in `WatermarkOperator` — the watermark is now `max(maxTs - delay, floor)` (one compare-and-swap per newer timestamp), notifications are skipped while no built-in window has a deadline due (new internal `IWatermarkDeadline`; windows read the stream's watermark from `EventTimeContext.CurrentWatermark` for late checks, which reports the previous value while a notification is running), and idle detection counts events and notes the activity time at the next idle check (at most a quarter of the timeout, max 1 s, late) — to meet the overhead criterion — cost if wrong: idle advance starts up to one check period later; `WatermarkTests` idle test needed one extra `CheckIdle()` call after the first emit.
+- 2026-11-22 Task 8: new regression test `Tumbling_LateEventIsDetected_EvenWhenNoWatermarkWasSentToTheWindow` failed with the window's own watermark only, passes with the context watermark.
+- 2026-11-22 Task 8: after the rework Map → Filter → Sink +27.4% to +31.6% (~10-12 ns/item, the cost of any extra pipeline stage against ~40 ns/item); windowed pipeline +6.6% and +9.0%; with an idle timeout same as without. User chose (info.request "Perf gate"): gate on the windowed pipeline at 10%, print the trivial-pipeline number, and say in the PR that the issue's 5% is not met on a trivial pipeline.
+- 2026-11-22 Task 8: the end-to-end test passed on its first run (it exercises Tasks 1-7, which already existed); its idle tail now advances the test clock while waiting, since idle activity is noted at the next check.
+- 2026-11-22 Task 8: complete — verified by the commit gate below (watermark and event-time tests, end-to-end test, bench PASS)
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.

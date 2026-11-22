@@ -241,6 +241,7 @@ namespace Cortex.Tests.Streams.Tests
             stream.Start();
 
             stream.Emit(new Ev("a", T0.AddSeconds(60), 1));   // watermark 55
+            watermarks.CheckIdle();                            // a check notes the activity (the timer does this)
             now = now.AddSeconds(10);
             watermarks.CheckIdle();                            // idle timeout just reached: no change
             Assert.Equal(T0.AddSeconds(55), watermarks.CurrentWatermark);

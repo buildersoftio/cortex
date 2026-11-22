@@ -24,7 +24,7 @@ namespace Cortex.Streams.Operators.Windows
     /// </remarks>
     /// <typeparam name="TInput">The type of the input items.</typeparam>
     /// <typeparam name="TKey">The type of the key used to partition sessions.</typeparam>
-    public class SessionWindowOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled, IWatermarkAware, IDisposable
+    public class SessionWindowOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled, IWatermarkAware, IWatermarkDeadline, IDisposable
     {
         private static readonly string OperatorName = $"SessionWindowOperator<{typeof(TInput).Name}>";
 
@@ -209,7 +209,8 @@ namespace Cortex.Streams.Operators.Windows
 
             lock (_lock)
             {
-                watermarkTicks = _watermarkTicks;
+                // Watermarks no session needed were not sent, so the stream's own may be ahead of ours
+                watermarkTicks = Math.Max(_watermarkTicks, _eventTime.CurrentWatermarkTicks);
                 late = timestamp.Ticks + _inactivityGap.Ticks + _latenessTicks < watermarkTicks;
 
                 if (!late)
@@ -313,6 +314,8 @@ namespace Cortex.Streams.Operators.Windows
                 }
             }
         }
+
+        long IWatermarkDeadline.NextWatermarkDeadlineTicks => Volatile.Read(ref _nextDeadlineTicks);
 
         /// <inheritdoc />
         public void OnWatermark(DateTime watermark)

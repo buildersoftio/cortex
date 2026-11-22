@@ -21,4 +21,15 @@ namespace Cortex.Streams.Watermarks
         /// <summary>Tells the operator the watermark advanced to <paramref name="watermark"/>.</summary>
         void OnWatermark(DateTime watermark);
     }
+
+    /// <summary>
+    /// Implemented by built-in event-time operators that only need a watermark once it reaches a deadline
+    /// (their earliest window end). When every operator downstream of a watermark operator reports one, watermarks
+    /// below all deadlines are not sent; such operators read <see cref="EventTimeContext.CurrentWatermark"/> instead.
+    /// </summary>
+    internal interface IWatermarkDeadline
+    {
+        /// <summary>The smallest watermark (UTC ticks) the operator must be told about; <see cref="long.MaxValue"/> when none.</summary>
+        long NextWatermarkDeadlineTicks { get; }
+    }
 }

@@ -11,11 +11,26 @@ namespace Cortex.Streams.Watermarks
     public sealed class EventTimeContext
     {
         private long _lateEventCount;
+        private readonly Func<long> _currentWatermarkTicks;
 
         public EventTimeContext(WatermarkStrategy strategy)
+            : this(strategy, () => DateTime.MinValue.Ticks)
+        {
+        }
+
+        internal EventTimeContext(WatermarkStrategy strategy, Func<long> currentWatermarkTicks)
         {
             Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
+            _currentWatermarkTicks = currentWatermarkTicks ?? throw new ArgumentNullException(nameof(currentWatermarkTicks));
         }
+
+        /// <summary>
+        /// The stream's current watermark. It can be ahead of the last <see cref="IWatermarkAware.OnWatermark"/> call,
+        /// because watermarks that no window needs are not sent.
+        /// </summary>
+        public DateTime CurrentWatermark => new DateTime(CurrentWatermarkTicks, DateTimeKind.Utc);
+
+        internal long CurrentWatermarkTicks => _currentWatermarkTicks();
 
         /// <summary>The stream's watermark strategy.</summary>
         public WatermarkStrategy Strategy { get; }

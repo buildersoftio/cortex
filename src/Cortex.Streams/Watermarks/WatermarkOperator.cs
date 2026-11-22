@@ -46,9 +46,22 @@ namespace Cortex.Streams.Watermarks
 
         private IOperator _nextOperator;
         private IWatermarkAware[] _subscribers = NoSubscribers;
+        private IWatermarkDeadline[] _deadlines = new IWatermarkDeadline[0];
+        // The watermark is max(_maxTimestampTicks - delay, _floorTicks); the floor holds idle advances and restored values
         private long _maxTimestampTicks = NoTimestamp;
-        private long _watermarkTicks;
+        private long _floorTicks;
         private long _notifiedTicks;
+
+        // While subscribers are being notified, the context reports the previous watermark, so items an upstream window
+        // emits during the notification are judged by the watermark the downstream operator has actually seen
+        private bool _notifying;
+        private long _notifyingFromTicks;
+
+        // Idle detection: events bump _eventCount without a lock (a lost increment still changes it); the idle check
+        // notes, under _idleLock, when it last saw the count change
+        private readonly object _idleLock = new object();
+        private long _eventCount;
+        private long _seenEventCount;
         private long _lastEventAtTicks;
         private Timer _idleTimer;
         private bool _paused;
@@ -69,7 +82,7 @@ namespace Cortex.Streams.Watermarks
         {
             _timestampSelector = timestampSelector ?? throw new ArgumentNullException(nameof(timestampSelector));
             Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-            Context = new EventTimeContext(strategy);
+            Context = new EventTimeContext(strategy, ContextWatermarkTicks);
 
             _delayTicks = strategy.MaxOutOfOrderness.Ticks;
             _idleTimeoutTicks = strategy.IdleTimeout?.Ticks ?? 0;
@@ -92,9 +105,9 @@ namespace Cortex.Streams.Watermarks
 
             if (_stateStore.ContainsKey(WatermarkStrategy.WatermarkStateKey))
             {
-                _watermarkTicks = _stateStore.Get(WatermarkStrategy.WatermarkStateKey);
-                _notifiedTicks = _watermarkTicks;
-                _savedWatermarkTicks = _watermarkTicks;
+                _floorTicks = _stateStore.Get(WatermarkStrategy.WatermarkStateKey);
+                _notifiedTicks = _floorTicks;
+                _savedWatermarkTicks = _floorTicks;
             }
         }
 
@@ -105,7 +118,19 @@ namespace Cortex.Streams.Watermarks
         public EventTimeContext Context { get; }
 
         /// <summary>The current watermark; <see cref="DateTime.MinValue"/> before the first event.</summary>
-        public DateTime CurrentWatermark => new DateTime(Volatile.Read(ref _watermarkTicks), DateTimeKind.Utc);
+        public DateTime CurrentWatermark => new DateTime(ComputeWatermarkTicks(), DateTimeKind.Utc);
+
+        private long ContextWatermarkTicks()
+        {
+            return Volatile.Read(ref _notifying) ? Volatile.Read(ref _notifyingFromTicks) : ComputeWatermarkTicks();
+        }
+
+        private long ComputeWatermarkTicks()
+        {
+            var maxTimestamp = Volatile.Read(ref _maxTimestampTicks);
+            var fromEvents = maxTimestamp == NoTimestamp ? 0 : Math.Max(maxTimestamp - _delayTicks, 0);
+            return Math.Max(fromEvents, Volatile.Read(ref _floorTicks));
+        }
 
         /// <summary>The number of events dropped as late by the operators downstream.</summary>
         public long LateEventCount => Context.LateEventCount;
@@ -130,55 +155,69 @@ namespace Cortex.Streams.Watermarks
         /// Advances the watermark if the source has been idle longer than <see cref="WatermarkStrategy.IdleTimeout"/>:
         /// from then on it moves at wall-clock speed from where it stopped. Called by the idle timer; callable directly.
         /// </summary>
+        /// <remarks>
+        /// Events are only counted on the hot path; a check that sees the count changed records that moment as the
+        /// last activity. Idleness is therefore measured from the first check after the last event, which with the
+        /// idle timer is at most a quarter of the idle timeout (and at most one second) late.
+        /// </remarks>
         public void CheckIdle()
         {
             if (_idleTimeoutTicks == 0)
                 return;
 
             var maxTimestamp = Volatile.Read(ref _maxTimestampTicks);
-            var lastEventAt = Volatile.Read(ref _lastEventAtTicks);
-
-            // Idle only counts after an event of this run
-            if (maxTimestamp == NoTimestamp || lastEventAt == 0)
+            if (maxTimestamp == NoTimestamp)
                 return;
 
-            var idleFor = _clock().Ticks - lastEventAt - _idleTimeoutTicks;
+            long idleFor;
+            lock (_idleLock)
+            {
+                var now = _clock().Ticks;
+                var count = Volatile.Read(ref _eventCount);
+                if (count != _seenEventCount || _lastEventAtTicks == 0)
+                {
+                    _seenEventCount = count;
+                    _lastEventAtTicks = now;
+                    return;
+                }
+
+                idleFor = now - _lastEventAtTicks - _idleTimeoutTicks;
+            }
+
             if (idleFor <= 0)
                 return;
 
-            AdvanceTo(maxTimestamp - _delayTicks + idleFor);
-        }
+            var candidate = maxTimestamp - _delayTicks + idleFor;
+            if (candidate > DateTime.MaxValue.Ticks)
+                candidate = DateTime.MaxValue.Ticks;
 
-        private void Observe(long timestampTicks)
-        {
-            if (_idleTimeoutTicks != 0)
+            var current = Volatile.Read(ref _floorTicks);
+            while (candidate > current)
             {
-                Volatile.Write(ref _lastEventAtTicks, _clock().Ticks);
-                EnsureIdleTimer();
-            }
-
-            var current = Volatile.Read(ref _maxTimestampTicks);
-            while (timestampTicks > current)
-            {
-                var observed = Interlocked.CompareExchange(ref _maxTimestampTicks, timestampTicks, current);
+                var observed = Interlocked.CompareExchange(ref _floorTicks, candidate, current);
                 if (observed == current)
                 {
-                    AdvanceTo(timestampTicks - _delayTicks);
+                    Notify();
                     return;
                 }
                 current = observed;
             }
         }
 
-        private void AdvanceTo(long candidateTicks)
+        private void Observe(long timestampTicks)
         {
-            if (candidateTicks > DateTime.MaxValue.Ticks)
-                candidateTicks = DateTime.MaxValue.Ticks;
-
-            var current = Volatile.Read(ref _watermarkTicks);
-            while (candidateTicks > current)
+            if (_idleTimeoutTicks != 0)
             {
-                var observed = Interlocked.CompareExchange(ref _watermarkTicks, candidateTicks, current);
+                _eventCount++;
+                if (_idleTimer == null)
+                    EnsureIdleTimer();
+            }
+
+            // One compare-and-swap per newer timestamp; older timestamps cost a read
+            var current = Volatile.Read(ref _maxTimestampTicks);
+            while (timestampTicks > current)
+            {
+                var observed = Interlocked.CompareExchange(ref _maxTimestampTicks, timestampTicks, current);
                 if (observed == current)
                 {
                     Notify();
@@ -191,17 +230,31 @@ namespace Cortex.Streams.Watermarks
         // One notification at a time, in increasing order; a slower thread that lost the race sends nothing
         private void Notify()
         {
+            // Skip the lock when no subscriber has anything due and nothing is saved: the common in-order case.
+            // Subscribers that skip a watermark read the current one from their context when they need it.
+            if (_stateStore == null && !AnySubscriberDue(ComputeWatermarkTicks()))
+                return;
+
             lock (_notifyLock)
             {
-                var watermarkTicks = Volatile.Read(ref _watermarkTicks);
+                var watermarkTicks = ComputeWatermarkTicks();
                 if (watermarkTicks <= _notifiedTicks)
                     return;
 
+                Volatile.Write(ref _notifyingFromTicks, _notifiedTicks);
+                Volatile.Write(ref _notifying, true);
                 _notifiedTicks = watermarkTicks;
-                var watermark = new DateTime(watermarkTicks, DateTimeKind.Utc);
-                foreach (var subscriber in Volatile.Read(ref _subscribers))
+                try
                 {
-                    subscriber.OnWatermark(watermark);
+                    var watermark = new DateTime(watermarkTicks, DateTimeKind.Utc);
+                    foreach (var subscriber in Volatile.Read(ref _subscribers))
+                    {
+                        subscriber.OnWatermark(watermark);
+                    }
+                }
+                finally
+                {
+                    Volatile.Write(ref _notifying, false);
                 }
 
                 Save(force: false);
@@ -214,7 +267,7 @@ namespace Cortex.Streams.Watermarks
             if (_stateStore == null)
                 return;
 
-            var watermarkTicks = Volatile.Read(ref _watermarkTicks);
+            var watermarkTicks = ComputeWatermarkTicks();
             if (watermarkTicks == _savedWatermarkTicks)
                 return;
 
@@ -282,9 +335,41 @@ namespace Cortex.Streams.Watermarks
             }
         }
 
+        private bool AnySubscriberDue(long watermarkTicks)
+        {
+            var deadlines = Volatile.Read(ref _deadlines);
+            if (deadlines == null)
+                return true;
+
+            foreach (var deadline in deadlines)
+            {
+                if (deadline.NextWatermarkDeadlineTicks <= watermarkTicks)
+                    return true;
+            }
+            return false;
+        }
+
         void IWatermarkGenerator.SetSubscribers(IWatermarkAware[] subscribers)
         {
-            Volatile.Write(ref _subscribers, subscribers ?? NoSubscribers);
+            subscribers = subscribers ?? NoSubscribers;
+
+            // Deadlines can be skipped only when every subscriber reports one
+            var deadlines = new IWatermarkDeadline[subscribers.Length];
+            for (var i = 0; i < subscribers.Length; i++)
+            {
+                if (!(subscribers[i] is IWatermarkDeadline deadline))
+                {
+                    deadlines = null;
+                    break;
+                }
+                deadlines[i] = deadline;
+            }
+
+            lock (_notifyLock)
+            {
+                Volatile.Write(ref _subscribers, subscribers);
+                Volatile.Write(ref _deadlines, deadlines);
+            }
         }
 
         void IWatermarkGenerator.Pause()
@@ -308,7 +393,10 @@ namespace Cortex.Streams.Watermarks
                 _paused = false;
 
                 // Time spent stopped is not idle time
-                Volatile.Write(ref _lastEventAtTicks, _clock().Ticks);
+                lock (_idleLock)
+                {
+                    _lastEventAtTicks = _clock().Ticks;
+                }
 
                 var period = IdleCheckPeriod();
                 _idleTimer?.Change(period, period);
