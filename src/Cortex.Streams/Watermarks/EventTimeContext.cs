@@ -68,5 +68,23 @@ namespace Cortex.Streams.Watermarks
         {
             Interlocked.Increment(ref _lateEventCount);
         }
+
+        /// <summary>
+        /// Counts a late event and runs an operator's own late-event callback (such as
+        /// <c>WindowConfiguration.OnLateEvent</c>) with the same guarantee as the strategy's handler: an exception is traced and ignored.
+        /// </summary>
+        internal void InvokeLateCallback(Action callback, string operatorName)
+        {
+            CountLateEvent();
+
+            try
+            {
+                callback();
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"{operatorName}: the late-event callback threw: {ex}");
+            }
+        }
     }
 }

@@ -51,7 +51,6 @@ namespace Cortex.Streams.Operators.Windows
         private EventTimeContext _eventTime;
         private long _latenessTicks;
         private long _watermarkTicks;
-        private long _nextSessionId;
         private readonly Dictionary<string, List<string>> _sessionsByKey = new Dictionary<string, List<string>>();
         private readonly HashSet<string> _firedSessions = new HashSet<string>();
 
@@ -246,8 +245,7 @@ namespace Cortex.Streams.Operators.Windows
             {
                 if (_config.OnLateEvent != null)
                 {
-                    _config.OnLateEvent(item, timestamp);
-                    _eventTime.CountLateEvent();
+                    _eventTime.InvokeLateCallback(() => _config.OnLateEvent(item, timestamp), OperatorName);
                 }
                 else
                 {
@@ -296,7 +294,8 @@ namespace Cortex.Streams.Operators.Windows
                     RemoveEventTimeSession(o.Key);
                 }
 
-                sessionKey = $"session_{key}_{++_nextSessionId}";
+                // A unique key: a durable store may still hold sessions of an earlier run
+                sessionKey = $"session_{key}_{Guid.NewGuid():N}";
                 var newKey = sessionKey;
                 var items = ordered.SelectMany(o => o.Session.Items).ToList();
                 items.Add(item);
@@ -416,7 +415,7 @@ namespace Cortex.Streams.Operators.Windows
                     .Select(sessionKey => (Key: sessionKey, Session: _stateStore.Get(sessionKey)))
                     .Where(s => s.Session != null)
                     .OrderBy(s => s.Session.LastActivityTime)
-                    .ThenBy(s => s.Key, StringComparer.Ordinal)
+                    .ThenBy(s => s.Session.Key, StringComparer.Ordinal)
                     .ToList();
 
                 foreach (var (sessionKey, session) in sessions)
@@ -432,7 +431,8 @@ namespace Cortex.Streams.Operators.Windows
                         continue;
                     }
 
-                    var triggerResult = _config.Trigger.OnProcessingTime(watermark, session.StartTime, windowEnd, session.TriggerContext);
+                    // An event at exactly last activity + gap still joins, so the trigger sees the end one tick later
+                    var triggerResult = _config.Trigger.OnProcessingTime(watermark, session.StartTime, windowEnd.AddTicks(1), session.TriggerContext);
                     if (triggerResult == TriggerResult.FireAndPurge || windowEnd.Ticks < _watermarkTicks)
                     {
                         EmitSession(sessionKey, session, isFinal: true);

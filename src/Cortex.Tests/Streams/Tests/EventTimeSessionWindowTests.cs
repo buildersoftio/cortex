@@ -118,6 +118,51 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void SessionsAlreadyInTheStore_AreNotOverwrittenByNewSessions()
+        {
+            // A durable store can hold sessions from an earlier run under the event-time key format
+            var store = new Cortex.States.InMemoryStateStore<string, SessionState<Ev>>("sessions");
+            store.Put("session_a_1", new SessionState<Ev>
+            {
+                Key = "a",
+                StartTime = T0,
+                LastActivityTime = T0,
+                Items = new List<Ev> { At(0, 1) }
+            });
+
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("RestoredSessions")
+                .Stream()
+                .WithWatermarks(e => e.Time, WatermarkStrategy.BoundedOutOfOrderness(TimeSpan.FromMinutes(5)))
+                .SessionWindow(e => e.Key, e => e.Time, TimeSpan.FromSeconds(10), stateStore: store)
+                .Sink(results.Add)
+                .Build();
+            stream.Start();
+
+            stream.Emit(At(50, 2));    // a second session for key a
+            stream.Emit(At(500, 3, "b"));
+
+            Assert.Equal(new[] { new[] { 1 }, new[] { 2 } }, results.Select(Values));
+        }
+
+        [Fact]
+        public void LateEventBridgingTwoFiredSessions_RefiresTheMergedSession()
+        {
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = Sessions(WatermarkStrategy.ForMonotonousTimestamps().WithAllowedLateness(TimeSpan.FromSeconds(30)), results);
+
+            stream.Emit(At(0, 1));
+            stream.Emit(At(18, 2));
+            stream.Emit(At(40, 3, "b"));   // W = 40: both sessions of a fired, kept until W > their end + 30
+            stream.Emit(At(9, 4));         // bridges them
+
+            Assert.Equal(new[] { new[] { 1 }, new[] { 2 }, new[] { 1, 2, 4 } }, results.Select(Values));
+            Assert.Equal(T0, results[2].WindowStart);
+            Assert.Equal(T0.AddSeconds(28), results[2].WindowEnd);
+        }
+
+        [Fact]
         public void AllowedLateness_RefiresTheMergedSession_ThenExpires()
         {
             var late = new List<LateEvent>();

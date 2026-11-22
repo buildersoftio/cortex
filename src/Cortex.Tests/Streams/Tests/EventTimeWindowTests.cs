@@ -114,6 +114,48 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void Tumbling_UnboundedAllowedLateness_DoesNotOverflow()
+        {
+            var late = new List<LateEvent>();
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = Tumbling(
+                WatermarkStrategy.ForMonotonousTimestamps().WithAllowedLateness(TimeSpan.MaxValue).OnLateEvent(late.Add),
+                results);
+
+            stream.Emit(At(1, 1));
+            stream.Emit(At(20, 2));   // [0,10) fires and is kept for ever
+            stream.Emit(At(5, 3));    // still accepted
+
+            Assert.Empty(late);
+            Assert.Equal(new[] { new[] { 1 }, new[] { 1, 3 } }, results.Select(Values));
+        }
+
+        [Fact]
+        public void Sliding_AllowedLateness_RefiresEachWindow_ThenExpires()
+        {
+            var late = new List<LateEvent>();
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("SlidingLateness")
+                .Stream()
+                .WithWatermarks(e => e.Time, WatermarkStrategy.ForMonotonousTimestamps()
+                    .WithAllowedLateness(TimeSpan.FromSeconds(5)).OnLateEvent(late.Add))
+                .SlidingWindow(e => e.Key, e => e.Time, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(5))
+                .Sink(results.Add)
+                .Build();
+            stream.Start();
+
+            stream.Emit(At(7, 1));     // [0,10) and [5,15)
+            stream.Emit(At(16, 2));    // W = 16: both fire; [0,10) kept until 15 is past, [5,15) until 20
+            stream.Emit(At(8, 3));     // [0,10) expired: reported; [5,15) refires with it
+
+            Assert.Equal(
+                new[] { (0, new[] { 1 }), (5, new[] { 1 }), (5, new[] { 1, 3 }) },
+                results.Select(r => ((int)(r.WindowStart - T0).TotalSeconds, Values(r))));
+            Assert.Equal(3, ((Ev)Assert.Single(late).Item).Value);
+        }
+
+        [Fact]
         public void Tumbling_WallClockTimerNoLongerClosesWindows()
         {
             var results = new List<WindowResult<string, Ev>>();

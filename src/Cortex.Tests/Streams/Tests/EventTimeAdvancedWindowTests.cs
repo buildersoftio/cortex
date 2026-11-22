@@ -121,6 +121,75 @@ namespace Cortex.Tests.Streams.Tests
             Assert.Equal(3, ((Ev)Assert.Single(late).Item).Value);
         }
 
+        [Fact]
+        public void Accumulating_KeepsItemsThroughTheAllowedLateness_SoACorrectionHasThemAll()
+        {
+            var results = new List<WindowResult<string, Ev>>();
+            var config = WindowConfiguration<Ev>.Create().Accumulating().WithAllowedLateness(TimeSpan.FromSeconds(10)).Build();
+            var stream = AdvancedTumbling(WatermarkStrategy.ForMonotonousTimestamps(), config, results);
+
+            stream.Emit(At(1, 1));
+            stream.Emit(At(12, 2));   // [0,10) fires on time with [1]
+            stream.Emit(At(4, 3));    // allowed late: the correction has [1, 3]
+
+            Assert.Equal(new[] { new[] { 1 }, new[] { 1, 3 } }, results.Select(Values));
+            Assert.Equal(WindowEmissionType.Late, results[1].EmissionType);
+        }
+
+        [Fact]
+        public void WindowWhoseTriggerNeverFires_IsRemovedAfterTheLateness()
+        {
+            var store = new Cortex.States.InMemoryStateStore<string, List<Ev>>("never-fires");
+            var config = WindowConfiguration<Ev>.Create()
+                .WithTrigger(new Cortex.Streams.Operators.Windows.Triggers.CustomTrigger<Ev>(
+                    onProcessingTime: (time, start, end, context) => Cortex.Streams.Operators.Windows.Triggers.TriggerResult.Continue))
+                .Build();
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("NeverFires")
+                .Stream()
+                .WithWatermarks(e => e.Time, WatermarkStrategy.ForMonotonousTimestamps())
+                .AdvancedTumblingWindow(e => e.Key, e => e.Time, TimeSpan.FromSeconds(10), config, stateStore: store)
+                .Sink(_ => { })
+                .Build();
+            stream.Start();
+
+            stream.Emit(At(1, 1));
+            stream.Emit(At(30, 2, "b"));   // W = 30: [0,10) of key a is past its lateness
+
+            Assert.DoesNotContain(store.GetKeys(), k => k.StartsWith("a_"));
+        }
+
+        [Fact]
+        public void ConfiguredLateCallbackThatThrows_IsIgnoredAndCounted()
+        {
+            var config = WindowConfiguration<Ev>.Create()
+                .OnLateEvent((e, _) => throw new InvalidOperationException("callback failure"))
+                .Build();
+            var stream = AdvancedTumbling(WatermarkStrategy.ForMonotonousTimestamps(), config, new List<WindowResult<string, Ev>>());
+
+            stream.Emit(At(1, 1));
+            stream.Emit(At(20, 2));
+            var exception = Record.Exception(() => stream.Emit(At(2, 3)));   // late
+
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public void AdvancedSession_DoesNotCloseAtExactlyLastPlusGap()
+        {
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = AdvancedSessions(WatermarkStrategy.ForMonotonousTimestamps(), new WindowConfiguration<Ev>(), results);
+
+            stream.Emit(At(0, 1));
+            stream.Emit(At(10, 2, "b"));   // W = 10 = 0 + gap: an event at 10 could still join
+            Assert.Empty(results);
+
+            stream.Emit(At(10, 3));        // joins the session of key a
+            stream.Emit(At(30, 4, "b"));
+
+            Assert.Equal(new[] { 1, 3 }, Values(results.Single(r => r.Key == "a")));
+        }
+
         private static IStream<Ev> AdvancedSessions(
             WatermarkStrategy strategy, WindowConfiguration<Ev> config, List<WindowResult<string, Ev>> results)
         {

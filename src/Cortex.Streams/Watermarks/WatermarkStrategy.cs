@@ -16,6 +16,9 @@ namespace Cortex.Streams.Watermarks
     /// </remarks>
     public sealed class WatermarkStrategy
     {
+        /// <summary>The longest allowed lateness: the whole <see cref="DateTime"/> range. Longer values are capped to it.</summary>
+        public static readonly TimeSpan MaxLateness = TimeSpan.FromTicks(DateTime.MaxValue.Ticks);
+
         private WatermarkStrategy(TimeSpan maxOutOfOrderness)
         {
             MaxOutOfOrderness = maxOutOfOrderness;
@@ -99,8 +102,9 @@ namespace Cortex.Streams.Watermarks
             if (allowedLateness < TimeSpan.Zero)
                 throw new ArgumentOutOfRangeException(nameof(allowedLateness), "The allowed lateness cannot be negative.");
 
+            // Longer than the whole DateTime range means "never": cap it so window end + lateness cannot overflow
             var copy = Clone();
-            copy.AllowedLateness = allowedLateness;
+            copy.AllowedLateness = allowedLateness > MaxLateness ? MaxLateness : allowedLateness;
             return copy;
         }
 

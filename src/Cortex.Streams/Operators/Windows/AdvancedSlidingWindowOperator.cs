@@ -64,6 +64,9 @@ namespace Cortex.Streams.Operators.Windows
             public int EmissionSequence { get; set; }
             public List<TInput> LastEmittedItems { get; set; }
             public bool HasFired { get; set; }
+
+            // Event time: the final result was emitted, and the window waits for allowed-late events until its cleanup
+            public bool FinalFired { get; set; }
         }
 
         /// <summary>
@@ -246,8 +249,7 @@ namespace Cortex.Streams.Operators.Windows
         {
             if (_config.OnLateEvent != null)
             {
-                _config.OnLateEvent(item, timestamp);
-                _eventTime.CountLateEvent();
+                _eventTime.InvokeLateCallback(() => _config.OnLateEvent(item, timestamp), OperatorName);
             }
             else
             {
@@ -264,7 +266,7 @@ namespace Cortex.Streams.Operators.Windows
             lock (_lock)
             {
                 var lateness = _config.AllowedLateness > TimeSpan.Zero ? _config.AllowedLateness : context.AllowedLateness;
-                _latenessTicks = lateness.Ticks;
+                _latenessTicks = Math.Min(lateness.Ticks, WatermarkStrategy.MaxLateness.Ticks);
                 _eventTime = context;
 
                 // Triggers run on the watermark from now on
@@ -344,18 +346,22 @@ namespace Cortex.Streams.Operators.Windows
                 var windowKey = kvp.Key;
                 var windowState = kvp.Value;
 
-                // Evaluate processing time trigger
-                var triggerResult = _config.Trigger.OnProcessingTime(now, windowState.WindowStart, windowState.WindowEnd, windowState.TriggerContext);
+                // A window kept after its final result only waits for allowed-late events and its cleanup
+                if (!windowState.FinalFired)
+                {
+                    // Evaluate processing time trigger
+                    var triggerResult = _config.Trigger.OnProcessingTime(now, windowState.WindowStart, windowState.WindowEnd, windowState.TriggerContext);
 
-                // Parse the key from the window key
-                var keyEndIndex = windowKey.LastIndexOf('_');
-                var keyString = windowKey.Substring(0, keyEndIndex);
+                    // Parse the key from the window key
+                    var keyEndIndex = windowKey.LastIndexOf('_');
+                    var keyString = windowKey.Substring(0, keyEndIndex);
 
-                var isOnTime = now >= windowState.WindowEnd;
-                HandleTriggerResult(triggerResult, windowKey, windowState, keyString, isOnTime);
+                    var isOnTime = now >= windowState.WindowEnd;
+                    HandleTriggerResult(triggerResult, windowKey, windowState, keyString, isOnTime);
+                }
 
-                // Remove window if it's past allowed lateness
-                if (now > windowState.WindowEnd + allowedLateness && windowState.HasFired)
+                // Remove window if it's past allowed lateness; in event time also when its trigger never fired
+                if (now.Ticks > windowState.WindowEnd.Ticks + allowedLateness.Ticks && (windowState.HasFired || _eventTime != null))
                 {
                     windowsToRemove.Add(windowKey);
                 }
@@ -450,11 +456,19 @@ namespace Cortex.Streams.Operators.Windows
 
             windowState.HasFired = true;
 
-            // Purge state if required
+            // Purge state if required; in event time a final result keeps the window until its allowed lateness ends,
+            // so a late correction still has the earlier items
             if (result == TriggerResult.FireAndPurge)
             {
-                _stateStore.Remove(windowKey);
-                _windowStates.Remove(windowKey);
+                if (_eventTime != null && _watermarkTicks < windowState.WindowEnd.Ticks + _latenessTicks)
+                {
+                    windowState.FinalFired = true;
+                }
+                else
+                {
+                    _stateStore.Remove(windowKey);
+                    _windowStates.Remove(windowKey);
+                }
             }
         }
 

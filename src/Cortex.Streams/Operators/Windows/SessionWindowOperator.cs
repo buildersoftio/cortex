@@ -50,7 +50,6 @@ namespace Cortex.Streams.Operators.Windows
         private long _latenessTicks;
         private long _watermarkTicks;
         private long _nextDeadlineTicks = long.MaxValue;
-        private long _nextSessionId;
         private readonly Dictionary<string, List<string>> _sessionsByKey = new Dictionary<string, List<string>>();
         private readonly HashSet<string> _firedSessions = new HashSet<string>();
 
@@ -265,7 +264,8 @@ namespace Cortex.Streams.Operators.Windows
                 Items = items
             };
 
-            var mergedKey = $"session_{key}_{++_nextSessionId}";
+            // A unique key: a durable store may still hold sessions of an earlier run
+            var mergedKey = $"session_{key}_{Guid.NewGuid():N}";
             if (!_sessionsByKey.TryGetValue(key, out sessionKeys))
             {
                 sessionKeys = new List<string>();
@@ -334,7 +334,7 @@ namespace Cortex.Streams.Operators.Windows
                     .Select(sessionKey => (Key: sessionKey, Session: _stateStore.Get(sessionKey)))
                     .Where(s => s.Session != null && Deadline(s.Key, s.Session) <= _watermarkTicks)
                     .OrderBy(s => s.Session.LastActivityTime)
-                    .ThenBy(s => s.Key, StringComparer.Ordinal)
+                    .ThenBy(s => s.Session.Key, StringComparer.Ordinal)
                     .ToList();
 
                 foreach (var (sessionKey, session) in due)
