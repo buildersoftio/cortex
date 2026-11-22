@@ -117,6 +117,26 @@ namespace Cortex.Tests.Streams.Tests
         }
 
         [Fact]
+        public void RightAndOuterJoins_EmitUnmatchedRightEvents_AtWindowPlusGrace()
+        {
+            foreach (var joinType in new[] { StreamJoinType.Right, StreamJoinType.Outer })
+            {
+                var results = new List<string>();
+                var (stream, join) = Build(WatermarkStrategy.ForMonotonousTimestamps(), joinType, results, TimeSpan.FromSeconds(5));
+
+                join.ProcessRight(PaymentAt("P", 0));
+                stream.Emit(OrderAt("X", 14));
+                join.ProcessRight(PaymentAt("Q", 14));   // watermark 14 < 0 + 10 + 5
+                Assert.DoesNotContain("-:0", results);
+
+                stream.Emit(OrderAt("Y", 15));
+                join.ProcessRight(PaymentAt("R", 15));   // watermark 15: P expires
+
+                Assert.Equal(1, results.Count(r => r == "-:0"));
+            }
+        }
+
+        [Fact]
         public void LateElements_AreReported_AndNotBuffered()
         {
             var late = new List<LateEvent>();

@@ -272,7 +272,8 @@ namespace Cortex.Streams.Operators
                     foreach (var rightElement in rightList.ToList())
                     {
                         // Check if within window: by event-time distance, or not yet expired by the wall clock
-                        if (eventTime ? WithinWindow(timestamp, rightElement.Timestamp) : rightElement.ExpiresAt > now)
+                        // (an expired counterpart can still be buffered while another thread is about to clean it up)
+                        if (eventTime ? WithinWindow(timestamp, rightElement.Timestamp) && !IsLate(rightElement) : rightElement.ExpiresAt > now)
                         {
                             // Found a match!
                             bufferedElement.Matched = true;
@@ -356,7 +357,8 @@ namespace Cortex.Streams.Operators
                     foreach (var leftElement in leftList.ToList())
                     {
                         // Check if within window: by event-time distance, or not yet expired by the wall clock
-                        if (eventTime ? WithinWindow(timestamp, leftElement.Timestamp) : leftElement.ExpiresAt > now)
+                        // (an expired counterpart can still be buffered while another thread is about to clean it up)
+                        if (eventTime ? WithinWindow(timestamp, leftElement.Timestamp) && !IsLate(leftElement) : leftElement.ExpiresAt > now)
                         {
                             // Found a match!
                             bufferedElement.Matched = true;

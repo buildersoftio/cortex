@@ -50,7 +50,7 @@ Strategies are immutable; each `With...` method returns a new one:
 
 | Method | Default | Effect |
 |--------|---------|--------|
-| `WithAllowedLateness(TimeSpan)` | zero | How long after a window's end it still accepts events and fires again |
+| `WithAllowedLateness(TimeSpan)` | zero | How long after a window's end it still accepts events and fires again (`TimeSpan.MaxValue`: for ever) |
 | `OnLateEvent(Action<LateEvent>)` | none | Called for every event dropped as too late |
 | `WithIdleTimeout(TimeSpan)` | none | Keeps the watermark moving when no events arrive (see [Idle sources](#idle-sources)) |
 | `WithStateStore(IDataStore<string, long>)` | none | Saves and restores the watermark (see [Restarts](#restarts)) |
@@ -83,8 +83,9 @@ Event timestamps must be **UTC**.
 
 - The default `EventTimeTrigger` fires when the watermark reaches the window end.
 - `CountTrigger` fires on its count and purges when the watermark reaches the end.
-- Interval triggers (`TriggerOnProcessingTime`, `WithEarlyTrigger`) measure their interval in **event time**: an early trigger of 10 seconds fires for every 10 seconds the watermark advances.
-- An allowed-late event fires the window at once, with `EmissionType` `Late`.
+- Interval triggers (`TriggerOnProcessingTime`, `WithEarlyTrigger`) measure their interval in **event time**: an early trigger of 10 seconds fires when the watermark has advanced at least 10 seconds since its last early result. A watermark that jumps by 30 seconds produces one early result, not three.
+- After its final result a window keeps its items until the watermark passes its end plus the allowed lateness. An allowed-late event fires it again at once, with `EmissionType` `Late`: in accumulating mode with all items, in discarding mode with the new ones.
+- A window whose trigger never fires is removed when the watermark passes its end plus the allowed lateness.
 - `WindowConfiguration.AllowedLateness` and `OnLateEvent`, when set, take precedence over the strategy's.
 
 ### Stream-stream joins
@@ -120,7 +121,7 @@ With only event time, a window closes when a *later* event arrives. If a source 
 
 ### Restarts
 
-`WithStateStore(store)` saves the watermark (under the keys `WatermarkStrategy.WatermarkStateKey` and `MaxTimestampStateKey`) at most once a second while it advances and when the stream stops or is disposed, and restores it when the stream is built again. The store is listed in `GetStateStores()`. Use one store, or one store name, per `WithWatermarks`.
+`WithStateStore(store)` saves the watermark (under the keys `WatermarkStrategy.WatermarkStateKey` and `MaxTimestampStateKey`) at most once a second while it advances and when the stream stops or is disposed, and restores it when the stream is built again; with an idle timeout, a restored watermark keeps moving even before the first new event. After a crash the saved value can be up to a second old. The store is listed in `GetStateStores()`. Use one store, or one store name, per `WithWatermarks`.
 
 Only the **watermark** is restored. Windows and join buffers that were open when the process stopped are not, so their items are lost unless your source replays them.
 
@@ -239,7 +240,7 @@ public sealed class UserSessions
 
 ### Hourly API Usage That Survives Restarts
 
-API calls are billed per customer and hour. Calls are reported by several gateways and arrive up to a minute late. When the service restarts, it must not bill an hour twice: calls older than the watermark saved before the restart are reported as late instead of opening the hour again.
+API calls are billed per customer and hour. Calls are reported by several gateways and arrive up to a minute late. When the service is restarted, an hour that was already billed must not open again: a call for that hour, replayed by a gateway after the restart, is reported as late because the saved watermark is already past the hour's end.
 
 ```csharp
 public sealed record ApiCall(string CustomerId, string Endpoint, DateTime CalledAt);
@@ -280,7 +281,8 @@ public sealed class UsageBilling
 }
 ```
 
-- `Stop()` saves the watermark; the next `UsageBilling` built on the same store starts from it.
+- `Stop()` saves the watermark; the next `UsageBilling` built on the same store starts from it. Calls for an hour that was still open at the restart are accepted.
+- The watermark is saved at most once a second while it advances. After a **crash**, the saved watermark can be up to a second behind, so the last hour billed may be billed again: make `IBillingLedger.Add` idempotent per (customer, hour).
 - The hour that was open at the restart is not restored. Replay its calls from your source, or bill it from the raw log.
 
 ### Ad Click Attribution over Last Week's Logs
