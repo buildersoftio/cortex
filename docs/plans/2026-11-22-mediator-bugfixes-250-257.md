@@ -89,11 +89,11 @@ Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): make InvalidateAll remove cached query results (#252)
 
 ### Task 4: Use the full query type name in cache keys (#253)
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator/Caching/DefaultCacheKeyGenerator.cs` (modify), `src/Cortex.Tests/Mediator/Tests/DefaultCacheKeyGeneratorTests.cs` (modify)
 Depends on: Task 3
-- [ ] Add `SameNameQueriesInDifferentNamespaces_GetDifferentKeys` (all three key shapes: custom key, property hash, no properties) and `GenericQueries_WithDifferentArguments_GetDifferentKeys`; run them red.
-- [ ] Replace `queryType.Name` with `queryType.ToString()` in the three key formats.
+- [x] Add `SameNameQueriesInDifferentNamespaces_GetDifferentKeys` (all three key shapes: custom key, property hash, no properties) and `GenericQueries_WithDifferentArguments_GetDifferentKeys`; run them red.
+- [x] Replace `queryType.Name` with `queryType.ToString()` in the three key formats.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -f net11.0 --filter "FullyQualifiedName~Caching|FullyQualifiedName~DefaultCacheKeyGeneratorTests|FullyQualifiedName~CacheInvalidatorTests"`
 Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): use the full query type name in cache keys (#253)
@@ -154,4 +154,6 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Task 2: complete — `--filter "FullyQualifiedName~Mediator"` → "Failed: 0, Passed: 417" (commit f5b2c32).
 - 2026-11-22 Task 3: red — `InvalidateAll_RemovesEveryCachedResultOfThatQueryType` and `InvalidateAll_ThenNewResults_AreCachedAgain` failed ("Failed: 2, Passed: 6").
 - 2026-11-22 Ruling: the caching behavior takes its invalidation token before running the handler — an `InvalidateAll` during the handler then also expires that result — cost if wrong: one extra cache miss in that race.
-- 2026-11-22 Task 3: complete — see the commit's run.
+- 2026-11-22 Task 3: complete — caching filter → "Failed: 0, Passed: 20" (commit 2a64089).
+- 2026-11-22 Task 4: red — 5 new test cases failed, plus `GenerateKey_WithoutProperties_ShouldStillWork`, whose expected key was updated from `"Test:TestQuery"` to the full type name ("Failed: 6, Passed: 7").
+- 2026-11-22 Task 4: complete — see the commit's run.

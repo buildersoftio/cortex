@@ -142,7 +142,90 @@ namespace Cortex.Tests.Mediator.Tests
             var key = generatorWithoutProps.GenerateKey<TestQuery, string>(query);
 
             // Assert
-            Assert.Equal("Test:TestQuery", key);
+            Assert.Equal($"Test:{typeof(TestQuery)}", key);
         }
+
+        public class GenericQuery<T> : IQuery<string>
+        {
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void GenerateKey_SameNameQueriesInDifferentNamespaces_GetDifferentKeys(bool includeProperties)
+        {
+            // Arrange
+            var generator = new DefaultCacheKeyGenerator(Options.Create(new CachingOptions
+            {
+                CacheKeyPrefix = "Test",
+                IncludeQueryPropertiesInCacheKey = includeProperties
+            }));
+
+            // Act
+            var keyA = generator.GenerateKey<CacheKeyNamespaceA.GetTotalQuery, int>(new CacheKeyNamespaceA.GetTotalQuery());
+            var keyB = generator.GenerateKey<CacheKeyNamespaceB.GetTotalQuery, int>(new CacheKeyNamespaceB.GetTotalQuery());
+
+            // Assert
+            Assert.NotEqual(keyA, keyB);
+        }
+
+        [Fact]
+        public void GenerateKey_SameNameCacheableQueriesInDifferentNamespaces_GetDifferentKeys()
+        {
+            // Act: both queries return the same custom CacheKey
+            var keyA = _generator.GenerateKey<CacheKeyNamespaceA.GetTotalCacheableQuery, int>(new CacheKeyNamespaceA.GetTotalCacheableQuery());
+            var keyB = _generator.GenerateKey<CacheKeyNamespaceB.GetTotalCacheableQuery, int>(new CacheKeyNamespaceB.GetTotalCacheableQuery());
+
+            // Assert
+            Assert.NotEqual(keyA, keyB);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void GenerateKey_GenericQueriesWithDifferentArguments_GetDifferentKeys(bool includeProperties)
+        {
+            // Arrange
+            var generator = new DefaultCacheKeyGenerator(Options.Create(new CachingOptions
+            {
+                CacheKeyPrefix = "Test",
+                IncludeQueryPropertiesInCacheKey = includeProperties
+            }));
+
+            // Act
+            var keyInt = generator.GenerateKey<GenericQuery<int>, string>(new GenericQuery<int>());
+            var keyString = generator.GenerateKey<GenericQuery<string>, string>(new GenericQuery<string>());
+
+            // Assert
+            Assert.NotEqual(keyInt, keyString);
+        }
+    }
+}
+
+namespace Cortex.Tests.Mediator.Tests.CacheKeyNamespaceA
+{
+    public class GetTotalQuery : IQuery<int>
+    {
+    }
+
+    public class GetTotalCacheableQuery : IQuery<int>, ICacheableQuery
+    {
+        public string? CacheKey => "total";
+        public TimeSpan? AbsoluteExpiration => null;
+        public TimeSpan? SlidingExpiration => null;
+    }
+}
+
+namespace Cortex.Tests.Mediator.Tests.CacheKeyNamespaceB
+{
+    public class GetTotalQuery : IQuery<int>
+    {
+    }
+
+    public class GetTotalCacheableQuery : IQuery<int>, ICacheableQuery
+    {
+        public string? CacheKey => "total";
+        public TimeSpan? AbsoluteExpiration => null;
+        public TimeSpan? SlidingExpiration => null;
     }
 }

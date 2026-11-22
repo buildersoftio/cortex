@@ -39,6 +39,10 @@ namespace Cortex.Mediator.Caching
             var queryType = typeof(TQuery);
             var prefix = _options.CacheKeyPrefix;
 
+            // Full name with generic arguments and without assembly versions, e.g. "Sales.GetTotalQuery" or
+            // "Reports.GetPageQuery`1[System.Int32]". Type.Name alone collides across namespaces and generic arguments.
+            var queryTypeName = queryType.ToString();
+
             // Check for CacheableAttribute with custom prefix
             var cacheableAttr = queryType.GetCustomAttribute<CacheableAttribute>();
             if (cacheableAttr?.CacheKeyPrefix != null)
@@ -49,17 +53,17 @@ namespace Cortex.Mediator.Caching
             // Check if query implements ICacheableQuery with custom key
             if (query is ICacheableQuery cacheableQuery && !string.IsNullOrEmpty(cacheableQuery.CacheKey))
             {
-                return $"{prefix}:{queryType.Name}:{cacheableQuery.CacheKey}";
+                return $"{prefix}:{queryTypeName}:{cacheableQuery.CacheKey}";
             }
 
             // Generate key from query properties
             if (_options.IncludeQueryPropertiesInCacheKey)
             {
                 var queryHash = GenerateQueryHash(query);
-                return $"{prefix}:{queryType.Name}:{queryHash}";
+                return $"{prefix}:{queryTypeName}:{queryHash}";
             }
 
-            return $"{prefix}:{queryType.Name}";
+            return $"{prefix}:{queryTypeName}";
         }
 
         private static string GenerateQueryHash<TQuery>(TQuery query)
