@@ -163,6 +163,28 @@ namespace Cortex.Tests.Mediator.Tests
         }
 
         [Fact]
+        public async Task AddCortexMediatorCalledTwice_ClosedBehaviorRunsOnce()
+        {
+            var services = new ServiceCollection();
+            for (var i = 0; i < 2; i++)
+            {
+                services.AddCortexMediator(new Type[0], options =>
+                {
+                    options.AddCommandPipelineBehavior<AddHundredCommandBehavior>();
+                });
+            }
+            services.AddTransient<ICommandHandler<RegistrationTestCommand, int>, RegistrationTestCommandHandler>();
+
+            var provider = services.BuildServiceProvider();
+            var mediator = provider.GetRequiredService<IMediator>();
+
+            var result = await mediator.SendCommandAsync<RegistrationTestCommand, int>(new RegistrationTestCommand { Value = 1 });
+
+            // Registered twice it would add 100 twice (201)
+            Assert.Equal(101, result);
+        }
+
+        [Fact]
         public async Task ClosedCommandBehavior_IsRegisteredAndRunsOnlyForItsCommand()
         {
             var services = new ServiceCollection();

@@ -164,4 +164,7 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Task 7: red — all 6 new tests failed ("Failed: 6, Passed: 6"); the three "does not block" tests waited their full 5 s.
 - 2026-11-22 Task 7: complete — validation filter → "Failed: 0, Passed: 12" (commit e8764ea).
 - 2026-11-22 Task 8: red — the new tests did not compile (CS1501: no `AddExceptionHandlingBehaviors` overload takes 1 argument; CS0246: `ExceptionHandlingOptions` not found).
-- 2026-11-22 Task 8: complete — see the commit's run.
+- 2026-11-22 Task 8: complete — `--filter "FullyQualifiedName~ExceptionHandling"` → "Failed: 0, Passed: 36" (commit 3e21c95).
+- 2026-11-22 Release build after Task 8: `dotnet build Cortex.sln -c Release` → "0 Error(s)", "1016 Warning(s)".
+- 2026-11-22 Review wave 1: 4 code-reviewer lenses (correctness, spec, tests, simplify), all APPROVE, SPEC: MET; 0 Critical, 0 Important, 3 Minor.
+- 2026-11-22 Ruling: the Minor test gap (no closed behavior registered twice) is fixed with `AddCortexMediatorCalledTwice_ClosedBehaviorRunsOnce`; with the closed branch temporarily set back to `AddTransient` it failed ("Failed: 1, Passed: 4"), then the line was restored — cheap, and it proves a line #251 relies on — cost if wrong: none.
