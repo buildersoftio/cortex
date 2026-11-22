@@ -1,3 +1,5 @@
+using Cortex.States;
+using Cortex.States.Operators;
 using Cortex.Streams.ErrorHandling;
 using Cortex.Streams.Operators;
 using Cortex.Telemetry;
@@ -27,12 +29,13 @@ namespace Cortex.Streams.Watermarks
     /// </summary>
     /// <typeparam name="T">The type of the items.</typeparam>
     public class WatermarkOperator<T> : IOperator, IHasNextOperators, ITelemetryEnabled, IErrorHandlingEnabled,
-        IStreamStopAware, IWatermarkGenerator, IDisposable
+        IStreamStopAware, IWatermarkGenerator, IStatefulOperator, IDisposable
     {
         private const long NoTimestamp = -1;
         private static readonly IWatermarkAware[] NoSubscribers = new IWatermarkAware[0];
         private static readonly long MinIdleCheckTicks = TimeSpan.FromMilliseconds(10).Ticks;
         private static readonly long MaxIdleCheckTicks = TimeSpan.FromSeconds(1).Ticks;
+        private static readonly long SaveIntervalTicks = TimeSpan.FromSeconds(1).Ticks;
 
         private readonly Func<T, DateTime> _timestampSelector;
         private readonly long _delayTicks;
@@ -52,6 +55,11 @@ namespace Cortex.Streams.Watermarks
         private bool _disposed;
         private Action _stopStream;
 
+        // Persistence, guarded by _notifyLock
+        private readonly IDataStore<string, long> _stateStore;
+        private long _savedWatermarkTicks;
+        private long _lastSaveAtTicks;
+
         /// <summary>
         /// Creates a watermark operator.
         /// </summary>
@@ -66,6 +74,28 @@ namespace Cortex.Streams.Watermarks
             _delayTicks = strategy.MaxOutOfOrderness.Ticks;
             _idleTimeoutTicks = strategy.IdleTimeout?.Ticks ?? 0;
             _clock = strategy.Clock;
+
+            _stateStore = strategy.StateStore;
+            if (_stateStore != null)
+            {
+                Restore();
+            }
+        }
+
+        // Resumes where a previous run stopped; operators downstream get the restored watermark when they are wired
+        private void Restore()
+        {
+            if (_stateStore.ContainsKey(WatermarkStrategy.MaxTimestampStateKey))
+            {
+                _maxTimestampTicks = _stateStore.Get(WatermarkStrategy.MaxTimestampStateKey);
+            }
+
+            if (_stateStore.ContainsKey(WatermarkStrategy.WatermarkStateKey))
+            {
+                _watermarkTicks = _stateStore.Get(WatermarkStrategy.WatermarkStateKey);
+                _notifiedTicks = _watermarkTicks;
+                _savedWatermarkTicks = _watermarkTicks;
+            }
         }
 
         /// <summary>The strategy this operator applies.</summary>
@@ -106,10 +136,13 @@ namespace Cortex.Streams.Watermarks
                 return;
 
             var maxTimestamp = Volatile.Read(ref _maxTimestampTicks);
-            if (maxTimestamp == NoTimestamp)
+            var lastEventAt = Volatile.Read(ref _lastEventAtTicks);
+
+            // Idle only counts after an event of this run
+            if (maxTimestamp == NoTimestamp || lastEventAt == 0)
                 return;
 
-            var idleFor = _clock().Ticks - Volatile.Read(ref _lastEventAtTicks) - _idleTimeoutTicks;
+            var idleFor = _clock().Ticks - lastEventAt - _idleTimeoutTicks;
             if (idleFor <= 0)
                 return;
 
@@ -170,7 +203,43 @@ namespace Cortex.Streams.Watermarks
                 {
                     subscriber.OnWatermark(watermark);
                 }
+
+                Save(force: false);
             }
+        }
+
+        // Called under _notifyLock: writes the watermark when it changed, at most once per second unless forced
+        private void Save(bool force)
+        {
+            if (_stateStore == null)
+                return;
+
+            var watermarkTicks = Volatile.Read(ref _watermarkTicks);
+            if (watermarkTicks == _savedWatermarkTicks)
+                return;
+
+            var now = _clock().Ticks;
+            if (!force && now - _lastSaveAtTicks < SaveIntervalTicks)
+                return;
+
+            _stateStore.Put(WatermarkStrategy.MaxTimestampStateKey, Volatile.Read(ref _maxTimestampTicks));
+            _stateStore.Put(WatermarkStrategy.WatermarkStateKey, watermarkTicks);
+            _savedWatermarkTicks = watermarkTicks;
+            _lastSaveAtTicks = now;
+        }
+
+        private void Flush()
+        {
+            lock (_notifyLock)
+            {
+                Save(force: true);
+            }
+        }
+
+        public IEnumerable<IDataStore> GetStateStores()
+        {
+            if (_stateStore != null)
+                yield return _stateStore;
         }
 
         private void EnsureIdleTimer()
@@ -220,6 +289,8 @@ namespace Cortex.Streams.Watermarks
 
         void IWatermarkGenerator.Pause()
         {
+            Flush();
+
             lock (_timerLock)
             {
                 _paused = true;
@@ -278,6 +349,8 @@ namespace Cortex.Streams.Watermarks
 
         public void Dispose()
         {
+            Flush();
+
             lock (_timerLock)
             {
                 if (_disposed)

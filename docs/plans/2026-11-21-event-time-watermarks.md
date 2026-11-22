@@ -121,11 +121,11 @@ Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time stream-stream joins
 
 ### Task 7: Persist watermark state in a state store
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Watermarks/WatermarkStrategy.cs` (modify), `src/Cortex.Streams/Watermarks/WatermarkOperator.cs` (modify), `src/Cortex.Tests/Streams/Tests/WatermarkPersistenceTests.cs` (create)
 Depends on: Task 1
-- [ ] Tests first: with `WithStateStore`, a rebuilt stream on the same store resumes at the saved watermark (an event older than it is late); saves are throttled to once per second while advancing and flushed on `Stop`; the store appears in `IStream.GetStateStores()`; without a store nothing is written.
-- [ ] Implement `IStatefulOperator` on `WatermarkOperator`.
+- [x] Tests first: with `WithStateStore`, a rebuilt stream on the same store resumes at the saved watermark (an event older than it is late); saves are throttled to once per second while advancing and flushed on `Stop`; the store appears in `IStream.GetStateStores()`; without a store nothing is written.
+- [x] Implement `IStatefulOperator` on `WatermarkOperator`.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~WatermarkPersistenceTests|FullyQualifiedName~WatermarkTests"`
 Expected: exit 0, `Failed: 0`
 Commit: feat(streams): persist watermarks in a state store
@@ -183,6 +183,9 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Task 6: red — `dotnet test ... --filter "FullyQualifiedName~EventTimeJoinTests"` → Failed: 5, Passed: 0
 - 2026-11-21 Ruling: in event time the join's cleanup runs on the caller's thread when the combined watermark reaches the earliest expiry (exceptions reach the emitting caller, as on the arrival path), and the cleanup timer only adds idle detection at `CleanupInterval` — keeps results deterministic and ordered with the watermark — cost if wrong: an idle right side is noticed only at the next cleanup tick (default 30 s).
 - 2026-11-21 Task 6: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeJoinTests|FullyQualifiedName~StreamStreamJoinOperatorTests"` → Passed! - Failed: 0, Passed: 29
+- 2026-11-21 Task 7: red — `dotnet test ... --filter "FullyQualifiedName~WatermarkPersistenceTests"` → CS0117 'WatermarkStrategy' does not contain 'WatermarkStateKey' / 'MaxTimestampStateKey'
+- 2026-11-21 Ruling: saved under fixed keys `watermark` and `max-timestamp` (public constants on `WatermarkStrategy`), one store per `WithWatermarks`; the "nothing written without a store" case has no test (nothing to observe) — keeps the store contract simple — cost if wrong: sharing one store across streams overwrites each other's watermark (documented on `StateStore`).
+- 2026-11-21 Task 7: complete — `dotnet test ... --filter "FullyQualifiedName~WatermarkPersistenceTests|FullyQualifiedName~WatermarkTests"` → Passed! - Failed: 0, Passed: 16
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.

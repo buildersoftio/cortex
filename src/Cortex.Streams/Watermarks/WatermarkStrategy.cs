@@ -36,7 +36,20 @@ namespace Cortex.Streams.Watermarks
         /// <summary>Called for every event dropped because it arrived after its window's lateness ended. Optional.</summary>
         public Action<LateEvent> LateEventHandler { get; private set; }
 
-        /// <summary>Optional store the watermark is saved to and restored from.</summary>
+        /// <summary>
+        /// Key under which the watermark (UTC ticks) is saved in <see cref="StateStore"/>.
+        /// </summary>
+        public const string WatermarkStateKey = "watermark";
+
+        /// <summary>
+        /// Key under which the newest event timestamp (UTC ticks) is saved in <see cref="StateStore"/>.
+        /// </summary>
+        public const string MaxTimestampStateKey = "max-timestamp";
+
+        /// <summary>
+        /// Optional store the watermark is saved to (at most once per second while it advances, and when the stream stops)
+        /// and restored from when the stream is built. Use one store, or one store name, per <c>WithWatermarks</c>.
+        /// </summary>
         public IDataStore<string, long> StateStore { get; private set; }
 
         /// <summary>The wall clock used for idle detection and saving. Default: <see cref="DateTime.UtcNow"/>.</summary>
