@@ -71,11 +71,11 @@ Expected: exit 0, `Failed: 0`
 Commit: feat(streams): add watermark strategy and event-time wiring
 
 ### Task 2: Event-time mode for tumbling and sliding windows
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Operators/Windows/TumblingWindowOperator.cs` (modify), `src/Cortex.Streams/Operators/Windows/SlidingWindowOperator.cs` (modify), `src/Cortex.Tests/Streams/Tests/EventTimeWindowTests.cs` (create)
 Depends on: Task 1
-- [ ] Tests first (no sleeps; drive `Process` + `OnWatermark` through a built stream or directly): in-order and shuffled-within-bound events land in exact windows; a window fires once at `W >= end`; an event for a window whose `end + lateness <= W` is dropped and reported as `LateEvent` (not a recreated window); within allowed lateness the window re-fires with all items; state is removed at `W >= end + lateness`; sliding checks each window separately; the wall-clock timer no longer fires in event-time mode.
-- [ ] Implement `IWatermarkAware` with a `_nextDeadline` fast path so an `OnWatermark` that changes nothing takes no lock.
+- [x] Tests first (no sleeps; drive `Process` + `OnWatermark` through a built stream or directly): in-order and shuffled-within-bound events land in exact windows; a window fires once at `W >= end`; an event for a window whose `end + lateness <= W` is dropped and reported as `LateEvent` (not a recreated window); within allowed lateness the window re-fires with all items; state is removed at `W >= end + lateness`; sliding checks each window separately; the wall-clock timer no longer fires in event-time mode.
+- [x] Implement `IWatermarkAware` with a `_nextDeadline` fast path so an `OnWatermark` that changes nothing takes no lock.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~EventTimeWindowTests|FullyQualifiedName~TumblingWindowOperatorTests|FullyQualifiedName~SlidingWindowOperatorTests"`
 Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time tumbling and sliding windows
@@ -161,6 +161,11 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Task 1: red — `dotnet test ... --filter "FullyQualifiedName~WatermarkTests"` → CS1061 'WithWatermarks' not found, CS0246 'WatermarkOperator<>' not found
 - 2026-11-21 Task 1: complete — `dotnet test ... --filter "FullyQualifiedName~WatermarkTests|FullyQualifiedName~DynamicBranchingTests|FullyQualifiedName~BranchMergeTests"` → Passed! - Failed: 0, Passed: 48
 - 2026-11-21 Ruling: the runtime AddBranch/RemoveBranch event-time tests move to Task 2 — branch builders have no SetNext, so they need a real window — cost if wrong: Task 1 commit ships that wiring tested one commit later.
+- 2026-11-21 Task 2: red — `dotnet test ... --filter "FullyQualifiedName~EventTimeWindowTests"` → Failed: 7, Passed: 1
+- 2026-11-21 Ruling: `Stream.TopologicalOrder` visits successors last-first, so sibling branches get watermarks in declaration order (found by the chained-windows test) — matches item order through a fork — cost if wrong: none; one line in `Stream.cs` in the Task 2 commit.
+- 2026-11-21 Ruling: a sliding-window event late for some of its windows still joins the open ones and is reported once — per-window check as planned, one report per event — cost if wrong: `OnLateEvent` also fires for partly kept events (documented on the operator).
+- 2026-11-21 Session interrupted mid-Task 2; resumed from the plan file and the working tree (Task 2 files only).
+- 2026-11-21 Task 2: complete — `dotnet test ... --filter "...EventTimeWindowTests|TumblingWindowOperatorTests|SlidingWindowOperatorTests|WatermarkTests"` → Passed! - Failed: 0, Passed: 38
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.
 - 2026-11-21 Ruling: implementation inline, no developer agents — every task shares the new contract and its files — cost if wrong: none beyond tokens.

@@ -148,7 +148,8 @@ namespace Cortex.Streams
                 if (op == null || !visited.Add(op))
                     return;
 
-                foreach (var next in GetSuccessors(op))
+                // Last successor first, so after the reversal earlier branches come before later ones
+                foreach (var next in GetSuccessors(op).Reverse())
                 {
                     Visit(next);
                 }
