@@ -81,11 +81,11 @@ Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time tumbling and sliding windows
 
 ### Task 3: Event-time mode for session windows
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Operators/Windows/SessionWindowOperator.cs` (modify), `src/Cortex.Tests/Streams/Tests/EventTimeSessionWindowTests.cs` (create)
 Depends on: Task 1
-- [ ] Tests first: an out-of-order event inside the gap extends the session (start = min, last = max); an event bridging two open sessions merges them; a far-ahead event opens a second session for the same key instead of closing the first; a session closes at `W >= last + gap`; a late event is dropped and reported; processing-time sessions unchanged.
-- [ ] Implement several open sessions per key in event-time mode (store keys per session plus an in-memory index), closing on watermark only.
+- [x] Tests first: an out-of-order event inside the gap extends the session (start = min, last = max); an event bridging two open sessions merges them; a far-ahead event opens a second session for the same key instead of closing the first; a session closes at `W >= last + gap`; a late event is dropped and reported; processing-time sessions unchanged.
+- [x] Implement several open sessions per key in event-time mode (store keys per session plus an in-memory index), closing on watermark only.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~EventTimeSessionWindowTests|FullyQualifiedName~SessionWindowOperatorTests"`
 Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time session windows
@@ -167,6 +167,9 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Session interrupted mid-Task 2; resumed from the plan file and the working tree (Task 2 files only).
 - 2026-11-21 Task 2: complete — `dotnet test ... --filter "...EventTimeWindowTests|TumblingWindowOperatorTests|SlidingWindowOperatorTests|WatermarkTests"` → Passed! - Failed: 0, Passed: 38
 - 2026-11-21 Task 2: repair 1/3 — the commit gate piped `dotnet test` into `findstr`, so commit ff117002 went in on a run with "Failed: 1" (`TumblingWindowOperator_SeparatesItemsByKey`, Expected 2, Actual 4; also `IntegrationWithStreamBuilder`, failing 3/5 and 4/6 runs) → both tests stamped `UtcNow` and `UtcNow + 500 ms` into 2 s windows, straddling a boundary about 1 run in 4; aligned their timestamps to a window start like `GroupsItemsIntoWindows`; 6/6 runs green. Gates now let `dotnet test`'s exit code decide.
+- 2026-11-21 Task 3: red — `dotnet test ... --filter "FullyQualifiedName~EventTimeSessionWindowTests"` → Failed: 6, Passed: 0
+- 2026-11-21 Ruling: event-time sessions use inclusive bounds (an event joins at exactly `last + gap`, the session fires when `W > last + gap`), merged items are ordered by session start then arrival — matches the processing-time rule "more than the gap closes it" — cost if wrong: an event exactly one gap apart lands in the other session.
+- 2026-11-21 Task 3: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeSessionWindowTests|FullyQualifiedName~SessionWindowOperatorTests"` → Passed! - Failed: 0, Passed: 17
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.
