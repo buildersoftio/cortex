@@ -42,7 +42,7 @@ A coordinated checkpoint/restore of window and join buffers (no framework exists
 - `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~Watermark|FullyQualifiedName~EventTime"` → exit 0, `Failed: 0`
 - `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release` → exit 0, `Failed: 0`
 - `dotnet run -c Release --project tools/Cortex.Streams.WatermarkBench` → exit 0, prints the overhead below 5%
-- `git diff --stat v3.2/release...HEAD -- src/Cortex.Tests` → only new files (existing tests unchanged = backward compatible)
+- `git diff --stat v3.2/release...HEAD -- src/Cortex.Tests` → only new files, plus the timestamp-only fix in `TumblingWindowOperatorTests.cs` (existing assertions unchanged = backward compatible)
 - End to end: `EventTimeEndToEndTests` builds Source → WithWatermarks → Map → TumblingWindow → Sink with shuffled events inside the bound, one late event and an idle tail, and asserts exact window contents, one `LateEvent`, and that the last window closes through idleness.
 
 ## Orchestration
@@ -166,6 +166,8 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Ruling: a sliding-window event late for some of its windows still joins the open ones and is reported once — per-window check as planned, one report per event — cost if wrong: `OnLateEvent` also fires for partly kept events (documented on the operator).
 - 2026-11-21 Session interrupted mid-Task 2; resumed from the plan file and the working tree (Task 2 files only).
 - 2026-11-21 Task 2: complete — `dotnet test ... --filter "...EventTimeWindowTests|TumblingWindowOperatorTests|SlidingWindowOperatorTests|WatermarkTests"` → Passed! - Failed: 0, Passed: 38
+- 2026-11-21 Task 2: repair 1/3 — the commit gate piped `dotnet test` into `findstr`, so commit ff117002 went in on a run with "Failed: 1" (`TumblingWindowOperator_SeparatesItemsByKey`, Expected 2, Actual 4; also `IntegrationWithStreamBuilder`, failing 3/5 and 4/6 runs) → both tests stamped `UtcNow` and `UtcNow + 500 ms` into 2 s windows, straddling a boundary about 1 run in 4; aligned their timestamps to a window start like `GroupsItemsIntoWindows`; 6/6 runs green. Gates now let `dotnet test`'s exit code decide.
+- 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.
 - 2026-11-21 Ruling: implementation inline, no developer agents — every task shares the new contract and its files — cost if wrong: none beyond tokens.

@@ -75,7 +75,8 @@ namespace Cortex.Streams.Tests
             });
             windowOperator.SetNext(sinkOperator);
 
-            var now = DateTime.UtcNow;
+            // Start at a window boundary so both timestamps fall into the same window
+            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks) * windowSize.Ticks, DateTimeKind.Utc);
 
             // Act - emit items for different keys
             windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
@@ -260,7 +261,8 @@ namespace Cortex.Streams.Tests
 
             stream.Start();
 
-            var now = DateTime.UtcNow;
+            // Start at a window boundary so both timestamps fall into the same window
+            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks) * windowSize.Ticks, DateTimeKind.Utc);
 
             // Act
             stream.Emit(new InputData { Key = "A", Value = 1, EventTime = now });
