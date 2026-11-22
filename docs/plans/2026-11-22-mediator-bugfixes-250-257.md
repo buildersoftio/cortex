@@ -119,11 +119,11 @@ Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): run every handler when one throws synchronously (#255)
 
 ### Task 7: Await FluentValidation validators with the request's token (#256)
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator.Behaviors.FluentValidation/ValidationCommandBehavior.cs` (modify), `src/Cortex.Mediator.Behaviors.FluentValidation/ValidationQueryBehavior.cs` (modify), `src/Cortex.Mediator.Behaviors.FluentValidation/VoidValidationCommandBehavior.cs` (modify), `src/Cortex.Tests/Mediator/FluentValidation/Tests/ValidationCommandBehaviorTests.cs` (modify), `src/Cortex.Tests/Mediator/FluentValidation/Tests/ValidationQueryBehaviorTests.cs` (modify), `src/Cortex.Tests/Mediator/FluentValidation/Tests/VoidValidationCommandBehaviorTests.cs` (modify)
 Depends on: Task 6
-- [ ] In each test class add `Handle_PassesCancellationTokenToValidators` (a `MustAsync((x, ct) => ...)` rule captures the token) and `Handle_DoesNotBlockWhileAsyncValidatorIsPending` (calling `Handle` on a worker thread returns within 5 s while the validator awaits a `TaskCompletionSource`; the source is completed afterwards either way); run them red.
-- [ ] Replace the `Select(...).Select(r => r.Result)` chain with a loop that awaits `validator.ValidateAsync(context, cancellationToken)` per validator, collecting non-null errors; return `next()` early when there are no validators. The thrown `ValidationException` and its dictionary stay the same.
+- [x] In each test class add `Handle_PassesCancellationTokenToValidators` (a `MustAsync((x, ct) => ...)` rule captures the token) and `Handle_DoesNotBlockWhileAsyncValidatorIsPending` (calling `Handle` on a worker thread returns within 5 s while the validator awaits a `TaskCompletionSource`; the source is completed afterwards either way); run them red.
+- [x] Replace the `Select(...).Select(r => r.Result)` chain with a loop that awaits `validator.ValidateAsync(context, cancellationToken)` per validator, collecting non-null errors; return `next()` early when there are no validators. The thrown `ValidationException` and its dictionary stay the same.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -f net11.0 --filter "FullyQualifiedName~ValidationCommandBehaviorTests|FullyQualifiedName~ValidationQueryBehaviorTests|FullyQualifiedName~VoidValidationCommandBehaviorTests"`
 Expected: exit 0, "Failed: 0"
 Commit: fix(mediator-validation): await validators with the cancellation token (#256)
@@ -160,4 +160,6 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Task 5: red — both new tests failed ("Failed: 2, Passed: 9").
 - 2026-11-22 Task 5: complete — streaming and mediator filter → "Failed: 0, Passed: 39" (commit 9b6add1).
 - 2026-11-22 Task 6: red — 5 new tests failed ("Failed: 5, Passed: 26"): the parallel strategy alone, the reflection mediator with the parallel strategy and with no strategy, a recording custom strategy (isolates the `Mediator.cs` delegates), and a generated-mediator runtime test with the same recording strategy (isolates the emitter).
-- 2026-11-22 Task 6: complete — see the commit's run (smoke project added to it, because the emitter changed).
+- 2026-11-22 Task 6: complete — notification and generator filter → "Failed: 0, Passed: 76"; smoke → "SMOKE OK: 10 checks passed through GeneratedMediator" (commit a107f73).
+- 2026-11-22 Task 7: red — all 6 new tests failed ("Failed: 6, Passed: 6"); the three "does not block" tests waited their full 5 s.
+- 2026-11-22 Task 7: complete — see the commit's run.
