@@ -120,5 +120,66 @@ namespace Cortex.Tests.Streams.Tests
                 results.Select(r => ((int)(r.WindowStart - T0).TotalSeconds, Values(r))));
             Assert.Equal(3, ((Ev)Assert.Single(late).Item).Value);
         }
+
+        private static IStream<Ev> AdvancedSessions(
+            WatermarkStrategy strategy, WindowConfiguration<Ev> config, List<WindowResult<string, Ev>> results)
+        {
+            var stream = StreamBuilder<Ev>
+                .CreateNewStream("EventTimeAdvancedSessions")
+                .Stream()
+                .WithWatermarks(e => e.Time, strategy)
+                .AdvancedSessionWindow(e => e.Key, e => e.Time, TimeSpan.FromSeconds(10), config)
+                .Sink(r => { lock (results) results.Add(r); })
+                .Build();
+            stream.Start();
+            return stream;
+        }
+
+        [Fact]
+        public void AdvancedSession_MergesOutOfOrderEvents_AndClosesByWatermark()
+        {
+            var results = new List<WindowResult<string, Ev>>();
+            var stream = AdvancedSessions(
+                WatermarkStrategy.BoundedOutOfOrderness(TimeSpan.FromSeconds(20)), new WindowConfiguration<Ev>(), results);
+
+            stream.Emit(At(0, 1));
+            stream.Emit(At(18, 2));   // a second session
+            stream.Emit(At(9, 3));    // bridges both
+            Thread.Sleep(300);        // the wall-clock timer runs every 100 ms
+            Assert.Empty(results);
+
+            stream.Emit(At(60, 4));   // W = 40
+
+            var session = Assert.Single(results);
+            Assert.Equal(new[] { 1, 2, 3 }, Values(session));
+            Assert.Equal(T0, session.WindowStart);
+            Assert.Equal(T0.AddSeconds(28), session.WindowEnd);
+            Assert.Equal(WindowEmissionType.OnTime, session.EmissionType);
+            Assert.True(session.IsFinal);
+        }
+
+        [Fact]
+        public void AdvancedSession_HonoursConfiguredLateness_AndLateCallback()
+        {
+            var configLate = new List<int>();
+            var results = new List<WindowResult<string, Ev>>();
+            var config = WindowConfiguration<Ev>.Create()
+                .WithAllowedLateness(TimeSpan.FromSeconds(10))
+                .OnLateEvent((e, _) => configLate.Add(e.Value))
+                .Build();
+            var stream = AdvancedSessions(WatermarkStrategy.ForMonotonousTimestamps(), config, results);
+
+            stream.Emit(At(0, 1));
+            stream.Emit(At(15, 2, "b"));   // W = 15: session a fires, kept until W > 20
+            stream.Emit(At(3, 3));         // joins the fired session: a late result
+            stream.Emit(At(40, 4, "b"));   // W = 40: a expires, b's first session fires
+            stream.Emit(At(4, 5));         // past the lateness
+
+            Assert.Equal(new[] { new[] { 1 }, new[] { 3 }, new[] { 2 } }, results.Select(Values));
+            Assert.Equal(
+                new[] { WindowEmissionType.OnTime, WindowEmissionType.Late, WindowEmissionType.OnTime },
+                results.Select(r => r.EmissionType));
+            Assert.Equal(new[] { 5 }, configLate);
+        }
     }
 }

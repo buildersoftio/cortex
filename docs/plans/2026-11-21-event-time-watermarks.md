@@ -101,11 +101,11 @@ Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time advanced tumbling and sliding windows
 
 ### Task 5: Event-time mode for advanced session windows
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Streams/Operators/Windows/AdvancedSessionWindowOperator.cs` (modify), `src/Cortex.Tests/Streams/Tests/EventTimeAdvancedWindowTests.cs` (modify)
 Depends on: Task 3, Task 4
-- [ ] Tests first: out-of-order extend and merge as in Task 3; the session honours `AllowedLateness` and `OnLateEvent`; triggers run on watermark time.
-- [ ] Implement, reusing Task 3's session index approach.
+- [x] Tests first: out-of-order extend and merge as in Task 3; the session honours `AllowedLateness` and `OnLateEvent`; triggers run on watermark time.
+- [x] Implement, reusing Task 3's session index approach.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release --filter "FullyQualifiedName~EventTimeAdvancedWindowTests|FullyQualifiedName~AdvancedWindowingTests"`
 Expected: exit 0, `Failed: 0`
 Commit: feat(streams): event-time advanced session windows
@@ -173,6 +173,13 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-21 Task 4: no red run captured — the new tests were run only after the implementation (first run: 4 of 4 new tests passed).
 - 2026-11-21 Task 4: repair 1/3 — `AdvancedWindowingTests.CountTrigger_FiresMultipleTimesInAccumulatingMode` failed once (Expected True, Actual False), then 6/6 green; `UtcNow..UtcNow + 300 ms` in a 10 s window splits across a boundary about 3% of runs → aligned it and its twin `CountTrigger_FiresAfterSpecifiedCount` to a window start (timestamps only).
 - 2026-11-21 Ruling: advanced windows in event time evaluate an allowed-late event at once (emission type Late), report a late event once per event, and remove an expired window's items from the store (event time only; processing time keeps the existing behaviour) — so a late event cannot revive old items — cost if wrong: custom triggers that never purge lose their items after the lateness, as documented.
+- 2026-11-21 Task 4: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeAdvancedWindowTests|FullyQualifiedName~AdvancedWindowingTests"` → Passed! - Failed: 0, Passed: 20
+- 2026-11-21 Task 5: red — `dotnet test ... --filter "FullyQualifiedName~EventTimeAdvancedWindowTests"` → Failed: 2, Passed: 4
+- 2026-11-21 Ruling: event-time advanced sessions run the trigger's OnElement for every element (processing time skips a session's first element), and a session that bridges several fired sessions concatenates their emitted-item lists for Discarding mode — a count trigger must see the first element; bridging fired sessions is rare — cost if wrong: Discarding output after such a bridge can repeat or skip items.
+- 2026-11-21 Task 4: repair 2/3 — the Task 5 gate caught `CountTrigger_FiresMultipleTimesInAccumulatingMode` failing again (Expected 4, Actual 2): the current window can end just after `UtcNow`, so the wall-clock timer purged it mid-test → both count-trigger tests now start at the next window boundary.
+- 2026-11-21 Task 4: repair 3/3 — the next gate caught `DiscardingMode_EmitsOnlyNewItemsSinceLastFiring` (Expected 2, Actual 1), same shape → it and `AccumulatingAndRetractingMode_EmitsRetractions` get the same next-boundary start. Cap: other `UtcNow`-based tests in `AdvancedWindowingTests.cs` (processing-time, early, OR and session triggers) are left as they are; if they flake, they are reported as pre-existing, not chased.
+- 2026-11-21 Cap: `ProcessingTimeTrigger_FiresAtInterval` and `EarlyTrigger_EmitsPartialResultsBeforeWindowCloses` still fail about 1 run in 10 — baseline on v3.2/release@1c6fc24b (temporary worktree, 10 runs of `AdvancedWindowingTests`): `ProcessingTimeTrigger_FiresAtInterval` and `AccumulatingAndRetractingMode_EmitsRetractions` each failed once, so the wall-clock interval flakes predate this branch; left unfixed after 3 repairs, reported.
+- 2026-11-21 Task 5: complete — `dotnet test ... --filter "FullyQualifiedName~EventTimeAdvancedWindowTests|FullyQualifiedName~AdvancedWindowingTests"` → Passed! - Failed: 0, Passed: 22
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.

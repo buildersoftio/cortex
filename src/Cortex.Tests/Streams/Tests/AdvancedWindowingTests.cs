@@ -45,8 +45,8 @@ namespace Cortex.Streams.Tests
             });
             windowOperator.SetNext(sinkOperator);
 
-            // Start at a window boundary so all timestamps fall into the same window
-            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks) * windowSize.Ticks, DateTimeKind.Utc);
+            // Start at the next window boundary: all timestamps fall into one window that cannot close during the test
+            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks + 1) * windowSize.Ticks, DateTimeKind.Utc);
 
             // Act - emit 3 items (should trigger)
             windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
@@ -96,8 +96,8 @@ namespace Cortex.Streams.Tests
             });
             windowOperator.SetNext(sinkOperator);
 
-            // Start at a window boundary so all timestamps fall into the same window
-            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks) * windowSize.Ticks, DateTimeKind.Utc);
+            // Start at the next window boundary: all timestamps fall into one window that cannot close during the test
+            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks + 1) * windowSize.Ticks, DateTimeKind.Utc);
 
             // Act - emit 4 items (should trigger twice in accumulating mode)
             windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
@@ -202,7 +202,8 @@ namespace Cortex.Streams.Tests
             });
             windowOperator.SetNext(sinkOperator);
 
-            var now = DateTime.UtcNow;
+            // Start at the next window boundary: all timestamps fall into one window that cannot close during the test
+            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks + 1) * windowSize.Ticks, DateTimeKind.Utc);
 
             // Act - emit 4 items
             windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
@@ -251,7 +252,8 @@ namespace Cortex.Streams.Tests
             });
             windowOperator.SetNext(sinkOperator);
 
-            var now = DateTime.UtcNow;
+            // Start at the next window boundary: all timestamps fall into one window that cannot close during the test
+            var now = new DateTime((DateTime.UtcNow.Ticks / windowSize.Ticks + 1) * windowSize.Ticks, DateTimeKind.Utc);
 
             // Act - emit 4 items
             windowOperator.Process(new InputData { Key = "A", Value = 1, EventTime = now });
