@@ -23,17 +23,28 @@ namespace Cortex.Mediator.Behaviors
         private readonly ICacheKeyGenerator _cacheKeyGenerator;
         private readonly ILogger<CachingQueryBehavior<TQuery, TResult>> _logger;
         private readonly CachingOptions _options;
+        private readonly CacheInvalidator? _cacheInvalidator;
 
+        /// <param name="cache">The memory cache.</param>
+        /// <param name="cacheKeyGenerator">The cache key generator.</param>
+        /// <param name="logger">The logger.</param>
+        /// <param name="options">The caching options.</param>
+        /// <param name="cacheInvalidator">
+        /// The registered invalidator. When it is the built-in <see cref="CacheInvalidator"/>, cached entries
+        /// carry its per-query-type token so <see cref="ICacheInvalidator.InvalidateAll{TQuery, TResult}"/> removes them.
+        /// </param>
         public CachingQueryBehavior(
             IMemoryCache cache,
             ICacheKeyGenerator cacheKeyGenerator,
             ILogger<CachingQueryBehavior<TQuery, TResult>> logger,
-            IOptions<CachingOptions> options)
+            IOptions<CachingOptions> options,
+            ICacheInvalidator? cacheInvalidator = null)
         {
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _cacheKeyGenerator = cacheKeyGenerator ?? throw new ArgumentNullException(nameof(cacheKeyGenerator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _options = options?.Value ?? new CachingOptions();
+            _cacheInvalidator = cacheInvalidator as CacheInvalidator;
         }
 
         public async Task<TResult> Handle(
@@ -71,6 +82,10 @@ namespace Cortex.Mediator.Behaviors
                 typeof(TQuery).Name,
                 cacheKey);
 
+            // Take the invalidation token before running the query, so an InvalidateAll that happens
+            // while the handler runs also expires this result.
+            var expirationToken = _cacheInvalidator?.GetExpirationToken(typeof(TQuery));
+
             // Execute the query
             var result = await next();
 
@@ -82,6 +97,11 @@ namespace Cortex.Mediator.Behaviors
                     AbsoluteExpirationRelativeToNow = absoluteExpiration,
                     SlidingExpiration = slidingExpiration
                 };
+
+                if (expirationToken != null)
+                {
+                    cacheEntryOptions.AddExpirationToken(expirationToken);
+                }
 
                 _cache.Set(cacheKey, result, cacheEntryOptions);
 

@@ -32,6 +32,26 @@ namespace Cortex.Mediator.DependencyInjection
         }
 
         /// <summary>
+        /// Adds exception handling behaviors for commands, queries, and notifications, and configures them.
+        /// Exception handlers can be registered separately in the DI container.
+        /// </summary>
+        /// <param name="options">The mediator options.</param>
+        /// <param name="configure">
+        /// Configures <see cref="ExceptionHandlingOptions"/>, for example
+        /// <c>o => o.SuppressNotificationExceptions = true</c>.
+        /// </param>
+        public static MediatorOptions AddExceptionHandlingBehaviors(
+            this MediatorOptions options,
+            System.Action<ExceptionHandlingOptions> configure)
+        {
+            if (configure == null)
+                throw new System.ArgumentNullException(nameof(configure));
+
+            options.ExceptionHandlingConfiguration += configure;
+            return options.AddExceptionHandlingBehaviors();
+        }
+
+        /// <summary>
         /// Adds caching behavior for queries.
         /// Queries must implement ICacheableQuery or be decorated with [Cacheable] attribute.
         /// </summary>

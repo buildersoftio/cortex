@@ -6,6 +6,32 @@ using Moq;
 
 namespace Cortex.Tests.Mediator.FluentValidation.Tests
 {
+    // Validator whose async rule records the cancellation token it receives.
+    public class TokenCapturingValidator<T> : AbstractValidator<T>
+    {
+        public CancellationToken Seen { get; private set; }
+
+        public TokenCapturingValidator()
+        {
+            RuleFor(x => x).MustAsync((x, ct) =>
+            {
+                Seen = ct;
+                return Task.FromResult(true);
+            });
+        }
+    }
+
+    // Validator whose async rule stays pending until Gate is completed.
+    public class PendingValidator<T> : AbstractValidator<T>
+    {
+        public TaskCompletionSource<bool> Gate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public PendingValidator()
+        {
+            RuleFor(x => x).MustAsync((x, ct) => Gate.Task);
+        }
+    }
+
     public class ValidationCommandBehaviorTests
     {
         public class FakeCommand : ICommand<string>
@@ -65,6 +91,40 @@ namespace Cortex.Tests.Mediator.FluentValidation.Tests
             // Act
             // Assert
             await Assert.ThrowsAsync<Cortex.Mediator.Exceptions.ValidationException>(async () => await systemUnderTest.Handle(new FakeCommand(), next.Object, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task Handle_PassesCancellationTokenToValidators()
+        {
+            // Arrange
+            var validator = new TokenCapturingValidator<FakeCommand>();
+            var systemUnderTest = new ValidationCommandBehavior<FakeCommand, string>(new IValidator<FakeCommand>[] { validator });
+            using var cts = new CancellationTokenSource();
+
+            // Act
+            await systemUnderTest.Handle(new FakeCommand(), () => Task.FromResult("completed"), cts.Token);
+
+            // Assert
+            Assert.Equal(cts.Token, validator.Seen);
+        }
+
+        [Fact]
+        public async Task Handle_DoesNotBlockWhileAsyncValidatorIsPending()
+        {
+            // Arrange
+            var validator = new PendingValidator<FakeCommand>();
+            var systemUnderTest = new ValidationCommandBehavior<FakeCommand, string>(new IValidator<FakeCommand>[] { validator });
+            Task<string>? handleTask = null;
+
+            // Act: Handle must return a pending task instead of blocking the calling thread
+            var call = Task.Run(() => { handleTask = systemUnderTest.Handle(new FakeCommand(), () => Task.FromResult("completed"), CancellationToken.None); });
+            var returnedWhilePending = call.Wait(TimeSpan.FromSeconds(5));
+            validator.Gate.SetResult(true);
+            await call;
+
+            // Assert
+            Assert.True(returnedWhilePending);
+            Assert.Equal("completed", await handleTask!);
         }
     }
 }

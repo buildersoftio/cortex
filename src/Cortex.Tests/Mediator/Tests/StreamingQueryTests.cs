@@ -270,5 +270,67 @@ namespace Cortex.Tests.Mediator.Tests
             Assert.Throws<ArgumentNullException>(() =>
                 mediator.CreateStream<UserItem>(null!));
         }
+
+        public class UnhandledStreamQuery : IStreamQuery<int>
+        {
+        }
+
+        public class GuardedStreamQuery : IStreamQuery<int>
+        {
+        }
+
+        public class GuardedStreamQueryHandler : IStreamQueryHandler<GuardedStreamQuery, int>
+        {
+            public async IAsyncEnumerable<int> Handle(
+                GuardedStreamQuery query,
+                [EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                await Task.Yield();
+                yield return 1;
+            }
+        }
+
+        // Throws while the pipeline is being built, before any enumeration.
+        public class ThrowingStreamBehavior : IStreamQueryPipelineBehavior<GuardedStreamQuery, int>
+        {
+            public IAsyncEnumerable<int> Handle(
+                GuardedStreamQuery query,
+                StreamQueryHandlerDelegate<int> next,
+                CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException("guard failed");
+            }
+        }
+
+        [Fact]
+        public void CreateStream_RuntimeTyped_WithoutHandler_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            var provider = CreateServiceProvider();
+            var mediator = provider.GetRequiredService<IMediator>();
+
+            // Act & Assert: the DI error itself, not a reflection wrapper
+            Assert.Throws<InvalidOperationException>(() =>
+                mediator.CreateStream(new UnhandledStreamQuery()));
+        }
+
+        [Fact]
+        public void CreateStream_RuntimeTyped_BehaviorThrowsSynchronously_ThrowsOriginalException()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddSingleton<IMediator, Cortex.Mediator.Mediator>();
+            services.AddTransient<IStreamQueryHandler<GuardedStreamQuery, int>, GuardedStreamQueryHandler>();
+            services.AddTransient<IStreamQueryPipelineBehavior<GuardedStreamQuery, int>, ThrowingStreamBehavior>();
+            var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
+
+            // Act
+            var ex = Assert.Throws<NotSupportedException>(() =>
+                mediator.CreateStream(new GuardedStreamQuery()));
+
+            // Assert: the original stack trace is kept
+            Assert.Equal("guard failed", ex.Message);
+            Assert.Contains(nameof(ThrowingStreamBehavior), ex.StackTrace);
+        }
     }
 }

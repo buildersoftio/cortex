@@ -65,5 +65,39 @@ namespace Cortex.Tests.Mediator.FluentValidation.Tests
             // Assert
             await Assert.ThrowsAsync<Cortex.Mediator.Exceptions.ValidationException>(async () => await systemUnderTest.Handle(new FakeQuery(), next.Object, CancellationToken.None));
         }
+
+        [Fact]
+        public async Task Handle_PassesCancellationTokenToValidators()
+        {
+            // Arrange
+            var validator = new TokenCapturingValidator<FakeQuery>();
+            var systemUnderTest = new ValidationQueryBehavior<FakeQuery, string>(new IValidator<FakeQuery>[] { validator });
+            using var cts = new CancellationTokenSource();
+
+            // Act
+            await systemUnderTest.Handle(new FakeQuery(), () => Task.FromResult("completed"), cts.Token);
+
+            // Assert
+            Assert.Equal(cts.Token, validator.Seen);
+        }
+
+        [Fact]
+        public async Task Handle_DoesNotBlockWhileAsyncValidatorIsPending()
+        {
+            // Arrange
+            var validator = new PendingValidator<FakeQuery>();
+            var systemUnderTest = new ValidationQueryBehavior<FakeQuery, string>(new IValidator<FakeQuery>[] { validator });
+            Task<string>? handleTask = null;
+
+            // Act: Handle must return a pending task instead of blocking the calling thread
+            var call = Task.Run(() => { handleTask = systemUnderTest.Handle(new FakeQuery(), () => Task.FromResult("completed"), CancellationToken.None); });
+            var returnedWhilePending = call.Wait(TimeSpan.FromSeconds(5));
+            validator.Gate.SetResult(true);
+            await call;
+
+            // Assert
+            Assert.True(returnedWhilePending);
+            Assert.Equal("completed", await handleTask!);
+        }
     }
 }

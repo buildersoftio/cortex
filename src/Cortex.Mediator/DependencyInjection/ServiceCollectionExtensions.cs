@@ -1,3 +1,4 @@
+using Cortex.Mediator.Behaviors;
 using Cortex.Mediator.Commands;
 using Cortex.Mediator.Notifications;
 using Cortex.Mediator.Processors;
@@ -5,6 +6,7 @@ using Cortex.Mediator.Queries;
 using Cortex.Mediator.Streaming;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,7 +42,7 @@ namespace Cortex.Mediator.DependencyInjection
             IEnumerable<Type> assemblyMarkerTypes,
             MediatorOptions options)
         {
-            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
+            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).Distinct().ToArray();
             var lifetime = options.HandlerLifetime;
 
             ScanAndRegister(services, assemblies, typeof(ICommandHandler<,>), options.OnlyPublicClasses, lifetime);
@@ -61,7 +63,7 @@ namespace Cortex.Mediator.DependencyInjection
             IEnumerable<Type> assemblyMarkerTypes,
             MediatorOptions options)
         {
-            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).ToArray();
+            var assemblies = assemblyMarkerTypes.Select(t => t.Assembly).Distinct().ToArray();
 
             // Register pre-processors
             ScanAndRegister(services, assemblies, typeof(IRequestPreProcessor<>), options.OnlyPublicClasses, ServiceLifetime.Transient);
@@ -103,9 +105,11 @@ namespace Cortex.Mediator.DependencyInjection
                         .Where(i => i.IsGenericType &&
                                     i.GetGenericTypeDefinition() == openGenericInterface);
 
+                    // TryAddEnumerable: a type found again (another marker in the same assembly,
+                    // or a second AddCortexMediator call) is not registered twice.
                     foreach (var serviceType in matchingInterfaces)
                     {
-                        services.Add(new ServiceDescriptor(serviceType, type, lifetime));
+                        services.TryAddEnumerable(new ServiceDescriptor(serviceType, type, lifetime));
                     }
                 }
             }
@@ -113,67 +117,65 @@ namespace Cortex.Mediator.DependencyInjection
 
         public static void RegisterPipelineBehaviors(IServiceCollection services, MediatorOptions options)
         {
+            // Options given to AddExceptionHandlingBehaviors(configure); the behaviors read them through IOptions.
+            if (options.ExceptionHandlingConfiguration != null)
+            {
+                services.Configure<ExceptionHandlingOptions>(options.ExceptionHandlingConfiguration);
+            }
+
             // Sort each behavior list by Order (stable sort preserves registration order for equal values).
             // OrderBy in LINQ is a stable sort.
 
             // Command behaviors
             foreach (var (behaviorType, _) in options.CommandBehaviors.OrderBy(b => b.Order))
             {
-                services.AddTransient(typeof(ICommandPipelineBehavior<,>), behaviorType);
+                RegisterBehavior(services, typeof(ICommandPipelineBehavior<,>), behaviorType);
             }
 
             // feature #141 - Register non-returning command pipeline behaviors
             foreach (var (behaviorType, _) in options.VoidCommandBehaviors.OrderBy(b => b.Order))
             {
-                services.AddTransient(typeof(ICommandPipelineBehavior<>), behaviorType);
+                RegisterBehavior(services, typeof(ICommandPipelineBehavior<>), behaviorType);
             }
 
             // Query behaviors
             foreach (var (behaviorType, _) in options.QueryBehaviors.OrderBy(b => b.Order))
             {
-                if (behaviorType.IsGenericTypeDefinition)
-                {
-                    // Open generic behavior - register against open generic interface
-                    services.AddTransient(typeof(IQueryPipelineBehavior<,>), behaviorType);
-                }
-                else
-                {
-                    // Closed behavior - find and register against specific implemented interfaces
-                    var implementedInterfaces = behaviorType.GetInterfaces()
-                        .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IQueryPipelineBehavior<,>));
-
-                    foreach (var iface in implementedInterfaces)
-                    {
-                        services.AddTransient(iface, behaviorType);
-                    }
-                }
+                RegisterBehavior(services, typeof(IQueryPipelineBehavior<,>), behaviorType);
             }
 
             // Notification behaviors
             foreach (var (behaviorType, _) in options.NotificationBehaviors.OrderBy(b => b.Order))
             {
-                if (behaviorType.IsGenericTypeDefinition)
-                {
-                    // Open generic behavior - register against open generic interface
-                    services.AddTransient(typeof(INotificationPipelineBehavior<>), behaviorType);
-                }
-                else
-                {
-                    // Closed behavior - find and register against specific implemented interfaces
-                    var implementedInterfaces = behaviorType.GetInterfaces()
-                        .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(INotificationPipelineBehavior<>));
-
-                    foreach (var iface in implementedInterfaces)
-                    {
-                        services.AddTransient(iface, behaviorType);
-                    }
-                }
+                RegisterBehavior(services, typeof(INotificationPipelineBehavior<>), behaviorType);
             }
 
             // Stream query behaviors
             foreach (var (behaviorType, _) in options.StreamQueryBehaviors.OrderBy(b => b.Order))
             {
-                services.AddTransient(typeof(IStreamQueryPipelineBehavior<,>), behaviorType);
+                RegisterBehavior(services, typeof(IStreamQueryPipelineBehavior<,>), behaviorType);
+            }
+        }
+
+        /// <summary>
+        /// Registers an open generic behavior against the open generic interface, and a closed behavior
+        /// against each closed form of that interface it implements. A behavior that is already registered
+        /// for a service type is not registered again, so it never runs twice in one pipeline.
+        /// </summary>
+        private static void RegisterBehavior(IServiceCollection services, Type openGenericInterface, Type behaviorType)
+        {
+            if (behaviorType.IsGenericTypeDefinition)
+            {
+                services.TryAddEnumerable(ServiceDescriptor.Transient(openGenericInterface, behaviorType));
+                return;
+            }
+
+            var implementedInterfaces = behaviorType.GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == openGenericInterface);
+
+            foreach (var iface in implementedInterfaces)
+            {
+                services.TryAddEnumerable(ServiceDescriptor.Transient(iface, behaviorType));
             }
         }
     }

@@ -206,6 +206,52 @@ namespace Cortex.Tests.Mediator.Tests
         }
 
         [Fact]
+        public async Task InvalidateAll_RemovesEveryCachedResultOfThatQueryType()
+        {
+            // Arrange
+            var provider = CreateServiceProvider();
+            var mediator = provider.GetRequiredService<IMediator>();
+            var userHandler = provider.GetRequiredService<GetUserQueryHandler>();
+            var productHandler = provider.GetRequiredService<GetProductQueryHandler>();
+            var invalidator = provider.GetRequiredService<ICacheInvalidator>();
+
+            await mediator.QueryAsync(new GetUserQuery { UserId = 1 });
+            await mediator.QueryAsync(new GetUserQuery { UserId = 2 });
+            await mediator.QueryAsync(new GetProductQuery { ProductId = 1 });
+
+            // Act
+            invalidator.InvalidateAll<GetUserQuery, UserDto>();
+
+            await mediator.QueryAsync(new GetUserQuery { UserId = 1 });
+            await mediator.QueryAsync(new GetUserQuery { UserId = 2 });
+            await mediator.QueryAsync(new GetProductQuery { ProductId = 1 });
+
+            // Assert: both user queries ran again; the product query is still cached
+            Assert.Equal(4, userHandler.ExecutionCount);
+            Assert.Equal(1, productHandler.ExecutionCount);
+        }
+
+        [Fact]
+        public async Task InvalidateAll_ThenNewResults_AreCachedAgain()
+        {
+            // Arrange
+            var provider = CreateServiceProvider();
+            var mediator = provider.GetRequiredService<IMediator>();
+            var handler = provider.GetRequiredService<GetUserQueryHandler>();
+            var invalidator = provider.GetRequiredService<ICacheInvalidator>();
+
+            await mediator.QueryAsync(new GetUserQuery { UserId = 1 });
+            invalidator.InvalidateAll<GetUserQuery, UserDto>();
+
+            // Act
+            await mediator.QueryAsync(new GetUserQuery { UserId = 1 });
+            await mediator.QueryAsync(new GetUserQuery { UserId = 1 });
+
+            // Assert: one run before, one after invalidation, then a cache hit
+            Assert.Equal(2, handler.ExecutionCount);
+        }
+
+        [Fact]
         public void AddMediatorCaching_ShouldRegisterServices()
         {
             // Arrange

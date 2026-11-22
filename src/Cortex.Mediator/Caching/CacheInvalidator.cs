@@ -1,8 +1,9 @@
 using Cortex.Mediator.Queries;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
+using System.Threading;
 
 namespace Cortex.Mediator.Caching
 {
@@ -36,11 +37,16 @@ namespace Cortex.Mediator.Caching
     /// <summary>
     /// Default implementation of cache invalidator using IMemoryCache.
     /// </summary>
+    /// <remarks>
+    /// <see cref="InvalidateAll{TQuery, TResult}"/> works for entries cached by <c>CachingQueryBehavior</c>
+    /// while this instance is the registered <see cref="ICacheInvalidator"/>: the behavior attaches a
+    /// per-query-type expiration token to each entry, and <c>InvalidateAll</c> cancels that token.
+    /// </remarks>
     public class CacheInvalidator : ICacheInvalidator
     {
         private readonly IMemoryCache _cache;
         private readonly ICacheKeyGenerator _cacheKeyGenerator;
-        private readonly ConcurrentDictionary<string, HashSet<string>> _keysByType = new();
+        private readonly ConcurrentDictionary<Type, CancellationTokenSource> _tokenSources = new();
 
         public CacheInvalidator(IMemoryCache cache, ICacheKeyGenerator cacheKeyGenerator)
         {
@@ -56,14 +62,11 @@ namespace Cortex.Mediator.Caching
 
         public void InvalidateAll<TQuery, TResult>() where TQuery : IQuery<TResult>
         {
-            var typeName = typeof(TQuery).Name;
-            if (_keysByType.TryGetValue(typeName, out var keys))
+            // The next GetExpirationToken call creates a fresh source, so later entries are cached again.
+            // The removed source is not disposed: an entry being cached right now may still register on its token.
+            if (_tokenSources.TryRemove(typeof(TQuery), out var source))
             {
-                foreach (var key in keys)
-                {
-                    _cache.Remove(key);
-                }
-                keys.Clear();
+                source.Cancel();
             }
         }
 
@@ -76,16 +79,14 @@ namespace Cortex.Mediator.Caching
         }
 
         /// <summary>
-        /// Tracks a cache key for a specific query type (for bulk invalidation).
+        /// Returns the token that expires every cached result of the given query type when
+        /// <see cref="InvalidateAll{TQuery, TResult}"/> is called for it.
         /// This method is called internally by the caching behavior.
         /// </summary>
-        internal void TrackKey(string queryTypeName, string cacheKey)
+        internal IChangeToken GetExpirationToken(Type queryType)
         {
-            var keys = _keysByType.GetOrAdd(queryTypeName, _ => new HashSet<string>());
-            lock (keys)
-            {
-                keys.Add(cacheKey);
-            }
+            var source = _tokenSources.GetOrAdd(queryType, _ => new CancellationTokenSource());
+            return new CancellationChangeToken(source.Token);
         }
     }
 }
