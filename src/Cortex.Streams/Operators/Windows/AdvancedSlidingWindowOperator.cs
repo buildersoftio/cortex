@@ -1,6 +1,7 @@
 using Cortex.States;
 using Cortex.States.Operators;
 using Cortex.Streams.Operators.Windows.Triggers;
+using Cortex.Streams.Watermarks;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
@@ -13,10 +14,20 @@ namespace Cortex.Streams.Operators.Windows
     /// <summary>
     /// An advanced sliding window operator with support for custom triggers and state modes.
     /// </summary>
+    /// <remarks>
+    /// Downstream of <c>WithWatermarks</c> the operator works in event time: triggers receive the watermark wherever they
+    /// would receive the processing time, so the default trigger fires when the watermark reaches the window end and
+    /// interval triggers measure event time. Lateness is checked per window: an event still goes into its open windows,
+    /// fires an allowed-late window at once as <see cref="WindowEmissionType.Late"/>, and is reported as late once if
+    /// any of its windows had already expired. <see cref="WindowConfiguration{TInput}.AllowedLateness"/> and
+    /// <see cref="WindowConfiguration{TInput}.OnLateEvent"/> take precedence over the stream's watermark strategy when set.
+    /// </remarks>
     /// <typeparam name="TInput">The type of the input items.</typeparam>
     /// <typeparam name="TKey">The type of the key used to partition windows.</typeparam>
-    public class AdvancedSlidingWindowOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled, IDisposable
+    public class AdvancedSlidingWindowOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled, IWatermarkAware, IDisposable
     {
+        private static readonly string OperatorName = $"AdvancedSlidingWindowOperator<{typeof(TInput).Name}>";
+
         private readonly Func<TInput, TKey> _keySelector;
         private readonly Func<TInput, DateTime> _timestampSelector;
         private readonly TimeSpan _windowSize;
@@ -37,6 +48,11 @@ namespace Cortex.Streams.Operators.Windows
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
 
+        // Event time, guarded by _lock: null until the stream enables it
+        private EventTimeContext _eventTime;
+        private long _latenessTicks;
+        private long _watermarkTicks;
+
         /// <summary>
         /// Internal window state tracking.
         /// </summary>
@@ -48,6 +64,9 @@ namespace Cortex.Streams.Operators.Windows
             public int EmissionSequence { get; set; }
             public List<TInput> LastEmittedItems { get; set; }
             public bool HasFired { get; set; }
+
+            // Event time: the final result was emitted, and the window waits for allowed-late events until its cleanup
+            public bool FinalFired { get; set; }
         }
 
         /// <summary>
@@ -150,19 +169,32 @@ namespace Cortex.Streams.Operators.Windows
             var key = _keySelector(typedInput);
             var timestamp = _timestampSelector(typedInput);
             var now = DateTime.UtcNow;
+            var late = false;
+            long watermarkTicks = 0;
 
             // Calculate all windows that this item belongs to
             var windowStarts = GetWindowStarts(timestamp);
 
             lock (_lock)
             {
+                var eventTime = _eventTime != null;
+                watermarkTicks = _watermarkTicks;
+
                 foreach (var windowStart in windowStarts)
                 {
                     var windowEnd = windowStart + _windowSize;
                     var windowKey = GetWindowKey(key, windowStart);
 
                     // Check for late data
-                    if (now > windowEnd + _config.AllowedLateness)
+                    if (eventTime)
+                    {
+                        if (windowEnd.Ticks + _latenessTicks <= watermarkTicks)
+                        {
+                            late = true;
+                            continue;
+                        }
+                    }
+                    else if (now > windowEnd + _config.AllowedLateness)
                     {
                         _config.OnLateEvent?.Invoke(typedInput, timestamp);
                         continue;
@@ -175,7 +207,7 @@ namespace Cortex.Streams.Operators.Windows
                         {
                             WindowStart = windowStart,
                             WindowEnd = windowEnd,
-                            TriggerContext = new TriggerContext<TInput>(windowKey, () => _stateStore.Get(windowKey)?.Count ?? 0),
+                            TriggerContext = new TriggerContext<TInput>(windowKey, () => _stateStore.Get(windowKey)?.Count ?? 0, CurrentTime),
                             EmissionSequence = 0,
                             LastEmittedItems = new List<TInput>()
                         };
@@ -190,7 +222,69 @@ namespace Cortex.Streams.Operators.Windows
                     // Evaluate trigger on element
                     var triggerResult = _config.Trigger.OnElement(typedInput, timestamp, windowStart, windowEnd, windowState.TriggerContext);
                     HandleTriggerResult(triggerResult, windowKey, windowState, key.ToString(), isOnTime: false);
+
+                    // An allowed-late event for a window the watermark has passed: evaluate it now, as a late result
+                    if (eventTime && windowEnd.Ticks <= watermarkTicks && _windowStates.TryGetValue(windowKey, out windowState))
+                    {
+                        var watermark = new DateTime(watermarkTicks, DateTimeKind.Utc);
+                        var lateResult = _config.Trigger.OnProcessingTime(watermark, windowStart, windowEnd, windowState.TriggerContext);
+                        HandleTriggerResult(lateResult, windowKey, windowState, key.ToString(), isOnTime: false);
+                    }
                 }
+            }
+
+            if (late)
+            {
+                ReportLateEvent(typedInput, timestamp, watermarkTicks);
+            }
+        }
+
+        // The trigger's notion of now: the wall clock, or the watermark in event time
+        private DateTime CurrentTime()
+        {
+            return _eventTime != null ? new DateTime(_watermarkTicks, DateTimeKind.Utc) : DateTime.UtcNow;
+        }
+
+        private void ReportLateEvent(TInput item, DateTime timestamp, long watermarkTicks)
+        {
+            if (_config.OnLateEvent != null)
+            {
+                _eventTime.InvokeLateCallback(() => _config.OnLateEvent(item, timestamp), OperatorName);
+            }
+            else
+            {
+                _eventTime.ReportLateEvent(item, timestamp, new DateTime(watermarkTicks, DateTimeKind.Utc), OperatorName);
+            }
+        }
+
+        /// <inheritdoc />
+        public void EnableEventTime(EventTimeContext context)
+        {
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
+
+            lock (_lock)
+            {
+                var lateness = _config.AllowedLateness > TimeSpan.Zero ? _config.AllowedLateness : context.AllowedLateness;
+                _latenessTicks = Math.Min(lateness.Ticks, WatermarkStrategy.MaxLateness.Ticks);
+                _eventTime = context;
+
+                // Triggers run on the watermark from now on
+                _windowTimer?.Dispose();
+                _windowTimer = null;
+            }
+        }
+
+        /// <inheritdoc />
+        public void OnWatermark(DateTime watermark)
+        {
+            lock (_lock)
+            {
+                if (_eventTime == null || watermark.Ticks <= _watermarkTicks)
+                    return;
+
+                _watermarkTicks = watermark.Ticks;
+                EvaluateWindowsAt(watermark, TimeSpan.FromTicks(_latenessTicks));
             }
         }
 
@@ -232,16 +326,29 @@ namespace Cortex.Streams.Operators.Windows
 
         private void EvaluateWindows(object state)
         {
-            var now = DateTime.UtcNow;
-            List<string> windowsToRemove = new List<string>();
-
             lock (_lock)
             {
-                foreach (var kvp in _windowStates.ToList())
-                {
-                    var windowKey = kvp.Key;
-                    var windowState = kvp.Value;
+                // A tick already running when event time was enabled
+                if (_eventTime != null)
+                    return;
 
+                EvaluateWindowsAt(DateTime.UtcNow, _config.AllowedLateness);
+            }
+        }
+
+        // Called under _lock with the wall clock or the watermark
+        private void EvaluateWindowsAt(DateTime now, TimeSpan allowedLateness)
+        {
+            List<string> windowsToRemove = new List<string>();
+
+            foreach (var kvp in _windowStates.ToList())
+            {
+                var windowKey = kvp.Key;
+                var windowState = kvp.Value;
+
+                // A window kept after its final result only waits for allowed-late events and its cleanup
+                if (!windowState.FinalFired)
+                {
                     // Evaluate processing time trigger
                     var triggerResult = _config.Trigger.OnProcessingTime(now, windowState.WindowStart, windowState.WindowEnd, windowState.TriggerContext);
 
@@ -251,18 +358,24 @@ namespace Cortex.Streams.Operators.Windows
 
                     var isOnTime = now >= windowState.WindowEnd;
                     HandleTriggerResult(triggerResult, windowKey, windowState, keyString, isOnTime);
-
-                    // Remove window if it's past allowed lateness
-                    if (now > windowState.WindowEnd + _config.AllowedLateness && windowState.HasFired)
-                    {
-                        windowsToRemove.Add(windowKey);
-                    }
                 }
 
-                // Clean up old windows
-                foreach (var windowKey in windowsToRemove)
+                // Remove window if it's past allowed lateness; in event time also when its trigger never fired
+                if (now.Ticks > windowState.WindowEnd.Ticks + allowedLateness.Ticks && (windowState.HasFired || _eventTime != null))
                 {
-                    _windowStates.Remove(windowKey);
+                    windowsToRemove.Add(windowKey);
+                }
+            }
+
+            // Clean up old windows
+            foreach (var windowKey in windowsToRemove)
+            {
+                _windowStates.Remove(windowKey);
+
+                // In event time an expired window's items go too, so a late event cannot revive them
+                if (_eventTime != null)
+                {
+                    _stateStore.Remove(windowKey);
                 }
             }
         }
@@ -343,11 +456,22 @@ namespace Cortex.Streams.Operators.Windows
 
             windowState.HasFired = true;
 
-            // Purge state if required
+            // Purge state if required; in event time a final result keeps the window until its allowed lateness ends,
+            // so a late correction still has the earlier items
             if (result == TriggerResult.FireAndPurge)
             {
-                _stateStore.Remove(windowKey);
-                _windowStates.Remove(windowKey);
+                // Only a result at or after the window end is final; a trigger may purge earlier, and the window starts over
+                if (_eventTime != null
+                    && _watermarkTicks >= windowState.WindowEnd.Ticks
+                    && _watermarkTicks < windowState.WindowEnd.Ticks + _latenessTicks)
+                {
+                    windowState.FinalFired = true;
+                }
+                else
+                {
+                    _stateStore.Remove(windowKey);
+                    _windowStates.Remove(windowKey);
+                }
             }
         }
 

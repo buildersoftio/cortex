@@ -39,6 +39,8 @@ When an event arrives on one side, it is buffered and matched against every **un
 
 Unmatched events are handled by a cleanup timer that runs every `CleanupInterval` (default 30 seconds). An event is removed once it is older than `WindowSize + GracePeriod`; for left, right and outer joins an unmatched one is then emitted with `default` (`null` for classes and records) for the missing side. These results are passed downstream **on the timer thread**, each through the stream's error handling (`WithErrorHandling`): `Skip` drops that result, `Retry` retries it, and `Stop` stops the stream. An exception that error handling does not handle is written to `System.Diagnostics.Trace` and the next unmatched event continues; it never escapes the timer.
 
+This describes processing time. When the join follows `WithWatermarks`, it works in **event time** instead: events match when their timestamps are less than `WindowSize` apart, however old they are, and expire by the smaller of the two sides' watermarks. See [Event Time and Watermarks](Event-Time-and-Watermarks.md#stream-stream-joins).
+
 ## Join Types
 
 | Join type | Unmatched left event | Unmatched right event | How to configure |
@@ -576,7 +578,7 @@ app.MapPost("/webhook", (WebhookEvent webhookEvent) =>
    - Too small: legitimate matches are missed.
    - Too large: more memory, and unmatched events are reported later.
 
-2. **Use UTC timestamps that are close to the current time.** Expiry is measured against `DateTime.UtcNow`, so local times or old event times make events expire early or never match.
+2. **Use UTC timestamps that are close to the current time.** Expiry is measured against `DateTime.UtcNow`, so local times or old event times make events expire early or never match. To join replayed or delayed events, put `WithWatermarks` before the join ([Event Time and Watermarks](Event-Time-and-Watermarks.md)).
 
 3. **Allow for late data:**
    ```csharp

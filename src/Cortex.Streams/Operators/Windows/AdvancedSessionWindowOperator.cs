@@ -1,6 +1,7 @@
 using Cortex.States;
 using Cortex.States.Operators;
 using Cortex.Streams.Operators.Windows.Triggers;
+using Cortex.Streams.Watermarks;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Generic;
@@ -13,10 +14,21 @@ namespace Cortex.Streams.Operators.Windows
     /// <summary>
     /// An advanced session window operator with support for custom triggers and state modes.
     /// </summary>
+    /// <remarks>
+    /// Downstream of <c>WithWatermarks</c> sessions work in event time, as in <see cref="SessionWindowOperator{TInput, TKey}"/>:
+    /// overlapping event intervals merge, so out-of-order events extend or bridge sessions. Triggers receive the watermark
+    /// wherever they would receive the processing time and run on every element. A session fires its final result when
+    /// its trigger purges or the watermark passes its last activity plus the gap; an event that joins it within the
+    /// allowed lateness fires a <see cref="WindowEmissionType.Late"/> result, and later events are dropped and reported.
+    /// <see cref="WindowConfiguration{TInput}.AllowedLateness"/> and <see cref="WindowConfiguration{TInput}.OnLateEvent"/>
+    /// take precedence over the stream's watermark strategy when set.
+    /// </remarks>
     /// <typeparam name="TInput">The type of the input items.</typeparam>
     /// <typeparam name="TKey">The type of the key used to partition sessions.</typeparam>
-    public class AdvancedSessionWindowOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled, IDisposable
+    public class AdvancedSessionWindowOperator<TInput, TKey> : IOperator, IStatefulOperator, ITelemetryEnabled, IWatermarkAware, IDisposable
     {
+        private static readonly string OperatorName = $"AdvancedSessionWindowOperator<{typeof(TInput).Name}>";
+
         private readonly Func<TInput, TKey> _keySelector;
         private readonly Func<TInput, DateTime> _timestampSelector;
         private readonly TimeSpan _inactivityGap;
@@ -34,6 +46,13 @@ namespace Cortex.Streams.Operators.Windows
         private ITracer _tracer;
         private Action _incrementProcessedCounter;
         private Action<double> _recordProcessingTime;
+
+        // Event time, guarded by _lock: null until the stream enables it
+        private EventTimeContext _eventTime;
+        private long _latenessTicks;
+        private long _watermarkTicks;
+        private readonly Dictionary<string, List<string>> _sessionsByKey = new Dictionary<string, List<string>>();
+        private readonly HashSet<string> _firedSessions = new HashSet<string>();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AdvancedSessionWindowOperator{TInput, TKey}"/> class.
@@ -125,6 +144,13 @@ namespace Cortex.Streams.Operators.Windows
             var typedInput = (TInput)input;
             var key = _keySelector(typedInput);
             var timestamp = _timestampSelector(typedInput);
+
+            if (Volatile.Read(ref _eventTime) != null)
+            {
+                ProcessEventTime(typedInput, key.ToString(), timestamp);
+                return;
+            }
+
             var sessionKey = GetSessionKey(key);
 
             lock (_lock)
@@ -199,7 +225,235 @@ namespace Cortex.Streams.Operators.Windows
             return $"session_{key}";
         }
 
-        private void EmitSession(string sessionKey, AdvancedSessionState<TInput> session, bool isFinal)
+        private void ProcessEventTime(TInput item, string key, DateTime timestamp)
+        {
+            bool late;
+            long watermarkTicks;
+
+            lock (_lock)
+            {
+                watermarkTicks = _watermarkTicks;
+                late = timestamp.Ticks + _inactivityGap.Ticks + _latenessTicks < watermarkTicks;
+
+                if (!late)
+                {
+                    AddToSessions(item, key, timestamp, watermarkTicks);
+                }
+            }
+
+            if (late)
+            {
+                if (_config.OnLateEvent != null)
+                {
+                    _eventTime.InvokeLateCallback(() => _config.OnLateEvent(item, timestamp), OperatorName);
+                }
+                else
+                {
+                    _eventTime.ReportLateEvent(item, timestamp, new DateTime(watermarkTicks, DateTimeKind.Utc), OperatorName);
+                }
+            }
+        }
+
+        // Called under _lock: merges the event with every session its interval overlaps, then runs the trigger
+        private void AddToSessions(TInput item, string key, DateTime timestamp, long watermarkTicks)
+        {
+            var overlapping = new List<(string Key, AdvancedSessionState<TInput> Session)>();
+            if (_sessionsByKey.TryGetValue(key, out var existingKeys))
+            {
+                foreach (var existingKey in existingKeys.ToList())
+                {
+                    var existing = _stateStore.Get(existingKey);
+
+                    // Sessions of one key never overlap each other, so comparing with the event's interval is enough
+                    if (existing != null
+                        && timestamp <= existing.LastActivityTime + _inactivityGap
+                        && existing.StartTime <= timestamp + _inactivityGap)
+                    {
+                        overlapping.Add((existingKey, existing));
+                    }
+                }
+            }
+
+            string sessionKey;
+            AdvancedSessionState<TInput> session;
+            var wasFired = overlapping.Any(o => _firedSessions.Contains(o.Key));
+
+            if (overlapping.Count == 1)
+            {
+                // Extend the one session in place, keeping its trigger and emission state
+                (sessionKey, session) = overlapping[0];
+                session.Items.Add(item);
+                if (timestamp < session.StartTime) session.StartTime = timestamp;
+                if (timestamp > session.LastActivityTime) session.LastActivityTime = timestamp;
+            }
+            else
+            {
+                var ordered = overlapping.OrderBy(o => o.Session.StartTime).ToList();
+                foreach (var o in ordered)
+                {
+                    RemoveEventTimeSession(o.Key);
+                }
+
+                // A unique key: a durable store may still hold sessions of an earlier run
+                sessionKey = $"session_{key}_{Guid.NewGuid():N}";
+                var newKey = sessionKey;
+                var items = ordered.SelectMany(o => o.Session.Items).ToList();
+                items.Add(item);
+                session = new AdvancedSessionState<TInput>
+                {
+                    Key = key,
+                    StartTime = ordered.Count > 0 ? new[] { timestamp, ordered[0].Session.StartTime }.Min() : timestamp,
+                    LastActivityTime = ordered.Count > 0 ? ordered.Max(o => o.Session.LastActivityTime) : timestamp,
+                    Items = items,
+                    TriggerContext = new TriggerContext<TInput>(newKey, () => _stateStore.Get(newKey)?.Items?.Count ?? 0, CurrentTime),
+                    EmissionSequence = ordered.Count > 0 ? ordered.Max(o => o.Session.EmissionSequence) : 0,
+                    LastEmittedItems = ordered.SelectMany(o => o.Session.LastEmittedItems).ToList()
+                };
+                if (session.LastActivityTime < timestamp) session.LastActivityTime = timestamp;
+
+                if (!_sessionsByKey.TryGetValue(key, out existingKeys))
+                {
+                    existingKeys = new List<string>();
+                    _sessionsByKey[key] = existingKeys;
+                }
+                existingKeys.Add(sessionKey);
+            }
+
+            _stateStore.Put(sessionKey, session);
+
+            var windowEnd = session.LastActivityTime + _inactivityGap;
+            if (windowEnd.Ticks < watermarkTicks)
+            {
+                // Joined a session the watermark has passed, within the allowed lateness: a late result
+                EmitSession(sessionKey, session, isFinal: true, WindowEmissionType.Late);
+                _firedSessions.Add(sessionKey);
+                return;
+            }
+
+            if (wasFired)
+            {
+                // Extended past the watermark again: the session is open once more
+                _firedSessions.Remove(sessionKey);
+            }
+
+            var triggerResult = _config.Trigger.OnElement(item, timestamp, session.StartTime, windowEnd, session.TriggerContext);
+            if (triggerResult == TriggerResult.Fire)
+            {
+                EmitSession(sessionKey, session, isFinal: false);
+            }
+            else if (triggerResult == TriggerResult.FireAndPurge)
+            {
+                EmitSession(sessionKey, session, isFinal: true);
+                RemoveEventTimeSession(sessionKey);
+            }
+        }
+
+        // The trigger's notion of now: the wall clock, or the watermark in event time
+        private DateTime CurrentTime()
+        {
+            return _eventTime != null ? new DateTime(_watermarkTicks, DateTimeKind.Utc) : DateTime.UtcNow;
+        }
+
+        // Called under _lock
+        private void RemoveEventTimeSession(string sessionKey)
+        {
+            var session = _stateStore.Get(sessionKey);
+            _stateStore.Remove(sessionKey);
+            _firedSessions.Remove(sessionKey);
+
+            if (session != null && _sessionsByKey.TryGetValue(session.Key, out var sessionKeys))
+            {
+                sessionKeys.Remove(sessionKey);
+                if (sessionKeys.Count == 0)
+                {
+                    _sessionsByKey.Remove(session.Key);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public void EnableEventTime(EventTimeContext context)
+        {
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
+
+            lock (_lock)
+            {
+                var lateness = _config.AllowedLateness > TimeSpan.Zero ? _config.AllowedLateness : context.AllowedLateness;
+                _latenessTicks = Math.Min(lateness.Ticks, WatermarkStrategy.MaxLateness.Ticks);
+                _eventTime = context;
+
+                // Sessions close by watermark from now on
+                _sessionTimer?.Dispose();
+                _sessionTimer = null;
+
+                // Adopt sessions that are already open
+                foreach (var kvp in _stateStore.GetAll().ToList())
+                {
+                    if (!_sessionsByKey.TryGetValue(kvp.Value.Key, out var sessionKeys))
+                    {
+                        sessionKeys = new List<string>();
+                        _sessionsByKey[kvp.Value.Key] = sessionKeys;
+                    }
+                    sessionKeys.Add(kvp.Key);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public void OnWatermark(DateTime watermark)
+        {
+            lock (_lock)
+            {
+                if (_eventTime == null || watermark.Ticks <= _watermarkTicks)
+                    return;
+
+                _watermarkTicks = watermark.Ticks;
+
+                var sessions = _sessionsByKey.Values
+                    .SelectMany(keys => keys)
+                    .Select(sessionKey => (Key: sessionKey, Session: _stateStore.Get(sessionKey)))
+                    .Where(s => s.Session != null)
+                    .OrderBy(s => s.Session.LastActivityTime)
+                    .ThenBy(s => s.Session.Key, StringComparer.Ordinal)
+                    .ToList();
+
+                foreach (var (sessionKey, session) in sessions)
+                {
+                    var windowEnd = session.LastActivityTime + _inactivityGap;
+
+                    if (_firedSessions.Contains(sessionKey))
+                    {
+                        if (windowEnd.Ticks + _latenessTicks < _watermarkTicks)
+                        {
+                            RemoveEventTimeSession(sessionKey);
+                        }
+                        continue;
+                    }
+
+                    // An event at exactly last activity + gap still joins, so the trigger sees the end one tick later
+                    var triggerResult = _config.Trigger.OnProcessingTime(watermark, session.StartTime, windowEnd.AddTicks(1), session.TriggerContext);
+                    if (triggerResult == TriggerResult.FireAndPurge || windowEnd.Ticks < _watermarkTicks)
+                    {
+                        EmitSession(sessionKey, session, isFinal: true);
+                        if (windowEnd.Ticks + _latenessTicks >= _watermarkTicks)
+                        {
+                            _firedSessions.Add(sessionKey);
+                        }
+                        else
+                        {
+                            RemoveEventTimeSession(sessionKey);
+                        }
+                    }
+                    else if (triggerResult == TriggerResult.Fire)
+                    {
+                        EmitSession(sessionKey, session, isFinal: false);
+                    }
+                }
+            }
+        }
+
+        private void EmitSession(string sessionKey, AdvancedSessionState<TInput> session, bool isFinal, WindowEmissionType? finalType = null)
         {
             if (session == null || session.Items.Count == 0)
             {
@@ -207,7 +461,7 @@ namespace Cortex.Streams.Operators.Windows
             }
 
             session.EmissionSequence++;
-            var emissionType = isFinal ? WindowEmissionType.OnTime : WindowEmissionType.Early;
+            var emissionType = isFinal ? finalType ?? WindowEmissionType.OnTime : WindowEmissionType.Early;
             var windowEnd = session.LastActivityTime + _inactivityGap;
 
             // Handle state mode
@@ -275,6 +529,10 @@ namespace Cortex.Streams.Operators.Windows
 
             lock (_lock)
             {
+                // A tick already running when event time was enabled
+                if (_eventTime != null)
+                    return;
+
                 foreach (var kvp in _stateStore.GetAll())
                 {
                     var session = kvp.Value;

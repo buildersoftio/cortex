@@ -2,6 +2,7 @@ using Cortex.States;
 using Cortex.States.Operators;
 using Cortex.Streams.ErrorHandling;
 using Cortex.Streams.Operators.Joins;
+using Cortex.Streams.Watermarks;
 using Cortex.Telemetry;
 using System;
 using System.Collections.Concurrent;
@@ -17,11 +18,20 @@ namespace Cortex.Streams.Operators
     /// Events from both streams are buffered within the configured time window,
     /// and matching is performed when events arrive from either side.
     /// </summary>
+    /// <remarks>
+    /// Downstream of <c>WithWatermarks</c> the join works in event time. The left watermark comes from the stream; the
+    /// right watermark is tracked from the timestamps passed to <see cref="ProcessRight"/> with the same strategy, and the
+    /// join uses the smaller of the two (with an idle timeout, a right side without events for that long no longer holds the
+    /// left back). Two elements match when their timestamps are less than <see cref="StreamJoinConfiguration.WindowSize"/>
+    /// apart; an element expires, and is emitted as unmatched for left, right and outer joins, once the watermark reaches
+    /// its timestamp plus the window size plus <see cref="StreamJoinConfiguration.GracePeriod"/>. An element that arrives
+    /// after that point is dropped and reported as late. The cleanup timer then only drives idle detection.
+    /// </remarks>
     /// <typeparam name="TLeft">Type of elements from the left stream.</typeparam>
     /// <typeparam name="TRight">Type of elements from the right stream.</typeparam>
     /// <typeparam name="TKey">Type of the key used for matching.</typeparam>
     /// <typeparam name="TResult">Type of the result produced by the join.</typeparam>
-    public class StreamStreamJoinOperator<TLeft, TRight, TKey, TResult> : IOperator, IStatefulOperator, ITelemetryEnabled, IErrorHandlingEnabled, IStreamStopAware, IDisposable
+    public class StreamStreamJoinOperator<TLeft, TRight, TKey, TResult> : IOperator, IStatefulOperator, ITelemetryEnabled, IErrorHandlingEnabled, IStreamStopAware, IWatermarkAware, IDisposable
     {
         private readonly Func<TLeft, TKey> _leftKeySelector;
         private readonly Func<TRight, TKey> _rightKeySelector;
@@ -61,6 +71,17 @@ namespace Cortex.Streams.Operators
 
         // Set by the owning stream: stops it when error handling decides to stop on the cleanup timer
         private Action _stopStream;
+
+        // Event time, guarded by _bufferLock: null until the stream enables it
+        private EventTimeContext _eventTime;
+        private long _delayTicks;
+        private long _idleTimeoutTicks;
+        private Func<DateTime> _clock;
+        private long _leftWatermarkTicks;
+        private long _rightMaxTimestampTicks = -1;
+        private long _rightLastEventAtTicks;
+        private long _watermarkTicks;
+        private long _nextExpiryTicks = long.MaxValue;
 
         /// <summary>
         /// Represents an element buffered for windowed joining.
@@ -215,9 +236,17 @@ namespace Cortex.Streams.Operators
 
             List<TResult> results = new List<TResult>();
             bool foundMatch = false;
+            long lateAtWatermark = -1;
 
             lock (_bufferLock)
             {
+                var eventTime = _eventTime != null;
+                if (eventTime && IsLate(bufferedElement))
+                {
+                    lateAtWatermark = _watermarkTicks;
+                    goto ReleaseLeft;
+                }
+
                 // Add to left buffer
                 var leftList = _leftBuffer.GetOrAdd(key, _ => new List<BufferedElement<TLeft>>());
                 
@@ -231,14 +260,20 @@ namespace Cortex.Streams.Operators
                 // Persist to state store if available
                 _leftStateStore?.Put(key, leftList);
 
+                if (eventTime)
+                {
+                    _nextExpiryTicks = Math.Min(_nextExpiryTicks, bufferedElement.ExpiresAt.Ticks);
+                }
+
                 // Look for matches in right buffer
                 if (_rightBuffer.TryGetValue(key, out var rightList))
                 {
                     var now = DateTime.UtcNow;
                     foreach (var rightElement in rightList.ToList())
                     {
-                        // Check if within window (not expired)
-                        if (rightElement.ExpiresAt > now)
+                        // Check if within window: by event-time distance, or not yet expired by the wall clock
+                        // (an expired counterpart can still be buffered while another thread is about to clean it up)
+                        if (eventTime ? WithinWindow(timestamp, rightElement.Timestamp) && !IsLate(rightElement) : rightElement.ExpiresAt > now)
                         {
                             // Found a match!
                             bufferedElement.Matched = true;
@@ -251,6 +286,14 @@ namespace Cortex.Streams.Operators
                         }
                     }
                 }
+
+            ReleaseLeft:;
+            }
+
+            if (lateAtWatermark >= 0)
+            {
+                ReportLateEvent(left, timestamp, lateAtWatermark, "ProcessLeft");
+                return;
             }
 
             // Emit results outside the lock
@@ -271,9 +314,24 @@ namespace Cortex.Streams.Operators
 
             List<TResult> results = new List<TResult>();
             bool foundMatch = false;
+            long lateAtWatermark = -1;
 
             lock (_bufferLock)
             {
+                var eventTime = _eventTime != null;
+                if (eventTime)
+                {
+                    // Every right element shows the right side is active and may advance its watermark
+                    _rightMaxTimestampTicks = Math.Max(_rightMaxTimestampTicks, timestamp.Ticks);
+                    _rightLastEventAtTicks = _clock().Ticks;
+
+                    if (IsLate(bufferedElement))
+                    {
+                        lateAtWatermark = _watermarkTicks;
+                        goto ReleaseRight;
+                    }
+                }
+
                 // Add to right buffer
                 var rightList = _rightBuffer.GetOrAdd(key, _ => new List<BufferedElement<TRight>>());
                 
@@ -287,14 +345,20 @@ namespace Cortex.Streams.Operators
                 // Persist to state store if available
                 _rightStateStore?.Put(key, rightList);
 
+                if (eventTime)
+                {
+                    _nextExpiryTicks = Math.Min(_nextExpiryTicks, bufferedElement.ExpiresAt.Ticks);
+                }
+
                 // Look for matches in left buffer
                 if (_leftBuffer.TryGetValue(key, out var leftList))
                 {
                     var now = DateTime.UtcNow;
                     foreach (var leftElement in leftList.ToList())
                     {
-                        // Check if within window (not expired)
-                        if (leftElement.ExpiresAt > now)
+                        // Check if within window: by event-time distance, or not yet expired by the wall clock
+                        // (an expired counterpart can still be buffered while another thread is about to clean it up)
+                        if (eventTime ? WithinWindow(timestamp, leftElement.Timestamp) && !IsLate(leftElement) : leftElement.ExpiresAt > now)
                         {
                             // Found a match!
                             bufferedElement.Matched = true;
@@ -307,12 +371,122 @@ namespace Cortex.Streams.Operators
                         }
                     }
                 }
+
+            ReleaseRight:;
             }
 
-            // Emit results outside the lock
-            foreach (var result in results)
+            if (lateAtWatermark >= 0)
             {
-                _nextOperator?.Process(result);
+                ReportLateEvent(right, timestamp, lateAtWatermark, "ProcessRight");
+            }
+            else
+            {
+                // Emit results outside the lock
+                foreach (var result in results)
+                {
+                    _nextOperator?.Process(result);
+                }
+            }
+
+            if (Volatile.Read(ref _eventTime) != null)
+            {
+                ExpireByWatermark();
+            }
+        }
+
+        // Called under _bufferLock: the element's expiry plus the grace period has already been passed
+        private bool IsLate<T>(BufferedElement<T> element)
+        {
+            return element.ExpiresAt.Ticks + _configuration.GracePeriod.Ticks <= _watermarkTicks;
+        }
+
+        private bool WithinWindow(DateTime first, DateTime second)
+        {
+            return Math.Abs(first.Ticks - second.Ticks) < _configuration.WindowSize.Ticks;
+        }
+
+        private void ReportLateEvent(object item, DateTime timestamp, long watermarkTicks, string side)
+        {
+            _eventTime.ReportLateEvent(
+                item,
+                timestamp,
+                new DateTime(watermarkTicks, DateTimeKind.Utc),
+                $"StreamStreamJoinOperator<{typeof(TLeft).Name},{typeof(TRight).Name}>.{side}");
+        }
+
+        // Called under _bufferLock: the smaller of both sides' watermarks; an idle right side does not count
+        private void UpdateWatermark()
+        {
+            var rightWatermark = _rightMaxTimestampTicks < 0 ? DateTime.MinValue.Ticks : _rightMaxTimestampTicks - _delayTicks;
+            var rightIdle = _idleTimeoutTicks > 0 && _clock().Ticks - _rightLastEventAtTicks > _idleTimeoutTicks;
+            var candidate = rightIdle ? _leftWatermarkTicks : Math.Min(_leftWatermarkTicks, rightWatermark);
+
+            if (candidate > _watermarkTicks)
+            {
+                _watermarkTicks = candidate;
+            }
+        }
+
+        // Runs the cleanup only when the watermark has reached the earliest expiry
+        private void ExpireByWatermark()
+        {
+            bool due;
+            lock (_bufferLock)
+            {
+                UpdateWatermark();
+                due = _watermarkTicks - _configuration.GracePeriod.Ticks >= _nextExpiryTicks;
+            }
+
+            if (due)
+            {
+                CleanupExpiredElements(fromTimer: false);
+            }
+        }
+
+        /// <inheritdoc />
+        public void EnableEventTime(EventTimeContext context)
+        {
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
+
+            lock (_bufferLock)
+            {
+                _delayTicks = context.Strategy.MaxOutOfOrderness.Ticks;
+                _idleTimeoutTicks = context.Strategy.IdleTimeout?.Ticks ?? 0;
+                _clock = context.Strategy.Clock;
+                _rightLastEventAtTicks = _clock().Ticks;
+                RecomputeNextExpiry();
+                Volatile.Write(ref _eventTime, context);
+            }
+        }
+
+        /// <inheritdoc />
+        public void OnWatermark(DateTime watermark)
+        {
+            lock (_bufferLock)
+            {
+                if (_eventTime == null || watermark.Ticks <= _leftWatermarkTicks)
+                    return;
+
+                _leftWatermarkTicks = watermark.Ticks;
+            }
+
+            ExpireByWatermark();
+        }
+
+        // Called under _bufferLock
+        private void RecomputeNextExpiry()
+        {
+            _nextExpiryTicks = long.MaxValue;
+            foreach (var list in _leftBuffer.Values)
+            {
+                foreach (var element in list)
+                    _nextExpiryTicks = Math.Min(_nextExpiryTicks, element.ExpiresAt.Ticks);
+            }
+            foreach (var list in _rightBuffer.Values)
+            {
+                foreach (var element in list)
+                    _nextExpiryTicks = Math.Min(_nextExpiryTicks, element.ExpiresAt.Ticks);
             }
         }
 
@@ -347,12 +521,23 @@ namespace Cortex.Streams.Operators
             if (_disposed) return;
 
             var now = DateTime.UtcNow;
-            var expiredThreshold = now.Subtract(_configuration.GracePeriod);
             var unmatchedLeft = new List<TLeft>();
             var unmatchedRight = new List<TRight>();
 
             lock (_bufferLock)
             {
+                // Elements expire by the watermark in event time, by the wall clock otherwise
+                long expiredThreshold;
+                if (_eventTime != null)
+                {
+                    UpdateWatermark();
+                    expiredThreshold = _watermarkTicks - _configuration.GracePeriod.Ticks;
+                }
+                else
+                {
+                    expiredThreshold = now.Ticks - _configuration.GracePeriod.Ticks;
+                }
+
                 // Process left buffer
                 foreach (var kvp in _leftBuffer.ToList())
                 {
@@ -360,7 +545,7 @@ namespace Cortex.Streams.Operators
                     var leftList = kvp.Value;
 
                     var expiredElements = leftList
-                        .Where(e => e.ExpiresAt <= expiredThreshold)
+                        .Where(e => e.ExpiresAt.Ticks <= expiredThreshold)
                         .ToList();
 
                     foreach (var expired in expiredElements)
@@ -400,7 +585,7 @@ namespace Cortex.Streams.Operators
                     var rightList = kvp.Value;
 
                     var expiredElements = rightList
-                        .Where(e => e.ExpiresAt <= expiredThreshold)
+                        .Where(e => e.ExpiresAt.Ticks <= expiredThreshold)
                         .ToList();
 
                     foreach (var expired in expiredElements)
@@ -431,6 +616,11 @@ namespace Cortex.Streams.Operators
                         else
                             _rightStateStore.Remove(key);
                     }
+                }
+
+                if (_eventTime != null)
+                {
+                    RecomputeNextExpiry();
                 }
             }
 

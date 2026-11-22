@@ -338,7 +338,7 @@ public class SensorTelemetry
 }
 ```
 
-- Readings need UTC timestamps close to the current time: the window closes when the wall clock passes the window's end.
+- Readings need UTC timestamps close to the current time: the window closes when the wall clock passes the window's end. For readings that arrive out of order or are replayed, add `WithWatermarks` before the branches; see [Event Time and Watermarks](Event-Time-and-Watermarks.md).
 - Starting a tap for a site that already has one throws `ArgumentException`, because the branch name is taken. `StopDebugTap` returns `false` when no tap was running.
 
 ### Per-Tenant Webhook Subscriptions

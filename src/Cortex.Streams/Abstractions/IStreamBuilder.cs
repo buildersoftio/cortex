@@ -2,6 +2,7 @@
 using Cortex.Streams.Operators;
 using Cortex.Streams.Operators.Joins;
 using Cortex.Streams.Operators.Windows;
+using Cortex.Streams.Watermarks;
 using System;
 using System.Collections.Generic;
 
@@ -436,5 +437,27 @@ namespace Cortex.Streams.Abstractions
 
 
                 IStreamBuilder<TIn, TCurrent> SetNext(IOperator customOperator);
+
+                /// <summary>
+                /// Switches the stream to event time from this point on. Items pass through unchanged; the watermark
+                /// (the newest event timestamp minus the strategy's out-of-orderness bound) is tracked here, and every
+                /// window and stream-stream join downstream closes its windows by watermark instead of the wall clock.
+                /// Operators before this call keep processing time. Call it once per path, before the first window or join.
+                /// </summary>
+                /// <param name="timestampSelector">Extracts the event timestamp (UTC) from an item.</param>
+                /// <param name="strategy">The out-of-orderness bound, allowed lateness, late-event handler, idle timeout and optional state store.</param>
+                /// <returns>The stream builder for method chaining.</returns>
+                /// <exception cref="ArgumentNullException"><paramref name="timestampSelector"/> or <paramref name="strategy"/> is null.</exception>
+                /// <example>
+                /// <code>
+                /// var stream = StreamBuilder&lt;Reading&gt;.CreateNewStream("Sensors")
+                ///     .Stream()
+                ///     .WithWatermarks(r =&gt; r.MeasuredAt, WatermarkStrategy.BoundedOutOfOrderness(TimeSpan.FromSeconds(5)))
+                ///     .TumblingWindow(r =&gt; r.SensorId, r =&gt; r.MeasuredAt, TimeSpan.FromMinutes(1))
+                ///     .Sink(window =&gt; Console.WriteLine(window.Items.Count))
+                ///     .Build();
+                /// </code>
+                /// </example>
+                IStreamBuilder<TIn, TCurrent> WithWatermarks(Func<TCurrent, DateTime> timestampSelector, WatermarkStrategy strategy);
             }
         }
