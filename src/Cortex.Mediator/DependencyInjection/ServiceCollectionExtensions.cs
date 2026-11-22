@@ -119,61 +119,52 @@ namespace Cortex.Mediator.DependencyInjection
             // Command behaviors
             foreach (var (behaviorType, _) in options.CommandBehaviors.OrderBy(b => b.Order))
             {
-                services.AddTransient(typeof(ICommandPipelineBehavior<,>), behaviorType);
+                RegisterBehavior(services, typeof(ICommandPipelineBehavior<,>), behaviorType);
             }
 
             // feature #141 - Register non-returning command pipeline behaviors
             foreach (var (behaviorType, _) in options.VoidCommandBehaviors.OrderBy(b => b.Order))
             {
-                services.AddTransient(typeof(ICommandPipelineBehavior<>), behaviorType);
+                RegisterBehavior(services, typeof(ICommandPipelineBehavior<>), behaviorType);
             }
 
             // Query behaviors
             foreach (var (behaviorType, _) in options.QueryBehaviors.OrderBy(b => b.Order))
             {
-                if (behaviorType.IsGenericTypeDefinition)
-                {
-                    // Open generic behavior - register against open generic interface
-                    services.AddTransient(typeof(IQueryPipelineBehavior<,>), behaviorType);
-                }
-                else
-                {
-                    // Closed behavior - find and register against specific implemented interfaces
-                    var implementedInterfaces = behaviorType.GetInterfaces()
-                        .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IQueryPipelineBehavior<,>));
-
-                    foreach (var iface in implementedInterfaces)
-                    {
-                        services.AddTransient(iface, behaviorType);
-                    }
-                }
+                RegisterBehavior(services, typeof(IQueryPipelineBehavior<,>), behaviorType);
             }
 
             // Notification behaviors
             foreach (var (behaviorType, _) in options.NotificationBehaviors.OrderBy(b => b.Order))
             {
-                if (behaviorType.IsGenericTypeDefinition)
-                {
-                    // Open generic behavior - register against open generic interface
-                    services.AddTransient(typeof(INotificationPipelineBehavior<>), behaviorType);
-                }
-                else
-                {
-                    // Closed behavior - find and register against specific implemented interfaces
-                    var implementedInterfaces = behaviorType.GetInterfaces()
-                        .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(INotificationPipelineBehavior<>));
-
-                    foreach (var iface in implementedInterfaces)
-                    {
-                        services.AddTransient(iface, behaviorType);
-                    }
-                }
+                RegisterBehavior(services, typeof(INotificationPipelineBehavior<>), behaviorType);
             }
 
             // Stream query behaviors
             foreach (var (behaviorType, _) in options.StreamQueryBehaviors.OrderBy(b => b.Order))
             {
-                services.AddTransient(typeof(IStreamQueryPipelineBehavior<,>), behaviorType);
+                RegisterBehavior(services, typeof(IStreamQueryPipelineBehavior<,>), behaviorType);
+            }
+        }
+
+        /// <summary>
+        /// Registers an open generic behavior against the open generic interface, and a closed behavior
+        /// against each closed form of that interface it implements.
+        /// </summary>
+        private static void RegisterBehavior(IServiceCollection services, Type openGenericInterface, Type behaviorType)
+        {
+            if (behaviorType.IsGenericTypeDefinition)
+            {
+                services.AddTransient(openGenericInterface, behaviorType);
+                return;
+            }
+
+            var implementedInterfaces = behaviorType.GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == openGenericInterface);
+
+            foreach (var iface in implementedInterfaces)
+            {
+                services.AddTransient(iface, behaviorType);
             }
         }
     }
