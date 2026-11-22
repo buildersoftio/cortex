@@ -99,11 +99,11 @@ Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): use the full query type name in cache keys (#253)
 
 ### Task 5: Rethrow the original exception from runtime-typed dispatch (#254)
-- [ ] Done
+- [x] Done
 Files: `src/Cortex.Mediator/Mediator.cs` (modify), `src/Cortex.Tests/Mediator/Tests/StreamingQueryTests.cs` (modify)
 Depends on: Task 4
-- [ ] Add `CreateStream_RuntimeTyped_WithoutHandler_ThrowsInvalidOperationException` and `CreateStream_RuntimeTyped_BehaviorThrowsSynchronously_ThrowsOriginalException`; run them red (`TargetInvocationException`).
-- [ ] Add a private static `InvokeUnwrapped(MethodInfo, object, object[])` that catches `TargetInvocationException` with a non-null inner exception and rethrows it via `ExceptionDispatchInfo.Capture(...).Throw()`; use it in all five runtime-typed overloads.
+- [x] Add `CreateStream_RuntimeTyped_WithoutHandler_ThrowsInvalidOperationException` and `CreateStream_RuntimeTyped_BehaviorThrowsSynchronously_ThrowsOriginalException`; run them red (`TargetInvocationException`).
+- [x] Add a private static `InvokeUnwrapped(MethodInfo, object, object[])` that catches `TargetInvocationException` with a non-null inner exception and rethrows it via `ExceptionDispatchInfo.Capture(...).Throw()`; use it in all five runtime-typed overloads.
 Run: `dotnet test src/Cortex.Tests/Cortex.Tests.csproj -f net11.0 --filter "FullyQualifiedName~StreamingQueryTests|FullyQualifiedName~StreamingIntegrationTests|FullyQualifiedName~MediatorTests|FullyQualifiedName~RuntimeNotificationDispatchTests"`
 Expected: exit 0, "Failed: 0"
 Commit: fix(mediator): rethrow original exceptions from runtime-typed dispatch (#254)
@@ -156,4 +156,6 @@ Commit: fix(mediator): allow notification exception suppression to be configured
 - 2026-11-22 Ruling: the caching behavior takes its invalidation token before running the handler — an `InvalidateAll` during the handler then also expires that result — cost if wrong: one extra cache miss in that race.
 - 2026-11-22 Task 3: complete — caching filter → "Failed: 0, Passed: 20" (commit 2a64089).
 - 2026-11-22 Task 4: red — 5 new test cases failed, plus `GenerateKey_WithoutProperties_ShouldStillWork`, whose expected key was updated from `"Test:TestQuery"` to the full type name ("Failed: 6, Passed: 7").
-- 2026-11-22 Task 4: complete — see the commit's run.
+- 2026-11-22 Task 4: complete — cache filter → "Failed: 0, Passed: 33" (commit d9b0c13).
+- 2026-11-22 Task 5: red — both new tests failed ("Failed: 2, Passed: 9").
+- 2026-11-22 Task 5: complete — see the commit's run.

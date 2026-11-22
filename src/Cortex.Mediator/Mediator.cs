@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -66,7 +67,7 @@ namespace Cortex.Mediator
                 return genericMethod.MakeGenericMethod(type, resultType);
             });
 
-            return (Task<TResult>)method.Invoke(this, new object[] { command, cancellationToken })!;
+            return (Task<TResult>)InvokeUnwrapped(method, this, new object[] { command, cancellationToken });
         }
 
         public async Task SendCommandAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default) where TCommand : ICommand
@@ -101,7 +102,7 @@ namespace Cortex.Mediator
                 return genericMethod.MakeGenericMethod(type);
             });
 
-            return (Task)method.Invoke(this, new object[] { command, cancellationToken })!;
+            return (Task)InvokeUnwrapped(method, this, new object[] { command, cancellationToken });
         }
 
         public async Task<TResult> SendQueryAsync<TQuery, TResult>(TQuery query, CancellationToken cancellationToken = default)
@@ -136,7 +137,7 @@ namespace Cortex.Mediator
                 return genericMethod.MakeGenericMethod(type, resultType);
             });
 
-            return (Task<TResult>)method.Invoke(this, new object[] { query, cancellationToken })!;
+            return (Task<TResult>)InvokeUnwrapped(method, this, new object[] { query, cancellationToken });
         }
 
         public async Task PublishAsync<TNotification>(
@@ -206,7 +207,7 @@ namespace Cortex.Mediator
                 return genericMethod.MakeGenericMethod(type);
             });
 
-            return (Task)method.Invoke(this, new object[] { notification, cancellationToken })!;
+            return (Task)InvokeUnwrapped(method, this, new object[] { notification, cancellationToken });
         }
 
         public IAsyncEnumerable<TResult> CreateStream<TQuery, TResult>(
@@ -256,7 +257,24 @@ namespace Cortex.Mediator
                 return genericMethod.MakeGenericMethod(type, resultType);
             });
 
-            return (IAsyncEnumerable<TResult>)method.Invoke(this, new object[] { query, cancellationToken })!;
+            return (IAsyncEnumerable<TResult>)InvokeUnwrapped(method, this, new object[] { query, cancellationToken });
+        }
+
+        /// <summary>
+        /// Invokes a generic dispatch method and rethrows whatever it throws synchronously as the original
+        /// exception with its stack trace, instead of the <see cref="TargetInvocationException"/> reflection wraps it in.
+        /// </summary>
+        private static object InvokeUnwrapped(MethodInfo method, object target, object[] arguments)
+        {
+            try
+            {
+                return method.Invoke(target, arguments)!;
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw; // unreachable: Throw() always throws
+            }
         }
 
     
