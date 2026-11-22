@@ -141,10 +141,10 @@ Expected: exit 0, `Failed: 0`, bench prints PASS (windowed overhead < 10%)
 Commit: test(streams): add event-time end-to-end test and watermark bench
 
 ### Task 9: Document event time and watermarks
-- [ ] Done
+- [x] Done
 Files: `docs/wiki/Event-Time-and-Watermarks.md` (create), `docs/wiki/Branch-and-Merge.md` (modify), `docs/wiki/Stream-Stream-Joins.md` (modify)
 Depends on: Tasks 1-8
-- [ ] New page with self-contained, realistic examples (out-of-order IoT readings, Kafka replay with idle timeout, late-event callback, persisted watermark, event-time join), the firing/lateness rules and limits; link it from the two pages where they describe wall-clock closing (`Branch-and-Merge.md:341`, `Stream-Stream-Joins.md:26-40`). Each full example compiled and run in a throwaway test, deleted before commit.
+- [x] New page with self-contained, realistic examples (out-of-order IoT readings, Kafka replay with idle timeout, late-event callback, persisted watermark, event-time join), the firing/lateness rules and limits; link it from the two pages where they describe wall-clock closing (`Branch-and-Merge.md:341`, `Stream-Stream-Joins.md:26-40`). Each full example compiled and run in a throwaway test, deleted before commit.
 Run: `dotnet build src/Cortex.Streams/Cortex.Streams.csproj -c Release && dotnet test src/Cortex.Tests/Cortex.Tests.csproj -c Release`
 Expected: exit 0, `0 Error(s)`, `Failed: 0`
 Commit: docs(streams): document event time and watermarks
@@ -191,7 +191,9 @@ Commit: docs(streams): document event time and watermarks
 - 2026-11-22 Task 8: new regression test `Tumbling_LateEventIsDetected_EvenWhenNoWatermarkWasSentToTheWindow` failed with the window's own watermark only, passes with the context watermark.
 - 2026-11-22 Task 8: after the rework Map → Filter → Sink +27.4% to +31.6% (~10-12 ns/item, the cost of any extra pipeline stage against ~40 ns/item); windowed pipeline +6.6% and +9.0%; with an idle timeout same as without. User chose (info.request "Perf gate"): gate on the windowed pipeline at 10%, print the trivial-pipeline number, and say in the PR that the issue's 5% is not met on a trivial pipeline.
 - 2026-11-22 Task 8: the end-to-end test passed on its first run (it exercises Tasks 1-7, which already existed); its idle tail now advances the test clock while waiting, since idle activity is noted at the next check.
-- 2026-11-22 Task 8: complete — verified by the commit gate below (watermark and event-time tests, end-to-end test, bench PASS)
+- 2026-11-22 Task 8: complete — commit gate: `dotnet test ... (watermark, event-time, window suites)` → Passed! - Failed: 0, Passed: 71; bench → TumblingWindow overhead 4.9% (limit 10%), PASS; informational Map → Filter → Sink +26.2% (10.3 ns/item); with an idle timeout +119.3% in that run vs +31.6%/+33.8% in the two runs before (unexplained variance, informational only).
+- 2026-11-22 Task 9: the 4 wiki examples, the quick start and an early-trigger claim were copied verbatim into a throwaway test (`SophonScratchEventTimeDocsTests.cs`, deleted before commit) → Passed! - Failed: 0, Passed: 6 (one of my test expectations was wrong about when the unclicked impression is reported; the page's claim held).
+- 2026-11-22 Ruling: the Kafka/RocksDB mentions on the page are prose only, not compiled (the test project references neither) — cost if wrong: a reader's RocksDB store type must be `RocksDbStateStore<string, long>`.
 - 2026-11-21 Ruling: fixed the two flaky `TumblingWindowOperatorTests` (timestamps only, no assertion changed) — the full-suite gate needs Failed: 0 and the flake predates this branch (seen in the #238-246 run) — cost if wrong: one existing test file changed.
 - 2026-11-21 Ruling: branch `v3/feature/197` instead of `sophon/<slug>` — repo naming `v3/feature/<issue>` — cost if wrong: a branch rename.
 - 2026-11-21 Ruling: hybrid design — pragmatic push wiring with the minimal design's single source watermark per stream and stream-level opt-in — the user's choices — cost if wrong: per-window time modes need a later overload.
